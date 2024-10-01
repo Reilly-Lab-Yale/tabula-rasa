@@ -1,0 +1,33 @@
+---
+title: "extract_table"
+output: html_document
+date: "2024-09-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(Seurat)
+```
+
+From 
+
+```{r}
+seurat_obj=readRDS("/home/mcn26/palmer_scratch/sim/data/GSE217686_GEx_obj_sc_rep_mEB_series.RDS")
+```
+
+
+
+```{r}
+metadata <- seurat_obj@meta.data
+head(metadata)
+```
+```{r}
+write.table(metadata, file = "/home/mcn26/palmer_scratch/sim/data/seurat_metadata.tsv", sep = "\t", quote = FALSE, row.names = TRUE, col.names = NA)
+```
+
+
