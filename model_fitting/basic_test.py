@@ -54,13 +54,13 @@ def get_stats(fit_model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('scmpra_counts_file', type=str)
-    parser.add_argument('model_choice', type=str)
-    parser.add_argument('formula', type=str)
-    parser.add_argument('maxiter', type=int, default=50)
-    parser.add_argument('regularized_fit', type=bool, default=False)
-    parser.add_argument('temp_dir')
-    parser.add_argument('out_file', type=str)
+    parser.add_argument('--scmpra_counts_file', type=str)
+    parser.add_argument('--model_choice', type=str)
+    parser.add_argument('--formula', type=str)
+    parser.add_argument('--maxiter', type=int, default=50)
+    parser.add_argument('--regularized_fit', type=bool, default=False)
+    parser.add_argument('--temp_dir')
+    parser.add_argument('--out_file', type=str)
     args = parser.parse_args()
     scmpra_counts = DataSet(args.scmpra_counts_file)
     formula = args.formula
