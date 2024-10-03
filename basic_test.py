@@ -87,14 +87,14 @@ def main():
     else:
         scmpra_model_fit = scmpra_model.fit(maxiter)
 
-    scmpra_model_fit.save("%s/%s_%s_%s_%s_fit_model.pickle" % (temp_dir, model_choice, maxiter, reg_fit, formula))
+    scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
 
     model_info = [model_choice, formula, maxiter, reg_fit]
     model_stats = get_stats(scmpra_model_fit)
 
     out_list = model_info + model_stats
 
-    with open(out_file, "w") as o:
+    with open("%s/%s_stats.txt" % (temp_dir, out_file), "w") as o:
         o.write("\t".join(out_list))
 
     return
