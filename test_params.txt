@@ -1,0 +1,72 @@
+1	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	True	poisson
+2	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	True	zi_poisson
+3	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	True	negative_binomial
+4	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	True	zi_negative_binomial
+5	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	False	poisson
+6	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	False	zi_poisson
+7	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	False	negative_binomial
+8	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	100	False	zi_negative_binomial
+9	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	True	poisson
+10	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	True	zi_poisson
+11	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	True	negative_binomial
+12	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	True	zi_negative_binomial
+13	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	False	poisson
+14	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	False	zi_poisson
+15	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	False	negative_binomial
+16	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	500	False	zi_negative_binomial
+17	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	True	poisson
+18	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	True	zi_poisson
+19	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	True	negative_binomial
+20	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	True	zi_negative_binomial
+21	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	False	poisson
+22	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	False	zi_poisson
+23	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	False	negative_binomial
+24	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id)	1000	False	zi_negative_binomial
+25	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	True	poisson
+26	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	True	zi_poisson
+27	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	True	negative_binomial
+28	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	True	zi_negative_binomial
+29	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	False	poisson
+30	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	False	zi_poisson
+31	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	False	negative_binomial
+32	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	100	False	zi_negative_binomial
+33	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	True	poisson
+34	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	True	zi_poisson
+35	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	True	negative_binomial
+36	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	True	zi_negative_binomial
+37	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	False	poisson
+38	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	False	zi_poisson
+39	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	False	negative_binomial
+40	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	500	False	zi_negative_binomial
+41	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	True	poisson
+42	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	True	zi_poisson
+43	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	True	negative_binomial
+44	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	True	zi_negative_binomial
+45	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	False	poisson
+46	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	False	zi_poisson
+47	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	False	negative_binomial
+48	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC) + C(reads_oBC) + C(UMIs_oBC)	1000	False	zi_negative_binomial
+49	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	True	poisson
+50	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	True	zi_poisson
+51	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	True	negative_binomial
+52	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	True	zi_negative_binomial
+53	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	False	poisson
+54	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	False	zi_poisson
+55	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	False	negative_binomial
+56	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	100	False	zi_negative_binomial
+57	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	True	poisson
+58	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	True	zi_poisson
+59	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	True	negative_binomial
+60	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	True	zi_negative_binomial
+61	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	False	poisson
+62	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	False	zi_poisson
+63	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	False	negative_binomial
+64	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	500	False	zi_negative_binomial
+65	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	True	poisson
+66	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	True	zi_poisson
+67	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	True	negative_binomial
+68	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	True	zi_negative_binomial
+69	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	False	poisson
+70	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	False	zi_poisson
+71	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	False	negative_binomial
+72	UMIs_mBC ~ C(cell_type_annotation) + C(rep_id) + C(CRE_class) + C(CRE_id) + C(cellBC) + C(oBC) + C(mBC)	1000	False	zi_negative_binomial
