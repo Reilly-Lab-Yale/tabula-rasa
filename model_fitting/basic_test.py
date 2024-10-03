@@ -4,6 +4,7 @@ import statsmodels.discrete.count_model as smdc
 
 class DataSet(dict):
     def __init__(self, path):
+        print('initializing dataset')
         self.filepath = path
         self.parquet = pq.ParquetFile(self.filepath)
     
@@ -39,6 +40,7 @@ def zi_negative_binomial_model(counts_parq, patsy_formula):
     return counts_model_zi_negative_binomial
 
 def get_stats(fit_model):
+    print('getting stats')
     # available stats come from here https://www.statsmodels.org/dev/generated/statsmodels.discrete.discrete_model.CountResults.html
 
     aic = fit_model.aic
@@ -64,11 +66,17 @@ def main():
     args = parser.parse_args()
     scmpra_counts = DataSet(args.scmpra_counts_file)
     formula = args.formula
+    print('formula: %s' % formula)
     maxiter = args.maxiter
+    print('maxiter: %s' % maxiter)
     reg_fit = args.regularized_fit
+    print('reg_fit: %s' % reg_fit)
     temp_dir = args.temp_dir
+    print('temp_dir: %s' % temp_dir)
     model_choice = args.model_choice
+    print('model_choice: %s' % model_choice)
     out_file = args.out_file
+    print('out_file: %s' % out_file)
 
     model_dict = {'poisson': poisson_model,
                   'zi_poisson' : zi_poisson_model, 
@@ -82,6 +90,7 @@ def main():
         print('Failed to build %s model' % model_choice)
         return
     print(model_choice)
+
     if reg_fit:
         scmpra_model_fit = scmpra_model.fit_regularized(maxiter)
     else:
