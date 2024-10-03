@@ -12,7 +12,7 @@
 module load miniconda
 conda activate scmpra
 
-mkdir /home/eng26/palmer_scratch/scmpra_temp
+
 
 tempdir=/home/eng26/palmer_scratch/scmpra_temp
 counts=/home/eng26/project/scmpra/data/shendure_mpra_counts_GSE217686.parq
