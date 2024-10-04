@@ -47,7 +47,7 @@ def get_stats(fit_model):
     bic = fit_model.bic
     loglike = fit_model.llf
     llr_chi2 = fit_model.llr
-    llr_chip = fit_model.llf_pvalue
+    llr_chip = fit_model.llr_pvalue
     pseudr = fit_model.prsquared
     resid = fit_model.resid
     converged = fit_model.converged
