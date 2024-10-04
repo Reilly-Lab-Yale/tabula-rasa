@@ -107,7 +107,8 @@ def main():
 
     model_info = [model_choice, formula, maxiter, reg_fit]
     model_stats = get_stats(scmpra_model_fit)
-
+    print(model_stats)
+    print(model_info)
     out_list = model_info + model_stats
 
     with open("%s/%s_stats.txt" % (temp_dir, out_file), "w") as o:
