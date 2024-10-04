@@ -98,10 +98,10 @@ def main():
     print(model_choice)
 
     if reg_fit:
-        scmpra_model_fit = scmpra_model.fit_regularized(maxiter)
+        scmpra_model_fit = scmpra_model.fit_regularized(maxiter = maxiter)
 
     else:
-        scmpra_model_fit = scmpra_model.fit(maxiter)
+        scmpra_model_fit = scmpra_model.fit(maxiter = maxiter)
 
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
 
