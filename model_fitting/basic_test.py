@@ -98,17 +98,10 @@ def main():
     print(model_choice)
 
     if reg_fit:
-        try:
-            scmpra_model_fit = scmpra_model.fit_regularized(maxiter)
-        except:
-            print('Failed to reg. fit model')
-            return
+        scmpra_model_fit = scmpra_model.fit_regularized(maxiter)
+
     else:
-        try:
-            scmpra_model_fit = scmpra_model.fit(maxiter)
-        except:
-            print('Failed to (nonreg.) fit model')
-            return
+        scmpra_model_fit = scmpra_model.fit(maxiter)
 
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
 
