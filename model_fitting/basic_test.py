@@ -89,11 +89,11 @@ def main():
                   'zi_negative_binomial' : zi_negative_binomial_model}
     
 
-    try:
-        scmpra_model = model_dict[model_choice](scmpra_counts, formula)
-    except:
-        print('Failed to build %s model' % model_choice)
-        return
+    # try:
+    scmpra_model = model_dict[model_choice](scmpra_counts, formula)
+    # except:
+    #     print('Failed to build %s model' % model_choice)
+    #     return
     
     print(model_choice)
 
