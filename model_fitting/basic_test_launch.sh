@@ -22,4 +22,6 @@ maxiter=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $5}' test_params.txt
 regfit=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $2}' test_params.txt)
 model=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $3}' test_params.txt)
 
+echo 'regfit: ' $regfit
+
 python basic_test.py --scmpra_counts_file $counts --model_choice $model --formula $formula --maxiter $maxiter --regularized_fit $regfit --temp_dir $tempdir --out_file ${id}_${model}${maxiter}_${regfit}_${formula}
