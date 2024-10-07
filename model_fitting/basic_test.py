@@ -52,7 +52,7 @@ def get_stats(fit_model):
     resid = fit_model.resid
     converged = fit_model.converged
 
-    return [converged, aic, bic, loglike, llr_chi2, llr_chip, pseudr, resid]
+    return [converged, aic, bic, loglike, llr_chi2, llr_chip, pseudr, list(resid)]
 
 def boolean_string(s):
     if s not in {'False', 'True'}:
