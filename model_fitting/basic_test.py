@@ -109,10 +109,13 @@ def main():
     model_stats = get_stats(scmpra_model_fit)
     print(model_stats)
     print(model_info)
-    out_list = model_info + model_stats
+    out_list = model_info + model_stats[:-1]
 
     with open("%s/%s_stats.txt" % (temp_dir, out_file), "w") as o:
         o.write("\t".join(str(x) for x in out_list))
+
+    with open("%s/%s_resids.txt" % (temp_dir, out_file), "w") as o:
+        o.write(model_stats[:-1])
 
     return
 
