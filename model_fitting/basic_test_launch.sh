@@ -3,8 +3,8 @@
 #SBATCH -J 10_03_2024
 #SBATCH --mem=64G
 #SBATCH --time=20:00:00
-#SBATCH -o /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round1_%A_%a.out
-#SBATCH -e /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round1_%A_%a.err
+#SBATCH -o /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round2_%A_%a.out
+#SBATCH -e /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round2_%A_%a.err
 #SBATCH --array 1-24
 
 
@@ -24,4 +24,4 @@ model=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $3}' test_params.txt)
 
 echo 'regfit: ' $regfit
 
-python basic_test.py --scmpra_counts_file $counts --model_choice $model --formula $formula --maxiter $maxiter --regularized_fit $regfit --temp_dir $tempdir --out_file ${id}_${model}${maxiter}_${regfit}_${formula}
+python basic_test.py --scmpra_counts_file $counts --model_choice $model --formula $formula --maxiter $maxiter --regularized_fit $regfit --temp_dir $tempdir --out_file ${id}GROUPED_${model}${maxiter}_${regfit}_${formula}
