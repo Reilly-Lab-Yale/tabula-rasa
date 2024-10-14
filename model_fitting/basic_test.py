@@ -113,6 +113,7 @@ def main():
 
     with open("%s/%s_stats.txt" % (temp_dir, out_file), "w") as o:
         o.write("\t".join(str(x) for x in out_list))
+        o.write("\n")
 
     with open("%s/%s_resids.txt" % (temp_dir, out_file), "w") as o:
         o.write(model_stats[:-1])
