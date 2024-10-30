@@ -3,9 +3,9 @@
 #SBATCH -J 10_03_2024
 #SBATCH --mem=64G
 #SBATCH --time=20:00:00
-#SBATCH -o /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round2_%A_%a.out
-#SBATCH -e /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round2_%A_%a.err
-#SBATCH --array 1-24
+#SBATCH -o /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round3_%A_%a.out
+#SBATCH -e /home/eng26/project/scmpra/bin/tabula-rasa/stdout/testing_round3_%A_%a.err
+#SBATCH --array 1-12
 
 
 module load miniconda
