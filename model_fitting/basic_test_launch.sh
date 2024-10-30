@@ -15,7 +15,7 @@ conda activate scmpra
 
 tempdir=/home/eng26/palmer_scratch/scmpra_temp
 #counts=/home/eng26/project/scmpra/data/shendure_mpra_counts_GSE217686.parq
-counts=/home/eng26/project/scmpra/data/GSE217686_assigned_oBC_CRE_mBC_joined_counts_sc_rep_mEB_series.txt
+counts=/home/eng26/project/scmpra/data/shendure_counts_grouped.txt
 id=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $1}' test_params.txt)
 formula=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $4}' test_params.txt)
 maxiter=$(awk -v row=$SLURM_ARRAY_TASK_ID 'NR == row {print $5}' test_params.txt)
