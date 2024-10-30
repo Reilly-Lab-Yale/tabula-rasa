@@ -49,6 +49,7 @@ def main():
     parser.add_argument('--formula', type=str)
     parser.add_argument('--temp_dir')
     parser.add_argument('--out_file', type=str)
+    parser.add_argument('--maxiter', type=int)
     args = parser.parse_args()
     scmpra_counts = pd.read_table(args.scmpra_counts_file)
     formula = args.formula
