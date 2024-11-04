@@ -10,15 +10,3 @@
 10	False	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	100
 11	False	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	500
 12	False	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	1000
-13	True	poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	100
-14	True	poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	500
-15	True	poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	1000
-16	True	zi_poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	100
-17	True	zi_poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	500
-18	True	zi_poisson	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	1000
-19	True	negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	100
-20	True	negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	500
-21	True	negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	1000
-22	True	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	100
-23	True	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	500
-24	True	zi_negative_binomial	UMIs_mBC~C(cell_type_annotation)+C(rep_id)+C(CRE_class)+C(CRE_id)	1000
