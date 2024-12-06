@@ -1,4 +1,4 @@
----
+<!-- # --- -->
 title: "R Notebook"
 output: html_notebook
 ---
@@ -6,9 +6,10 @@ output: html_notebook
 libs & init definitions
 ```{r}
 data_root<-"/home/mcn26/palmer_scratch/tabula_data"
+output_root="/home/mcn26/palmer_scratch/tabula_data/formatted"
 #whether data should be automatically downloaded : run notebook once with true,
 #then subsequently with false
-download=FALSE
+download_data=FALSE
 library(tidyverse)
 library(Seurat)
 ```
@@ -34,7 +35,7 @@ GSM6614204 	retina u6 barcodes rep2 [scMPPRA]
 rep1_path=paste(data_root,"/GSE188639_retina_pBC_exp_rep1.csv.gz",sep="")
 rep2_path=paste(data_root,"/GSE188639_retina_pBC_exp_rep2.csv.gz",sep="")
 
-if(download){
+if(download_data){
   download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE188639&format=file&file=GSE188639%5Fretina%5FpBC%5Fexp%5Frep1%2Ecsv%2Egz",rep1_path)
   download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE188639&format=file&file=GSE188639%5Fretina%5FpBC%5Fexp%5Frep2%2Ecsv%2Egz",rep2_path)
 }
@@ -88,7 +89,7 @@ retina_rep1_barcodes=paste(data_root,"/GSM6614199_retina_rep1_barcodes.tsv.gz",s
 retina_rep1_features=paste(data_root,"/GSM6614199_retina_rep1_features.tsv.gz",sep="")
 retina_rep1_matrix=paste(data_root,"/GSM6614199_retina_rep1_matrix.mtx.gz",sep="")
 
-if(download){
+if(download_data){
   download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSM6614199&format=file&file=GSM6614199%5Fretina%5Frep1%5Fbarcodes%2Etsv%2Egz",retina_rep1_barcodes)
   download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSM6614199&format=file&file=GSM6614199%5Fretina%5Frep1%5Ffeatures%2Etsv%2Egz",retina_rep1_features)
   download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSM6614199&format=file&file=GSM6614199%5Fretina%5Frep1%5Fmatrix%2Emtx%2Egz",retina_rep1_matrix)
@@ -131,7 +132,78 @@ OK, I think it's in the zenodo
 https://zenodo.org/records/7338678/files/scMPRA.zip?download=1
 
 ```{r}
-
+zenodo=paste(data_root,"/scMPRA.zip",sep="")
+unzipped_zenodo_path=paste(data_root,"/scMPRA",sep="")
+if(download_data){
+  download.file("https://zenodo.org/records/7338678/files/scMPRA.zip?download=1",zenodo)
+  dir.create(unzipped_zenodo_path)
+  unzip(zenodo,exdir=unzipped_zenodo_path)
+  file.remove(zenodo)
+}
 ```
 
+```{r}
+retina_MPRAbc_rep1=read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_pBC_ec_rBC_ec_rep1.csv",sep=""))
+retina_MPRAbc_rep2=read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_pBC_ec_rBC_ec_rep2.csv",sep=""))
+```
+Preferable to have the two replicates in one tibble
+```{r}
+retina_MPRAbc_rep1 <- retina_MPRAbc_rep1 %>% mutate(rep_id=1)
+retina_MPRAbc_rep2 <- retina_MPRAbc_rep2 %>% mutate(rep_id=2)
+retina_MPRAbc <- bind_rows(retina_MPRAbc_rep1, retina_MPRAbc_rep2)
+```
+
+Kill the original variables to free some space. 
+```{r}
+rm(retina_MPRAbc_rep1,retina_MPRAbc_rep2)
+gc()
+```
+
+
+```{r}
+retina_MPRAbc_agg <- retina_MPRAbc %>%
+  group_by(cellBC, rBC, name, pBC, cluster, rep_id) %>%
+  summarise(
+    total_count = sum(count),
+    UMIs_MPRA_BC = n_distinct(umi),
+    .groups = "drop"
+  )
+```
+
+```{r}
+retina_MPRAbc_agg
+```
+
+
+
+
+
+```{r}
+retina_MPRAbc_agg<-retina_MPRAbc_agg %>% 
+  rename(#new=old
+    MPRA_BC=rBC,
+    reads_MPRA_BC=total_count,
+    cell_type_annotation=cluster,
+    transfection_BC=pBC,
+    CRE_id=name
+  )
+```
+Reorder the columns
+```{r}
+retina_MPRAbc_agg<-retina_MPRAbc_agg %>% select(cellBC, rep_id, CRE_id,cell_type_annotation,MPRA_BC,reads_MPRA_BC,UMIs_MPRA_BC,transfection_BC)
+```
+
+Set untransfected to NA
+```{r}
+retina_MPRAbc_agg<-retina_MPRAbc_agg %>%
+  mutate(
+    MPRA_BC = if_else(MPRA_BC == "0", NA_character_, MPRA_BC),
+    UMIs_MPRA_BC = if_else(is.na(MPRA_BC), NA_integer_, UMIs_MPRA_BC)
+  )
+```
+
+dump to disc
+```{r}
+write.table(retina_MPRAbc_agg, file = paste(output_root,"COHEN_RETINA.tsv",sep="/"), sep = "\t", row.names = FALSE, quote = FALSE)
+```
 
