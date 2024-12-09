@@ -1,7 +1,7 @@
 These scripts preprocess scMPRA from a couple sources into convienient eriniform tables. 
 
 All the actual data are in `/home/mcn26/palmer_scratch/tabula_data/formatted`
-The notebooks here are written to download and process all the files automatically (just set download_data to TRUE). 
+The notebooks here are written to download and process all the files automatically (just set download_data to TRUE and change the input/output root path variables to your own palmer_scratch). 
 
 Tables have columns:
 
