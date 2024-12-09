@@ -108,3 +108,31 @@ and
 GSM6614202 	retina barcodes rep2 [scMPPRA]
 both have no suppl files. 
 They do *say* "Processed data provided as supplementary file". So let's look...
+
+
+
+---
+  
+  Data could be re-constructed from the zenodo, but it looks like a better (more 
+                                                                            processed) file is avilable from here:
+  
+  [GSE188639_mixed_cell_bulk_exp.csv.gz](https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE188639&format=file&file=GSE188639%5Fmixed%5Fcell%5Fbulk%5Fexp%2Ecsv%2Egz)
+
+```{r}
+mixed_cell_path=paste(data_root,"GSE188639_mixed_cell_bulk_exp.csv.gz",sep="/")
+if(download_data){
+  download.file("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE188639&format=file&file=GSE188639%5Fmixed%5Fcell%5Fbulk%5Fexp%2Ecsv%2Egz",mixed_cell_path)
+}
+```
+
+```{r}
+mixed_cell_data=read_csv(mixed_cell_path)
+```
+
+
+
+```{r}
+mixed_cell_data
+```
+
+ok actually that's bulked and so useless'
