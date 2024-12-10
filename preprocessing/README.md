@@ -23,7 +23,11 @@ Optional:
 
 # Table-specific notes:
 
-in COHEN_RETINA.tsv
+COHEN_RETINA.tsv
 - I've merged in transfected unexpressed.
 - reads_transfection_BC has duplicated entries : multiple MPRA bc coresp. to same transfection BC in same cell.
 - So don't sum it
+
+COHEN_MIXED_CELL.tsv
+- Data were already summed across MPRA barcodes
+- (I can re-run their analysis and extract this information, but would be nontrivial amount of work).
