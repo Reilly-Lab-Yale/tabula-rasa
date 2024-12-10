@@ -1,5 +1,7 @@
 These scripts preprocess scMPRA from a couple sources into convienient eriniform tables. 
 
+Uses conda envieonment "rzone" for both r and python scripts. 
+
 All the actual data are in `/home/mcn26/palmer_scratch/tabula_data/formatted`
 The notebooks here are written to download and process all the files automatically (just set download_data to TRUE and change the input/output root path variables to your own palmer_scratch). 
 
@@ -16,7 +18,7 @@ Tables have columns:
 Optional:
 
 - transfection_BC <str> nucleotide barcode of the transfection reporter (called the oBC in the shendure paper, and alternately the cBC or pBC in the cohen paper)
-reads_transfection_BC <int>
+- reads_transfection_BC <int>
 
 
 # Table-specific notes:
