@@ -1,0 +1,8 @@
+cohen_multi poisson /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_multi_poisson_rep_id_CRE_id.RDS
+cohen_multi zi_poisson /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_multi_zip_rep_id_CRE_id.RDS
+cohen_multi negative_binomial /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_multi_negbin_rep_id_CRE_id.RDS
+cohen_multi zi_negative_binomial /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_multi_znb_rep_id_CRE_id.RDS
+cohen_retina poisson /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_retina_poisson_rep_id_CRE_id.RDS
+cohen_retina zi_poisson /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_retina_zip_rep_id_CRE_id.RDS
+cohen_retina negative_binomial /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/ccohen_retina_negbin_rep_id_CRE_id.RDS
+cohen_retina zi_negative_binomial /gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/notebooks/R_model_files/cohen_retina_znb_rep_id_CRE_id.RDS
