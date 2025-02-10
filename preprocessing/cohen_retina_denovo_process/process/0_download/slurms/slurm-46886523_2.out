@@ -1,0 +1,14 @@
+Downloading SRA run: SRR21787460
+2025-01-30T23:10:12 prefetch.3.1.1: 1) Resolving 'SRR21787460'...
+2025-01-30T23:10:13 prefetch.3.1.1: Current preference is set to retrieve SRA Normalized Format files with full base quality scores
+2025-01-30T23:10:13 prefetch.3.1.1: 1) Downloading 'SRR21787460'...
+2025-01-30T23:10:13 prefetch.3.1.1:  SRA Normalized Format file is being retrieved
+2025-01-30T23:10:13 prefetch.3.1.1:  Downloading via HTTPS...
+2025-01-30T23:15:19 prefetch.3.1.1:  HTTPS download succeed
+2025-01-30T23:16:00 prefetch.3.1.1:  'SRR21787460' is valid: 11774668649 bytes were streamed from 11774663479
+2025-01-30T23:16:00 prefetch.3.1.1: 1) 'SRR21787460' was downloaded successfully
+2025-01-30T23:16:01 prefetch.3.1.1: 'SRR21787460' has 0 unresolved dependencies
+Extracting FASTQ files for SRA run: SRR21787460
+Read 341856773 spots for SRR21787460
+Written 341856773 spots for SRR21787460
+Completed processing SRA run: SRR21787460
