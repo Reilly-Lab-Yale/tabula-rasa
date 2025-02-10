@@ -1,0 +1,14 @@
+Lmod has detected the following error: Cannot load module "miniconda/24.9.2"
+because these module(s) are loaded:
+   Python
+
+While processing the following module(s):
+    Module fullname   Module Filename
+    ---------------   ---------------
+    miniconda/24.9.2  /vast/palmer/apps/avx2/modules/tools/miniconda/24.9.2.lua
+
+/var/spool/slurmd/job47050997/slurm_script: line 8: conda: command not found
+unzipping R1...
+unzipping R2...
+beginning barcode extraction...
+/var/spool/slurmd/job47050997/slurm_script: line 20: umi_tools: command not found

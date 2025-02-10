@@ -1,0 +1,12 @@
+
+Note: the module "Python" cannot be unloaded because it was not loaded.
+
+Lmod Warning:
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded:
+Python/3.10.8-GCCcore-12.2.0 (required by: Bowtie2/2.5.1-GCC-12.2.0)
+-------------------------------------------------------------------------------
+
+
+
+beginning barcode extraction...

@@ -1,0 +1,23 @@
+To execute Trimmomatic run: java -jar $EBROOTTRIMMOMATIC/trimmomatic-0.39.jar
+Processing: SRR21787460_1.fastq.gz
+TrimmomaticPE: Started with arguments:
+ -threads 8 /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787460_1.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787460_2.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787460_1.fastq.gz_R1_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787460_1.fastq.gz_R1_unpaired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787460_1.fastq.gz_R2_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787460_1.fastq.gz_R2_unpaired.fastq.gz LEADING:30 TRAILING:30 SLIDINGWINDOW:4:30
+Quality encoding detected as phred33
+Input Read Pairs: 341856773 Both Surviving: 132869926 (38.87%) Forward Only Surviving: 136283314 (39.87%) Reverse Only Surviving: 15011139 (4.39%) Dropped: 57692394 (16.88%)
+TrimmomaticPE: Completed successfully
+Finished: SRR21787460_1.fastq.gz
+Processing: SRR21787461_1.fastq.gz
+TrimmomaticPE: Started with arguments:
+ -threads 8 /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787461_1.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787461_2.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787461_1.fastq.gz_R1_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787461_1.fastq.gz_R1_unpaired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787461_1.fastq.gz_R2_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787461_1.fastq.gz_R2_unpaired.fastq.gz LEADING:30 TRAILING:30 SLIDINGWINDOW:4:30
+Quality encoding detected as phred33
+Input Read Pairs: 285499642 Both Surviving: 126880302 (44.44%) Forward Only Surviving: 101242848 (35.46%) Reverse Only Surviving: 12565625 (4.40%) Dropped: 44810867 (15.70%)
+TrimmomaticPE: Completed successfully
+Finished: SRR21787461_1.fastq.gz
+Processing: SRR21787462_1.fastq.gz
+TrimmomaticPE: Started with arguments:
+ -threads 8 /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787462_1.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/raw_fastq/SRR21787462_2.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787462_1.fastq.gz_R1_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787462_1.fastq.gz_R1_unpaired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787462_1.fastq.gz_R2_paired.fastq.gz /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq/SRR21787462_1.fastq.gz_R2_unpaired.fastq.gz LEADING:30 TRAILING:30 SLIDINGWINDOW:4:30
+Quality encoding detected as phred33
+Input Read Pairs: 714566670 Both Surviving: 628585509 (87.97%) Forward Only Surviving: 46585537 (6.52%) Reverse Only Surviving: 29431723 (4.12%) Dropped: 9963901 (1.39%)
+TrimmomaticPE: Completed successfully
+Finished: SRR21787462_1.fastq.gz
+All files processed. Trimmed reads are in /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/filtered_fastq.
