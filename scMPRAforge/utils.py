@@ -1,6 +1,6 @@
 #utility functions
-#
 
+#external imports
 import functools
 
 unimplemented_functions = []  # List to track unimplemented functions
@@ -8,7 +8,7 @@ unimplemented_functions = []  # List to track unimplemented functions
 def unimplemented(func):
     """
     Decorator to mark functions as unimplemented.
-    Adds them to a global tracking list and raises a warning when called.
+    Adds them to a global tracking list and breaks when called. 
     """
     global unimplemented_functions
     unimplemented_functions.append(func.__name__)
