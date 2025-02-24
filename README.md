@@ -3,9 +3,11 @@ Assumptions:
 2. Removal of "false zeroes" through clonotype analysis and transfection reporters is part of pre-processing. 
 3. We are interested in changes in CRE activity within and between cell-types
 4. I've run ahead with the "one big model" approach (instead of the "one model per CRE" approach) but we can change this later based on some exploratory analysis. 
+5. We could potentially add MPRA barcode variability as another mixture-model component : however I expect this to be well-captured in a single set of per-CRE-cell-type ZINB paramater sets (should be tested). (Ought to be tested separately...)
 
 (We may eventually wish to turn the ad-hoc pre-processing steps into common tools.)
 
+Run `pydoc-markdown` in the repo root to update the docs. 
 
 # MPRA data formatting
 
@@ -15,11 +17,11 @@ Note that nothing in our code should *require* that any of the barcode sequences
 
 However, given python's weak typing, I'd recommend not putting something that could be obviously misinterpreted as another type (e.g. replicate a single int as this could easially be misinterpreted to suggest an ordinal position).
 
-Data can be umi-wise or read-wise, and with or without collapsed barcodes, for a total of four possible formats. Explicit column names and types are given below for each combination.
+Data can be umi-wise or read-wise.
 
-(Collapsing cells or replicates is not meaningful for us, since this would collapse what we believe to be true biological replicates. We may *summarize* (e.g. mean UMIs per cell).
+(Collapsing cells, replicates, and MPRA barcodes is not meaningful for us, since this would collapse what we believe to be true biological samples. However we may frequently *summarize* (e.g. compute mean UMIs per cell, or model a distribution where all UMI count originating from one CRE in one cell-type (regardless of MPRA barcode) are considered to have come from one triplicate of zinb parameters).
 
-**Read-wise UNcollapsed-on-barcodes**
+**Read-wise**
 | Column name | Type             | Description                 | Mandatory? |
 | ----------- | ---------------- | --------------------------- | ---------- |
 | cell_bc     | str (nucleotide) | cell barcode                | T          |
@@ -30,7 +32,7 @@ Data can be umi-wise or read-wise, and with or without collapsed barcodes, for a
 | umi         | str (nucleotide) | unique molecular identifier | T          |
 | reads       | int              | number of reads             | T          |
 
-**Umi-wise UNcollapsed-on-barcodes**
+**Umi-wise**
 | Column name | Type             | Description                             | Mandatory? |
 | ----------- | ---------------- | --------------------------------------- | ---------- |
 | cell_bc     | str (nucleotide) | cell barcode                            | T          |
@@ -40,6 +42,8 @@ Data can be umi-wise or read-wise, and with or without collapsed barcodes, for a
 | mpra_bc     | str (nucleotide) | MPRA reporter barcode                   | T          |
 | umis        | int              | number of unique molecular identifiers  | T          |
 | reads       | int              | number of reads, summed across all UMIs | F          |
+
+
 
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
@@ -58,6 +62,16 @@ Also note that all these strings are really factors / categorical data, and will
 - If no reference CRE is provided, the package will assume that we are comparing to zero (looking for any activity at all). 
 - A row that contains only one of reference_CRE, reference_cell_type is considered malformed. 
 - For assessing variant effects, we recommend the convention that reference columns refer to the reference allele, and comparison columns refer to the alternate allele. You can explicitly specify this in the metadata column. 
+
+A result table is the same as a hypothesis table with the following additional columns:
+
+| Column name    | Type  | Description                          | Mandatory? |
+| -------------- | ----- | ------------------------------------ | ---------- |
+| test_type      | str   | which test was performed             | T          |
+| test_statistic | float | the test-statistic for that test     | T          |
+| p_value        | float | type 1 error probability             | T          |
+| fold_change    | float | between ref and comparison           | T          |
+| bh_p           | float | benjamini hochberg corrected p-value | T          |
 
  # Preprocessing tools
 
