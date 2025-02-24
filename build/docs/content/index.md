@@ -29,6 +29,19 @@ def list_unimplemented()
 
 Returns the list of unimplemented functions.
 
+<a id="scMPRAforge.utils.one_versus_all"></a>
+
+#### one\_versus\_all
+
+```python
+@unimplemented
+def one_versus_all()
+```
+
+Provide one negative control, and a list of others to compare against, and 
+this function will generate a hypothesis list comparing all vs it...
+Useful for a quick "which elements are expressed".
+
 <a id="scMPRAforge.core"></a>
 
 # scMPRAforge.core
@@ -110,11 +123,12 @@ Loads scMPRA data from `filepath`. Determines whether it is umi or read-wise.
 
 ```python
 @unimplemented
-def graph_qc_metrics(scmpra_data, *args, **kwargs)
+def graph_qc_metrics(scmpra_data, actually_plot=True * args, **kwargs)
 ```
 
 Arguments
     scmpra_data <pd.DataFrame>
+    actually_plot <bool>
     *args
     **kwargs
 Returns
@@ -122,6 +136,8 @@ Returns
 
 Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
 and returns a histogram of frequency of reads per UMI using seaborn.histplot. 
+if actually_plot, will do the plotting. Otherwise will simply return the plot
+
 All other arguments are passed to the histplot call to allow graph 
 customization.
 
@@ -135,8 +151,8 @@ def cut_chimeric_reads(scmpra_data, threshold)
 ```
 
 Arguments
-    `scmpra_data` <pandas.DataFrame> of read-wise scMPRA data 
-    `threshold` <int>.
+    scmpra_data <pandas.DataFrame> of read-wise scMPRA data 
+    threshold <int>.
 
 Returns
     a pandas dataframe of umi-wise MPRA data
@@ -144,21 +160,39 @@ Returns
 subsets to those UMIs which lie above the number-of-reads threshold, 
 removing chimeric reads.
 
+<a id="scMPRAforge.core.apply_deseq"></a>
+
+#### apply\_deseq
+
+```python
+@unimplemented
+def apply_deseq()
+```
+
+R quarantine zone.
+
 <a id="scMPRAforge.core.hypothesis_tester"></a>
 
 #### hypothesis\_tester
 
 ```python
 @unimplemented
-def hypothesis_tester(scmpra_data, hypotheses, flavor="wald")
+def hypothesis_tester(scmpra_models, hypotheses, flavor="wald")
 ```
 
 Arguments
-    scmpra_data: 
-    hypotheses :
-`flavor`, a string with values 
+    scmpra_models : <pd.DataFrame>
+    hypotheses : <pd.Dataframe>
+    flavor : <str>
+Returns
+    <pd.DataFrame>
 
-a pandas dataframe of umi-wise scMPRA data
+Takes .. and a set of hypotheses and tests them all. Returns
+a results dataframe. Flavor selects the test type, and can be one of
+- wald : wald test
+- wilcox : wilcoxin-rank-sum
+- permute : permutation test
+- deseq : uses deseq2
 
 <a id="scMPRAforge.core.fit"></a>
 
@@ -169,6 +203,22 @@ a pandas dataframe of umi-wise scMPRA data
 def fit(scmpra_data, round_down_threshold=4)
 ```
 
-requires collapsed-on-barcodes, umi-wise
-impl. round-down for very low CREs...
+Arguments
+    scmpra_data
+Returns
+    {
+        'model':<statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
+        'flattened': <pd.DataFrame>
+    }
+
+<a id="scMPRAforge.core.volcano"></a>
+
+#### volcano
+
+```python
+@unimplemented
+def volcano(results)
+```
+
+Volcano plot of p value versus log fold change
 
