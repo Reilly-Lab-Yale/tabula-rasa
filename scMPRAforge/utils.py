@@ -13,6 +13,12 @@ def unimplemented(func):
     global unimplemented_functions
     unimplemented_functions.append(func.__name__)
 
+    note = "\n\n**Note:** This function is not yet implemented."
+    if func.__doc__:
+        func.__doc__ += note
+    else:
+        func.__doc__ = note.strip()
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         raise NotImplementedError
