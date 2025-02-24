@@ -7,7 +7,7 @@ Assumptions:
 
 (We may eventually wish to turn the ad-hoc pre-processing steps into common tools.)
 
-Run `pydoc-markdown` in the repo root to update the docs. 
+Run `pydoc-markdown` in the repo root to update the docs. (Could automate this with a github action). 
 
 # MPRA data formatting
 
@@ -45,7 +45,6 @@ Data can be umi-wise or read-wise.
 
 
 
-
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
 
  # Hypothesis formatting
@@ -61,19 +60,36 @@ Also note that all these strings are really factors / categorical data, and will
 
 - If no reference CRE is provided, the package will assume that we are comparing to zero (looking for any activity at all). 
 - A row that contains only one of reference_CRE, reference_cell_type is considered malformed. 
-- For assessing variant effects, we recommend the convention that reference columns refer to the reference allele, and comparison columns refer to the alternate allele. You can explicitly specify this in the metadata column. 
+- For assessing variant effects, we recommend the convention that reference columns refer to the reference allele, and comparison columns refer to the alternate allele.
+- The metadata column can also be used to paint plots, so a categorical like "negative_control", "positive_control", "emvar", "putative-brain-specific" or similar would work well. No strict requirements: modify names as suits your experimental design.
 
 A result table is the same as a hypothesis table with the following additional columns:
 
-| Column name    | Type  | Description                          | Mandatory? |
-| -------------- | ----- | ------------------------------------ | ---------- |
-| test_type      | str   | which test was performed             | T          |
-| test_statistic | float | the test-statistic for that test     | T          |
-| p_value        | float | type 1 error probability             | T          |
-| fold_change    | float | between ref and comparison           | T          |
-| bh_p           | float | benjamini hochberg corrected p-value | T          |
+| Column name    | Type  | Description                                            | Mandatory? |
+| -------------- | ----- | ------------------------------------------------------ | ---------- |
+| test_type      | str   | which test was performed                               | T          |
+| test_statistic | float | the test-statistic for that test                       | T          |
+| p_value        | float | type 1 error probability                               | T          |
+| fold_change    | float | between ref and comparison                             | T          |
+| bh_p           | float | benjamini hochberg corrected p-value                   | T          |
+| flattened      | bool  | whether the CRE was flattened due to insufficient UMIs | T          |
 
- # Preprocessing tools
+# Model formatting
+
+(If we change our mind and instead desire a per-CRE model approach, we could replace this with a pandas dataframe). 
+ 
+Model can be broken into a cohort parameters + a parameter table (but the reverse is not trivial).
+
+# Cohort parameters formatting
+
+A dictionary with keys
+- alpha: alpha value for the dataset (constant term in mean-variance relationship). 
+
+# Parameter table formatting
+
+Note that this object is closely associated with a gross
+
+# Preprocessing tools
 
 scMPRA is a new technique and there are as of yet no standard flows for the initial analysis. These preprocessing tools are only for common-to but also-specific-to scMPRA tasks and are not a substituite for standard scRNA-seq analysis. 
 
