@@ -29,3 +29,17 @@ def unimplemented(func):
 def list_unimplemented():
     """Returns the list of unimplemented functions."""
     return unimplemented_functions
+
+
+#        1         2         3         4         5         6         7         8
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890
+
+## tools for easy generation of hypotheses
+@unimplemented
+def one_versus_all():
+    """
+    Provide one negative control, and a list of others to compare against, and 
+    this function will generate a hypothesis list comparing all vs it...
+    Useful for a quick "which elements are expressed". 
+    """
+    pass
