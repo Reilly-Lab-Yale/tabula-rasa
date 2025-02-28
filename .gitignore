@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.h5ad
 preprocessing/.ipynb_checkpoints/
 .ipynb_checkpoints/Data_exploration-checkpoint.ipynb
 .ipynb_checkpoints/mcn-checkpoint.ipynb
