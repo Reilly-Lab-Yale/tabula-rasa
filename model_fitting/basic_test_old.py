@@ -1,8 +1,6 @@
 import pyarrow.parquet as pq
 import argparse
 import statsmodels.discrete.count_model as smdc
-import pandas as pd
-import numpy as np
 
 class DataSet(dict):
     def __init__(self, path):
@@ -22,25 +20,22 @@ class DataSet(dict):
 
 
 def poisson_model(counts_parq, patsy_formula):
-    # counts_model_poisson = smdc.GeneralizedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
+    counts_model_poisson = smdc.GeneralizedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
 
-    # return counts_model_poisson
-    return
+    return counts_model_poisson
 
 def zi_poisson_model(counts_parq, patsy_formula):
-    # counts_model_zi_poisson = smdc.ZeroInflatedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
+    counts_model_zi_poisson = smdc.ZeroInflatedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
 
-    # return counts_model_zi_poisson
-    return
+    return counts_model_zi_poisson
 
 def negative_binomial_model(counts_parq, patsy_formula):
-    # counts_model_negative_binomial = smdc.NegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq)
+    counts_model_negative_binomial = smdc.NegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq)
 
-    # return counts_model_negative_binomial
-    return
+    return counts_model_negative_binomial
 
-def zi_negative_binomial_model(counts_parq, patsy_formula, zi_param):
-    counts_model_zi_negative_binomial = smdc.ZeroInflatedNegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq, exog_infl = pd.get_dummies(pd.Categorical(counts_parq.__getitem__(zi_param))))
+def zi_negative_binomial_model(counts_parq, patsy_formula):
+    counts_model_zi_negative_binomial = smdc.ZeroInflatedNegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq)
 
     return counts_model_zi_negative_binomial
 
@@ -69,8 +64,8 @@ def main():
     parser.add_argument('--scmpra_counts_file', type=str)
     parser.add_argument('--model_choice', type=str)
     parser.add_argument('--formula', type=str)
-    parser.add_argument('--maxiter', type=int, default=200)
-    parser.add_argument('--zi_param', type=str)
+    parser.add_argument('--maxiter', type=int, default=50)
+    parser.add_argument('--regularized_fit', type=boolean_string, default=False)
     parser.add_argument('--temp_dir')
     parser.add_argument('--out_file', type=str)
     args = parser.parse_args()
@@ -79,15 +74,14 @@ def main():
     print('formula: %s' % formula)
     maxiter = args.maxiter
     print('maxiter: %s' % maxiter)
-    zi_param = args.zi_param
-    print('zi_param: %s' % zi_param)
+    reg_fit = args.regularized_fit
+    print('reg_fit: %s' % reg_fit)
     temp_dir = args.temp_dir
     print('temp_dir: %s' % temp_dir)
     model_choice = args.model_choice
     print('model_choice: %s' % model_choice)
     out_file = args.out_file
     print('out_file: %s' % out_file)
-    count = out_file.split('_')[0]
 
     model_dict = {'poisson': poisson_model,
                   'zi_poisson' : zi_poisson_model, 
@@ -96,23 +90,22 @@ def main():
     
 
     # try:
-    scmpra_model = model_dict[model_choice](scmpra_counts, formula, zi_param)
+    scmpra_model = model_dict[model_choice](scmpra_counts, formula)
     # except:
     #     print('Failed to build %s model' % model_choice)
     #     return
     
     print(model_choice)
-    
-    n_count_params = scmpra_model.exog.shape[1]      # Count model parameters
-    n_infl_params = scmpra_model.exog_infl.shape[1]    # Inflation model parameters
-    n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
-    start_params = np.full(n_total, 0.1)
-    
-    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="bfgs",maxiter=200)
+
+    if reg_fit:
+        scmpra_model_fit = scmpra_model.fit_regularized(maxiter = maxiter)
+
+    else:
+        scmpra_model_fit = scmpra_model.fit(maxiter = maxiter)
 
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
 
-    model_info = [count,model_choice, formula, maxiter, zi_param]
+    model_info = [model_choice, formula, maxiter, reg_fit]
     model_stats = get_stats(scmpra_model_fit)
     print(model_stats)
     print(model_info)
@@ -122,6 +115,8 @@ def main():
         o.write("\t".join(str(x) for x in out_list))
         o.write("\n")
 
+    with open("%s/%s_resids.txt" % (temp_dir, out_file), "w") as o:
+        o.write(model_stats[:-1])
 
     return
 
