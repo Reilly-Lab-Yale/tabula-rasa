@@ -1,3 +1,5 @@
+(add dna)
+
 These scripts preprocess scMPRA from a couple sources into convienient eriniform tables. 
 
 Uses conda envieonment "rzone" for both r and python scripts. 
