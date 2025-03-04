@@ -34,6 +34,15 @@ def list_unimplemented():
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
+@unimplemented
+def umi_table_merge(left,right,on,*args,**kwargs):
+    """
+    Joins two dataframes on column named `on`
+    Uses umitools library to correct sequencing errors 
+    *args and **kwargs passed to pandas.merge
+    """
+    pass
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():
