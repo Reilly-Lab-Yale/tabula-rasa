@@ -46,6 +46,37 @@ def umi_table_merge(left,right,on,*args,**kwargs):
     """
     pass
 
+def bcs_to_lut(bc,threshold=1,*args,**kwargs):
+    """
+    Arguments
+        bc <dict> of byte-string keys and integer occuracnce count values
+        threshold <int>
+
+    Returns
+        <dict>
+
+    A simple wrapper for umi_tools.UMIClusterer(). `threshold` is the edit 
+    distance passed to . args and kwargs are passed to umi_tools.UMIClusterer
+    constructor. 
+    Produces a lookup table where the keys are erronious & correct barcodes
+    and the values are all the corrected barcodes.
+    """
+    
+    #Why is this written as an object..? Why not just a function..? such a strange decision.
+    clusterer=umi_tools.UMIClusterer(*args,**kwargs)
+    fixed=clusterer(bc,threshold=1)
+    #the first barcode in each sub-list is the one supported by the most counts, 
+    #so we will consider those as the 'correct' values. 
+    
+    #could maybe vectorize to speed up, but only part of pre-processing so not priority. 
+    ret={}
+    for cluster in fixed:
+        correct_bc=cluster[0]
+        for bc in cluster:
+            ret[bc]=correct_bc
+
+    return ret
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():
