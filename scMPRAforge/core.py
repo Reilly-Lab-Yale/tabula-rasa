@@ -5,6 +5,8 @@
 
 #external imports
 import seaborn as sns
+import matplotlib.pyplot as plt
+
 import pandas as pd
 import numpy as np
 import warnings
@@ -23,7 +25,7 @@ def helloworld():
     pass
 
 
-@unimplemented
+
 def table_type(column_names):
     """
     Arguments:
@@ -42,7 +44,25 @@ def table_type(column_names):
     
     (We could extend to type-checking as well, but that seems a tad draconian.)
     """
-    pass
+    #Performs subset checking so that extra columns are allowed.
+    #Matching multiple definitions however is not allowed. 
+    
+    #If it matches no definitions the table is malformed: so this is the default. 
+    ret='malformed'
+    
+    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'umi', 'reads'}<=set(column_names):
+        if ret=='malformed':
+            ret='mpra_readwise'
+        else:
+            return 'malformed'
+    
+    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'umis'}<=set(column_names):
+        if ret=='malformed':
+            ret='mpra_umiwise'
+        else:
+            return 'malformed'
+    
+    return ret
 
 @unimplemented
 def load_hypothesis_set(filepath):
@@ -61,7 +81,7 @@ def load_hypothesis_set(filepath):
 
 
 
-@unimplemented
+
 def load_scMPRA_data(filepath):
     """
     Arguments
@@ -69,35 +89,39 @@ def load_scMPRA_data(filepath):
     Returns
         <pd.DataFrame>
 
-    Loads scMPRA data from `filepath`. Determines whether it is umi or read-wise.
+    Loads tsv scMPRA data from `filepath`.
     
     """
-    pass
+    tab=pd.read_csv(filepath,sep="\t")
+    tabtype=table_type(tab.columns)
+    assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
+    return tab
 
 
 
-@unimplemented
-def graph_qc_metrics(scmpra_data, actually_plot=True *args, **kwargs):
+def graph_chimeric(scmpra_data, *args, **kwargs):
     """
     Arguments
         scmpra_data <pd.DataFrame>
-        actually_plot <bool>
         *args
         **kwargs
     Returns
         <matplotlib.axes._axes.Axes>
 
     Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
-    and returns a histogram of frequency of reads per UMI using seaborn.histplot. 
-    if actually_plot, will do the plotting. Otherwise will simply return the plot
+    and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
 
     All other arguments are passed to the histplot call to allow graph 
-    customization.
+    customization. Particular useful are `bins`, `binrange`, and `log_scale`
     """
     assert table_type(scmpra_data.columns) == "mpra_readwise"
-    #if actually_plot
-    #   plot in-place to avoid making the user import seaborn if they don't want to
-    pass
+    
+    sns.histplot(scmpra_data['reads'], *args, **kwargs)
+
+    plt.xlabel('Reads')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Reads')
+    plt.show()
 
 @unimplemented
 def cut_chimeric_reads(scmpra_data, threshold):
@@ -113,7 +137,8 @@ def cut_chimeric_reads(scmpra_data, threshold):
     removing chimeric reads. 
     """
     assert table_type(scmpra_data.columns) == "mpra_readwise"
-    assert threshold >=0
+    assert threshold >=0, "threshold must be greater than zero."
+    
     pass
 
 #        1         2         3         4         5         6         7         8
