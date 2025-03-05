@@ -1,0 +1,1 @@
+Currently just a few manual tests. Will write up properly at a later date, when the contents of the package are more settled. 
