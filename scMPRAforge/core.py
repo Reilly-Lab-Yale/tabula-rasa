@@ -11,8 +11,10 @@ import pandas as pd
 import numpy as np
 import logging
 
+
 #internal imports
 from .utils import unimplemented
+from .utils import bcs_to_lut
 logger = logging.getLogger("scMPRAforge")
 
 #functions
@@ -129,8 +131,8 @@ def graph_chimeric(scmpra_data, *args, **kwargs):
 def cut_chimeric_reads(scmpra_data, threshold):
     """
     Arguments
-        scmpra_data <pandas.DataFrame> of read-wise scMPRA data 
-        threshold <int>.
+        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data 
+        threshold : <int>.
     
     Returns
         a pandas dataframe of umi-wise MPRA data
@@ -140,8 +142,37 @@ def cut_chimeric_reads(scmpra_data, threshold):
     """
     assert table_type(scmpra_data.columns) == "mpra_readwise"
     assert threshold >=0, "threshold must be greater than zero."
+    
+    #Trim
     ret=scmpra_data[scmpra_data["reads"]>threshold]
-    logger.info("test")
+
+    original_umi_count=len(scmpra_data["umi"].unique())
+    cut_umi_count=len(ret["umi"].unique())
+
+    logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
+
+    return ret
+
+
+def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
+    """
+    Arguments
+        df <pandas.DataFrame>
+        barcode_column <str>
+    Returns
+        <pandas.DataFrame>
+
+    Uses umitools to flatten different barcodes which are likely only different
+    due to sequencing errors. Passes *args,**kwargs upstream to bcs_to_lut. 
+    """
+    ret=df.copy()
+    
+    lut=bcs_to_lut(ret[barcode_column].value_counts().to_dict(),*args,**kwargs)
+
+    ret[barcode_column]=ret[barcode_column].map(lut)
+
+    return ret
+
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
