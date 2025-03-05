@@ -13,7 +13,7 @@ Run `pydoc-markdown` in the repo root to update the docs. (Could automate this w
 
 All on-disc data should be tsv or (some high-performace format to be chosen later).
 
-Note that nothing in our code should *require* that any of the barcode sequences should be actual nucleotide sequences. So you can replace them with, for example, numerical combinatorial barcoding sub-barcode ID strings with no consequence.
+Note that most of our code does not *require* that any of the barcode sequences should be actual nucleotide sequences. So you can replace them with, for example, numerical combinatorial barcoding sub-barcode ID strings with no consequence. The exception is barcode-deduplication. 
 
 However, given python's weak typing, I'd recommend not putting something that could be obviously misinterpreted as another type (e.g. replicate a single int as this could easially be misinterpreted to suggest an ordinal position).
 

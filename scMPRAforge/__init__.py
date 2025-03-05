@@ -8,6 +8,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import logging
+import umi_tools
 
 # Create a logger
 logger = logging.getLogger("scMPRAforge")
@@ -34,4 +35,4 @@ __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non
 __version__ = "-1"
 
 #Delete symbols used internally
-del pd, sns, plt, logging
+del pd, sns, plt, logging, umi_tools

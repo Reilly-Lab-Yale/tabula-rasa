@@ -3,6 +3,7 @@
 #external imports
 import functools
 import logging
+import umi_tools
 
 logger = logging.getLogger("scMPRAforge")
 
@@ -37,20 +38,14 @@ def list_unimplemented():
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-@unimplemented
-def umi_table_merge(left,right,on,*args,**kwargs):
-    """
-    Joins two dataframes on column named `on`
-    Uses umitools library to correct sequencing errors 
-    *args and **kwargs passed to pandas.merge
-    """
-    pass
 
-def bcs_to_lut(bc,threshold=1,*args,**kwargs):
+
+def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     """
     Arguments
-        bc <dict> of byte-string keys and integer occuracnce count values
-        threshold <int>
+        bc <dict> of string keys and integer occuracnce count values
+        threshold <int> edit distance
+        encoding <str> string encoding
 
     Returns
         <dict>
@@ -58,9 +53,13 @@ def bcs_to_lut(bc,threshold=1,*args,**kwargs):
     A simple wrapper for umi_tools.UMIClusterer(). `threshold` is the edit 
     distance passed to . args and kwargs are passed to umi_tools.UMIClusterer
     constructor. 
-    Produces a lookup table where the keys are erronious & correct barcodes
+    Produces a lookup table (lut) where the keys are erronious & correct barcodes
     and the values are all the corrected barcodes.
     """
+
+    #convert the strings in bc to bytes
+    
+    bc={key.encode(encoding):value for key, value in bc.items()}
     
     #Why is this written as an object..? Why not just a function..? such a strange decision.
     clusterer=umi_tools.UMIClusterer(*args,**kwargs)
@@ -74,6 +73,9 @@ def bcs_to_lut(bc,threshold=1,*args,**kwargs):
         correct_bc=cluster[0]
         for bc in cluster:
             ret[bc]=correct_bc
+
+    # convert the bytes in the dictionary back to strings
+    ret={key.decode(encoding):value.decode(encoding) for key, value in ret.items()}
 
     return ret
 
