@@ -7,6 +7,22 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import logging
+
+# Create a logger
+logger = logging.getLogger("scMPRAforge")
+logger.setLevel(logging.INFO)  # Default to showing INFO and above
+
+# Create a console handler that prints messages to stdout
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Define a simple formatter
+formatter = logging.Formatter("%(name)s: %(levelname)s: %(message)s")
+console_handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(console_handler)
 
 
 from .core import *  # Imports everything public from core.py
@@ -18,4 +34,4 @@ __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non
 __version__ = "-1"
 
 #Delete symbols used internally
-del pd, sns, plt
+del pd, sns, plt, logging
