@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 
 import pandas as pd
 import numpy as np
-import warnings
+import logging
 
 #internal imports
 from .utils import unimplemented
+logger = logging.getLogger("scMPRAforge")
 
+#functions
 @unimplemented
 def always_unfinished():
     """tests unimplemented decorator."""
@@ -123,7 +125,7 @@ def graph_chimeric(scmpra_data, *args, **kwargs):
     plt.title('Histogram of Reads')
     plt.show()
 
-@unimplemented
+
 def cut_chimeric_reads(scmpra_data, threshold):
     """
     Arguments
@@ -133,13 +135,13 @@ def cut_chimeric_reads(scmpra_data, threshold):
     Returns
         a pandas dataframe of umi-wise MPRA data
     
-    subsets to those UMIs which lie above the number-of-reads threshold, 
+    subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
     removing chimeric reads. 
     """
     assert table_type(scmpra_data.columns) == "mpra_readwise"
     assert threshold >=0, "threshold must be greater than zero."
-    
-    pass
+    ret=scmpra_data[scmpra_data["reads"]>threshold]
+    logger.info("test")
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890

@@ -2,6 +2,9 @@
 
 #external imports
 import functools
+import logging
+
+logger = logging.getLogger("scMPRAforge")
 
 unimplemented_functions = []  # List to track unimplemented functions
 
