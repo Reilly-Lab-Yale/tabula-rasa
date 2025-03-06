@@ -132,10 +132,10 @@ def cut_chimeric_reads(scmpra_data, threshold):
     """
     Arguments
         scmpra_data : <pandas.DataFrame> of read-wise scMPRA data 
-        threshold : <int>.
+        threshold : <int>
     
     Returns
-        a pandas dataframe of umi-wise MPRA data
+        <pandas.DataFrame> of read-wise MPRA data
     
     subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
     removing chimeric reads. 
@@ -153,6 +153,16 @@ def cut_chimeric_reads(scmpra_data, threshold):
 
     return ret
 
+
+def read_to_umi_wise():
+    """
+    Arguments
+        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
+    Returns
+        
+
+    """
+    pass
 
 def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     """
