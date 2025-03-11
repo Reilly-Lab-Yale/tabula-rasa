@@ -21,6 +21,8 @@ Data can be umi-wise or read-wise.
 
 (Collapsing cells, replicates, and MPRA barcodes is not meaningful for us, since this would collapse what we believe to be true biological samples. However we may frequently *summarize* (e.g. compute mean UMIs per cell, or model a distribution where all UMI count originating from one CRE in one cell-type (regardless of MPRA barcode) are considered to have come from one triplicate of zinb parameters).
 
+In memory, dataframes use named columns with dummy row indicies. 
+
 **Read-wise**
 | Column name | Type             | Description                 | Mandatory? |
 | ----------- | ---------------- | --------------------------- | ---------- |
@@ -32,7 +34,8 @@ Data can be umi-wise or read-wise.
 | umi         | str (nucleotide) | unique molecular identifier | T          |
 | reads       | int              | number of reads             | T          |
 
-**Umi-wise**
+
+**Umi-wise, full MPRA**
 | Column name | Type             | Description                             | Mandatory? |
 | ----------- | ---------------- | --------------------------------------- | ---------- |
 | cell_bc     | str (nucleotide) | cell barcode                            | T          |
@@ -43,6 +46,16 @@ Data can be umi-wise or read-wise.
 | umis        | int              | number of unique molecular identifiers  | T          |
 | reads       | int              | number of reads, summed across all UMIs | F          |
 
+**Umi-wise, flattened MPRA**
+| Column name | Type             | Description                             | Mandatory? |
+| ----------- | ---------------- | --------------------------------------- | ---------- |
+| cell_bc     | str (nucleotide) | cell barcode                            | T          |
+| rep_id      | str              | replicate id                            | T          |
+| cre_id      | str              | CRE id or name                          | T          |
+| cell_type   | str              | cell-type                               | T          |
+| mpra_bc     | str (nucleotide) | MPRA reporter barcode                   | T          |
+| umis        | int              | number of unique molecular identifiers  | T          |
+| reads       | int              | number of reads, summed across all UMIs | F          |
 
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
