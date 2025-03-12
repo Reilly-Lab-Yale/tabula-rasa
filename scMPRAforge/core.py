@@ -153,16 +153,34 @@ def cut_chimeric_reads(scmpra_data, threshold):
 
     return ret
 
+#        1         2         3         4         5         6         7         8
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def read_to_umi_wise():
+def read_wise_to_umi_wise(scmpra_data,keep_reads=False):
     """
     Arguments
         scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
+        keep_reads : <bool>
     Returns
-        
+        <pandas.DataFrame> of umi-wise scMPRA data
 
+    Converts read-wise to UMI-wise table (see readme for spec).
     """
-    pass
+    assert table_type(scmpra_data.columns)=="mpra_readwise","Malformed table."
+
+    grouping_columns = [col for col in scmpra_data.columns if col not in ['umi', 'reads']]
+
+
+    aggregations = {
+        'umis': ('umi', 'nunique')  # Count unique UMIs
+    }
+
+    # Conditionally include 'reads' sum
+    if keep_reads:
+        aggregations['reads'] = ('reads', 'sum')
+
+    return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
+    
 
 def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     """
@@ -184,8 +202,7 @@ def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     return ret
 
 
-#        1         2         3         4         5         6         7         8
-#2345678901234567890123456789012345678901234567890123456789012345678901234567890
+
 
 @unimplemented
 def apply_deseq():
@@ -218,6 +235,34 @@ def hypothesis_tester(scmpra_models, hypotheses, flavor="wald"):
     assert table_type(hypotheses.columns) == "hypotheses"
     pass
 
+def flatten_mpra_barcodes(scmpra_data):
+    """
+    Arguments
+        scmpra_data : <pd.DataFrame> of umi-wise, full MPRA
+    returns
+        <pd.DataFrame> of umi-wise, flattened MPRA
+    """
+    
+    assert table_type(scmpra_data.columns)=="mpra_umiwise","Malformed table."
+    
+    # sum umi counts across MPRA barcodes
+    # - if reads present, sum that too
+
+    grouping_columns = [col for col in scmpra_data.columns if col not in ['reads', 'umis','mpra_bc']]
+
+
+    aggregations={
+        'umis':('umis','sum')
+    }
+
+    if "reads" in scmpra_data.columns:
+        aggregations['reads']=('reads','sum')
+    
+    return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
+
+
+    
+
 @unimplemented
 def fit(scmpra_data,round_down_threshold=4):
     """
@@ -225,8 +270,8 @@ def fit(scmpra_data,round_down_threshold=4):
         scmpra_data
     Returns
         {
-            'model':<statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
-            'flattened': <pd.DataFrame>
+            model : <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
+            flattened : <pd.DataFrame>
         }
 
     """
