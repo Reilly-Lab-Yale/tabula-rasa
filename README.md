@@ -1,3 +1,5 @@
+(Low priority) reminder : change asserts to thrown errors. 
+
 Assumptions:
 1. Barcode flattening is mandatory. Though ideally we would model each barcode as per MPRAmodel for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. 
 2. Removal of "false zeroes" through clonotype analysis and transfection reporters is part of pre-processing. 
