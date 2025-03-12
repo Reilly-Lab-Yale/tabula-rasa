@@ -55,8 +55,8 @@ In memory, dataframes use named columns with dummy row indicies.
 | rep_id      | str              | replicate id                            | T          |
 | cre_id      | str              | CRE id or name                          | T          |
 | cell_type   | str              | cell-type                               | T          |
-| mpra_bc     | str (nucleotide) | MPRA reporter barcode                   | T          |
 | umis        | int              | number of unique molecular identifiers  | T          |
+| mpra_bcs     | int | Numer of MPRA barcodes                   | F          |
 | reads       | int              | number of reads, summed across all UMIs | F          |
 
 
