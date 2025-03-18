@@ -29,6 +29,14 @@ def helloworld():
     pass
 
 
+#actually probably easier to do an 'inflate' function to avoid too much mem usage...?
+@unimplemented
+def mpra_unstack():
+    pass
+
+@unimplemented
+def mpra_stack():
+    pass
 
 def table_type(column_names):
     """
