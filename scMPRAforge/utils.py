@@ -38,6 +38,7 @@ def list_unimplemented():
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
+import time
 
 
 def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
@@ -63,7 +64,12 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     
     #Why is this written as an object..? Why not just a function..? such a strange decision.
     clusterer=umi_tools.UMIClusterer(*args,**kwargs)
+    
+    start_time = time.time()
     fixed=clusterer(bc,threshold=1)
+    end_time = time.time()
+    print(f"Clustering execution time: {end_time - start_time:.6f} seconds")
+
     #the first barcode in each sub-list is the one supported by the most counts, 
     #so we will consider those as the 'correct' values. 
     
