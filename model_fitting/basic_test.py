@@ -108,7 +108,7 @@ def main():
     n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
     start_params = np.full(n_total, 0.1)
     
-    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="bfgs",maxiter=200)
+    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="bfgs",maxiter=maxiter)
 
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
 
