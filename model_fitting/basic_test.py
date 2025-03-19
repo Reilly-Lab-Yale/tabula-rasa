@@ -21,23 +21,23 @@ class DataSet(dict):
         return (self.__class__, (self.filepath, ))
 
 
-def poisson_model(counts_parq, patsy_formula):
-    # counts_model_poisson = smdc.GeneralizedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
+def poisson_model(counts_parq, patsy_formula, zi_param):
+    counts_model_poisson = smdc.GeneralizedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
 
-    # return counts_model_poisson
-    return
+    return counts_model_poisson
 
-def zi_poisson_model(counts_parq, patsy_formula):
-    # counts_model_zi_poisson = smdc.ZeroInflatedPoisson.from_formula(formula = patsy_formula, data = counts_parq)
 
-    # return counts_model_zi_poisson
-    return
+def zi_poisson_model(counts_parq, patsy_formula, zi_param):
+    counts_model_zi_poisson = smdc.ZeroInflatedPoisson.from_formula(formula = patsy_formula, data = counts_parq, exog_infl = pd.get_dummies(pd.Categorical(counts_parq.__getitem__(zi_param))))
 
-def negative_binomial_model(counts_parq, patsy_formula):
-    # counts_model_negative_binomial = smdc.NegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq)
+    return counts_model_zi_poisson
 
-    # return counts_model_negative_binomial
-    return
+
+def negative_binomial_model(counts_parq, patsy_formula, zi_param):
+    counts_model_negative_binomial = smdc.NegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq)
+
+    return counts_model_negative_binomial
+
 
 def zi_negative_binomial_model(counts_parq, patsy_formula, zi_param):
     counts_model_zi_negative_binomial = smdc.ZeroInflatedNegativeBinomialP.from_formula(formula = patsy_formula, data = counts_parq, exog_infl = pd.get_dummies(pd.Categorical(counts_parq.__getitem__(zi_param))))
@@ -102,11 +102,21 @@ def main():
     #     return
     
     print(model_choice)
-    
-    n_count_params = scmpra_model.exog.shape[1]      # Count model parameters
-    n_infl_params = scmpra_model.exog_infl.shape[1]    # Inflation model parameters
-    n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
-    start_params = np.full(n_total, 0.1)
+    if model_choice.split('_')[0] != 'zi':
+        zi_param = 'NA'
+        n_count_params = scmpra_model.exog.shape[1]      # Count model parameters
+        #n_infl_params = scmpra_model.exog_infl.shape[1]    # Inflation model parameters
+        n_total = n_count_params + 1 # adding 1 for alpha, no inflation params if not a zero inflated model
+        start_params = np.full(n_total, 0.1)
+    else:
+        n_count_params = scmpra_model.exog.shape[1]      # Count model parameters
+        n_infl_params = scmpra_model.exog_infl.shape[1]    # Inflation model parameters
+        if model_choice == 'zi_negative_binomial':
+            n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
+        else:
+            n_total = n_count_params + n_infl_params # no alpha in poisson 
+            
+        start_params = np.full(n_total, 0.1)
     
     scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="bfgs",maxiter=maxiter)
 
