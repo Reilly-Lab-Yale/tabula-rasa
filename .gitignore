@@ -1,3 +1,8 @@
+mcn_workbench.ipynb
+__pycache__/
+*.py[cod]
+*.h5ad
+*.tsv
 preprocessing/.ipynb_checkpoints/
 .ipynb_checkpoints/Data_exploration-checkpoint.ipynb
 .ipynb_checkpoints/mcn-checkpoint.ipynb
@@ -83,6 +88,10 @@ stdout/testing_round4_47216387_11.err
 stdout/testing_round4_47216387_11.out
 stdout/testing_round4_47216387_12.err
 stdout/testing_round4_47216387_12.out
+demo/sim_pred_zinb_dist.svg
+demo/sim_pred_zinb_resid.svg
+stdout/testing_round4_48817927_4.err
+stdout/testing_round4_48817927_4.out
 stdout/testing_round4_48118420_1.err
 stdout/testing_round4_48118420_1.out
 stdout/testing_round4_48118420_2.err
@@ -117,5 +126,7 @@ stdout/testing_round4_48783321_1.err
 stdout/testing_round4_48783321_1.out
 stdout/testing_round4_48783321_2.err
 stdout/testing_round4_48783321_2.out
+stdout/testing_round4_48817927_4.err
+stdout/testing_round4_48817927_4.out
 stdout/testing_round4_48817927_4.err
 stdout/testing_round4_48817927_4.out
