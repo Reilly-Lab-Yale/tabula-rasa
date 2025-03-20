@@ -28,19 +28,19 @@ In memory, dataframes use named columns with dummy row-indicies.
 UMI = unique molecular identifier
 
 **Read-wise**
-| Column name           | Type             | Description                 | Mandatory? |
-| --------------------- | ---------------- | --------------------------- | ---------- |
-| cell_bc               | str (nucleotide) | cell barcode                | T          |
-| rep_id                | str              | replicate id                | T          |
-| cre_id                | str              | CRE id or name              | T          |
-| cell_type             | str              | cell-type                   | T          |
-| mpra_bc               | str (nucleotide) | MPRA reporter barcode       | T          |
-| mpra_umi              | str (nucleotide) | MPRA umi                    | T          |
-| reads_mpra            | int              | number mpra reads           | T          |
-| transfection_bc       | str (nucleotide) | transfection barcode        | F          |
-| transfection_umi      | str (nucleotide) | transfection reporter umi   | F          |
-| reads_transfection_bc | int              | number transfection reporter reads  | F          |
-
+| Column name           | Type             | Description                          | Mandatory? |
+| --------------------- | ---------------- | ------------------------------------ | ---------- |
+| cell_bc               | str (nucleotide) | cell barcode                         | T          |
+| rep_id                | str              | replicate id                         | T          |
+| cre_id                | str              | CRE id or name                       | T          |
+| cell_type             | str              | cell-type                            | T          |
+| mpra_bc               | str (nucleotide) | MPRA reporter barcode                | T          |
+| mpra_umi              | str (nucleotide) | MPRA umi                             | T          |
+| reads_mpra            | int              | number mpra reads                    | T          |
+| transfection_bc       | str (nucleotide) | transfection barcode                 | F          |
+| transfection_umi      | str (nucleotide) | transfection reporter umi            | F          |
+| reads_transfection_bc | int              | number transfection reporter reads   | F          |
+| reads_DNA             | int              | DNA library reads (for MPRA barcode) | F          |
 
 **Umi-wise, full MPRA**
 | Column name           | Type             | Description                                                      | Mandatory? |
@@ -55,6 +55,7 @@ UMI = unique molecular identifier
 | transfection_bc       | str (nucleotide) | transfection barcode                                             | F          |
 | umis_transfection_bc  | int              | number transfection reporter UMIs                                | F          |
 | reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs       | F          |
+| reads_DNA             | int              | DNA library reads (for MPRA barcode)                             | F          |
 
 **Umi-wise, flattened MPRA**
 | Column name           | Type             | Description                                                 | Mandatory? |
@@ -69,6 +70,10 @@ UMI = unique molecular identifier
 | transfection_bcs      | int              | number of transfection barcodes                             | F          |
 | umis_transfection_bc  | int              | number transfection reporter UMIs                           | F          |
 | reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs  | F          |
+| reads_DNA             | int              | DNA library reads (summed across ALL MPRA barcodes)         | F          |
+
+Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
+This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
 
