@@ -29,6 +29,28 @@ def list_unimplemented()
 
 Returns the list of unimplemented functions.
 
+<a id="scMPRAforge.utils.bcs_to_lut"></a>
+
+#### bcs\_to\_lut
+
+```python
+def bcs_to_lut(bc, threshold=1, encoding="utf-8", *args, **kwargs)
+```
+
+Arguments
+    bc <dict> of string keys and integer occuracnce count values
+    threshold <int> edit distance
+    encoding <str> string encoding
+
+Returns
+    <dict>
+
+A simple wrapper for umi_tools.UMIClusterer(). `threshold` is the edit 
+distance passed to . args and kwargs are passed to umi_tools.UMIClusterer
+constructor. 
+Produces a lookup table (lut) where the keys are erronious & correct barcodes
+and the values are all the corrected barcodes.
+
 <a id="scMPRAforge.utils.one_versus_all"></a>
 
 #### one\_versus\_all
@@ -62,7 +84,6 @@ tests unimplemented decorator.
 #### table\_type
 
 ```python
-@unimplemented
 def table_type(column_names)
 ```
 
@@ -106,7 +127,6 @@ Loads a hypothesis or hypothesis+results set from disc.
 #### load\_scMPRA\_data
 
 ```python
-@unimplemented
 def load_scMPRA_data(filepath)
 ```
 
@@ -115,50 +135,79 @@ Arguments
 Returns
     <pd.DataFrame>
 
-Loads scMPRA data from `filepath`. Determines whether it is umi or read-wise.
+Loads tsv scMPRA data from `filepath`.
 
-<a id="scMPRAforge.core.graph_qc_metrics"></a>
+<a id="scMPRAforge.core.graph_chimeric"></a>
 
-#### graph\_qc\_metrics
+#### graph\_chimeric
 
 ```python
-@unimplemented
-def graph_qc_metrics(scmpra_data, actually_plot=True * args, **kwargs)
+def graph_chimeric(scmpra_data, *args, **kwargs)
 ```
 
 Arguments
     scmpra_data <pd.DataFrame>
-    actually_plot <bool>
     *args
     **kwargs
 Returns
     <matplotlib.axes._axes.Axes>
 
 Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
-and returns a histogram of frequency of reads per UMI using seaborn.histplot. 
-if actually_plot, will do the plotting. Otherwise will simply return the plot
+and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
 
 All other arguments are passed to the histplot call to allow graph 
-customization.
+customization. Particular useful are `bins`, `binrange`, and `log_scale`
 
 <a id="scMPRAforge.core.cut_chimeric_reads"></a>
 
 #### cut\_chimeric\_reads
 
 ```python
-@unimplemented
 def cut_chimeric_reads(scmpra_data, threshold)
 ```
 
 Arguments
-    scmpra_data <pandas.DataFrame> of read-wise scMPRA data 
-    threshold <int>.
+    scmpra_data : <pandas.DataFrame> of read-wise scMPRA data 
+    threshold : <int>
 
 Returns
-    a pandas dataframe of umi-wise MPRA data
+    <pandas.DataFrame> of read-wise MPRA data
 
-subsets to those UMIs which lie above the number-of-reads threshold, 
+subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
 removing chimeric reads.
+
+<a id="scMPRAforge.core.read_wise_to_umi_wise"></a>
+
+#### read\_wise\_to\_umi\_wise
+
+```python
+def read_wise_to_umi_wise(scmpra_data, keep_reads=False)
+```
+
+Arguments
+    scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
+    keep_reads : <bool>
+Returns
+    <pandas.DataFrame> of umi-wise scMPRA data
+
+Converts read-wise to UMI-wise table (see readme for spec).
+
+<a id="scMPRAforge.core.flatten_barcode_errors"></a>
+
+#### flatten\_barcode\_errors
+
+```python
+def flatten_barcode_errors(df, barcode_column, *args, **kwargs)
+```
+
+Arguments
+    df <pandas.DataFrame>
+    barcode_column <str>
+Returns
+    <pandas.DataFrame>
+
+Uses umitools to flatten different barcodes which are likely only different
+due to sequencing errors. Passes *args,**kwargs upstream to bcs_to_lut.
 
 <a id="scMPRAforge.core.apply_deseq"></a>
 
@@ -194,6 +243,19 @@ a results dataframe. Flavor selects the test type, and can be one of
 - permute : permutation test
 - deseq : uses deseq2
 
+<a id="scMPRAforge.core.flatten_mpra_barcodes"></a>
+
+#### flatten\_mpra\_barcodes
+
+```python
+def flatten_mpra_barcodes(scmpra_data)
+```
+
+Arguments
+    scmpra_data : <pd.DataFrame> of umi-wise, full MPRA
+returns
+    <pd.DataFrame> of umi-wise, flattened MPRA
+
 <a id="scMPRAforge.core.fit"></a>
 
 #### fit
@@ -207,8 +269,8 @@ Arguments
     scmpra_data
 Returns
     {
-        'model':<statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
-        'flattened': <pd.DataFrame>
+        model : <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
+        flattened : <pd.DataFrame>
     }
 
 <a id="scMPRAforge.core.volcano"></a>
