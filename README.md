@@ -45,8 +45,8 @@ In memory, dataframes use named columns with dummy row indicies.
 | cre_id      | str              | CRE id or name                          | T          |
 | cell_type   | str              | cell-type                               | T          |
 | mpra_bc     | str (nucleotide) | MPRA reporter barcode                   | T          |
-| umis        | int              | number of unique molecular identifiers  | T          |
-| reads       | int              | number of reads, summed across all UMIs | F          |
+| umis_mpra_bc| int              | number of unique molecular identifiers  | T          |
+| reads_mpra_bc| int              | number of reads, summed across all UMIs | F          |
 
 **Umi-wise, flattened MPRA**
 | Column name | Type             | Description                             | Mandatory? |
@@ -55,9 +55,9 @@ In memory, dataframes use named columns with dummy row indicies.
 | rep_id      | str              | replicate id                            | T          |
 | cre_id      | str              | CRE id or name                          | T          |
 | cell_type   | str              | cell-type                               | T          |
-| umis        | int              | number of unique molecular identifiers  | T          |
+| umis_mpra_bc| int              | number of unique molecular identifiers  | T          |
 | mpra_bcs     | int | Numer of MPRA barcodes                   | F          |
-| reads       | int              | number of reads, summed across all UMIs | F          |
+| reads_mpra_bc| int              | number of reads, summed across all UMIs | F          |
 
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
