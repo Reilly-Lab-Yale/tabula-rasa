@@ -23,42 +23,54 @@ Data can be umi-wise or read-wise.
 
 (Collapsing cells, replicates, and MPRA barcodes is not meaningful for us, since this would collapse what we believe to be true biological samples. However we may frequently *summarize* (e.g. compute mean UMIs per cell, or model a distribution where all UMI count originating from one CRE in one cell-type (regardless of MPRA barcode) are considered to have come from one triplicate of zinb parameters).
 
-In memory, dataframes use named columns with dummy row indicies. 
+In memory, dataframes use named columns with dummy row-indicies. 
+
+        mpra_bc    umis_transfection_bc    reads_mpra_bc   umis_mpra_bc
+
+umi = unique molecular identifier
 
 **Read-wise**
-| Column name | Type             | Description                 | Mandatory? |
-| ----------- | ---------------- | --------------------------- | ---------- |
-| cell_bc     | str (nucleotide) | cell barcode                | T          |
-| rep_id      | str              | replicate id                | T          |
-| cre_id      | str              | CRE id or name              | T          |
-| cell_type   | str              | cell-type                   | T          |
-| mpra_bc     | str (nucleotide) | MPRA reporter barcode       | T          |
-| umi         | str (nucleotide) | unique molecular identifier | T          |
-| reads       | int              | number of reads             | T          |
+| Column name           | Type             | Description                 | Mandatory? |
+| --------------------- | ---------------- | --------------------------- | ---------- |
+| cell_bc               | str (nucleotide) | cell barcode                | T          |
+| rep_id                | str              | replicate id                | T          |
+| cre_id                | str              | CRE id or name              | T          |
+| cell_type             | str              | cell-type                   | T          |
+| mpra_bc               | str (nucleotide) | MPRA reporter barcode       | T          |
+| mpra_umi              | str (nucleotide) | MPRA umi                    | T          |
+| reads_mpra            | int              | number mpra reads           | T          |
+| transfection_bc       | str (nucleotide) | transfection barcode        | F          |
+| transfection_umi      | str (nucleotide) | transfection reporter umi   | F          |
+| reads_transfection_bc | int              | number transfection reporter reads  | F          |
 
 
 **Umi-wise, full MPRA**
-| Column name | Type             | Description                             | Mandatory? |
-| ----------- | ---------------- | --------------------------------------- | ---------- |
-| cell_bc     | str (nucleotide) | cell barcode                            | T          |
-| rep_id      | str              | replicate id                            | T          |
-| cre_id      | str              | CRE id or name                          | T          |
-| cell_type   | str              | cell-type                               | T          |
-| mpra_bc     | str (nucleotide) | MPRA reporter barcode                   | T          |
-| umis_mpra_bc| int              | number of unique molecular identifiers  | T          |
-| reads_mpra_bc| int              | number of reads, summed across all UMIs | F          |
+| Column name           | Type             | Description                                                      | Mandatory? |
+| --------------------- | ---------------- | ---------------------------------------------------------------- | ---------- |
+| cell_bc               | str (nucleotide) | cell barcode                                                     | T          |
+| rep_id                | str              | replicate id                                                     | T          |
+| cre_id                | str              | CRE id or name                                                   | T          |
+| cell_type             | str              | cell-type                                                        | T          |
+| mpra_bc               | str (nucleotide) | MPRA reporter barcode                                            | T          |
+| umis_mpra_bc          | int              | number of MPRA UMIs                                              | T          |
+| reads_mpra_bc         | int              | number of MPRA reads, summed across all UMIs                     | F          |
+| transfection_bc       | str (nucleotide) | transfection barcode                                             | F          |
+| umis_transfection_bc  | int              | number transfection reporter UMIs                                | F          |
+| reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs       | F          |
 
 **Umi-wise, flattened MPRA**
-| Column name | Type             | Description                             | Mandatory? |
-| ----------- | ---------------- | --------------------------------------- | ---------- |
-| cell_bc     | str (nucleotide) | cell barcode                            | T          |
-| rep_id      | str              | replicate id                            | T          |
-| cre_id      | str              | CRE id or name                          | T          |
-| cell_type   | str              | cell-type                               | T          |
-| umis_mpra_bc| int              | number of unique molecular identifiers  | T          |
-| mpra_bcs     | int | Numer of MPRA barcodes                   | F          |
-| reads_mpra_bc| int              | number of reads, summed across all UMIs | F          |
-
+| Column name           | Type             | Description                                                 | Mandatory? |
+| --------------------- | ---------------- | ----------------------------------------------------------- | ---------- |
+| cell_bc               | str (nucleotide) | cell barcode                                                | T          |
+| rep_id                | str              | replicate id                                                | T          |
+| cre_id                | str              | CRE id or name                                              | T          |
+| cell_type             | str              | cell-type                                                   | T          |
+| umis_mpra_bc          | int              | number of unique molecular identifiers                      | T          |
+| mpra_bcs              | int              | Numer of MPRA barcodes                                      | F          |
+| reads_mpra_bc         | int              | number of reads, summed across all UMIs                     | F          |
+| transfection_bcs      | int              | number of transfection barcodes                             | F          |
+| umis_transfection_bc  | int              | number transfection reporter UMIs                           | F          |
+| reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs  | F          |
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
 
