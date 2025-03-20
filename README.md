@@ -25,9 +25,7 @@ Data can be umi-wise or read-wise.
 
 In memory, dataframes use named columns with dummy row-indicies. 
 
-        mpra_bc    umis_transfection_bc    reads_mpra_bc   umis_mpra_bc
-
-umi = unique molecular identifier
+UMI = unique molecular identifier
 
 **Read-wise**
 | Column name           | Type             | Description                 | Mandatory? |
