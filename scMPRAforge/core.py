@@ -164,7 +164,7 @@ def cut_chimeric_reads(scmpra_data, threshold):
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def read_wise_to_umi_wise(scmpra_data,keep_reads=False):
+def read_wise_to_umi_wise(scmpra_data,keep_reads=False,bypass_consistency_check=False):
     """
     Arguments
         scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
@@ -174,7 +174,8 @@ def read_wise_to_umi_wise(scmpra_data,keep_reads=False):
 
     Converts read-wise to UMI-wise table (see readme for spec).
     """
-    assert table_type(scmpra_data.columns)=="mpra_readwise","Malformed table."
+    if not bypass_consistency_check:
+        assert table_type(scmpra_data.columns)=="mpra_readwise","Malformed table."
 
     grouping_columns = [col for col in scmpra_data.columns if col not in ['umi', 'reads']]
 
