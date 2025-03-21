@@ -261,7 +261,8 @@ def flatten_mpra_barcodes(scmpra_data):
 
 
     aggregations={
-        'umis':('umis','sum')
+        'umis':('umis','sum'),
+        'mpra_bcs':('mpra_bc','nunique')
     }
 
     if "reads" in scmpra_data.columns:
