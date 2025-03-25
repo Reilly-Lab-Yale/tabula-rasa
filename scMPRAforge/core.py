@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import logging
-
+import statsmodels.discrete.count_model as smdc
 import patsy
 
 #internal imports
@@ -295,6 +295,8 @@ class experiment_model:
         #saving relevant info        
         self.scmpra_data=scmpra_data
         self.round_down_threshold=round_down_threshold
+        self.model=None
+        #(creating from scratch so no model until after fit is called)
         
 
         if formula_type not in self.valid_formula_types:
@@ -328,11 +330,10 @@ class experiment_model:
 
     @unimplemented
     @classmethod
-    def to_pickle():
+    def to_pickle(self):
         pass
 
-    @unimplemented
-    def fit():
+    def fit(self):
         # for all (cre, cell-type) combos with less than 4 umis:
         #   add index to list `too_low`
 
@@ -347,6 +348,20 @@ class experiment_model:
         #   raise error("")
         
         #!!do the fitting...!!
+
+        y, X = patsy.dmatrices(self.formula,
+                                self.scmpra_data, return_type='dataframe')
+        Z = patsy.dmatrix("C(rep_id)", self.scmpra_data, return_type='dataframe')
+
+        zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
+
+        n_count_params = zinb_model.exog.shape[1]      # Count model parameters
+        n_infl_params = zinb_model.exog_infl.shape[1]    # Inflation model parameters
+        n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
+        start_params = np.full(n_total, 0.1)
+
+        self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
+
         #model.fit will produce an object of type <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>
         
         #if !converged:
