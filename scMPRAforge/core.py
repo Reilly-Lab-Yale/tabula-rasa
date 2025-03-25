@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import logging
 
+import patsy
 
 #internal imports
 from .utils import unimplemented
@@ -276,43 +277,85 @@ def flatten_mpra_barcodes(scmpra_data):
     return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
 
 
-    
 
-@unimplemented
-def fit(scmpra_data,round_down_threshold=4):
+#        1         2         3         4         5         6         7         8
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890
+class experiment_model:
     """
-    Arguments
-        scmpra_data
-    Returns
-        {
-            model : <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>,
-            flattened : <pd.DataFrame>
-        }
-
+        type 
     """
-    # for all (cre, cell-type) combos with less than 4 umis:
-    #   add index to list `too_low`
-
-    #select out the cre-celltype combos we have to ditch because we have no UMIs making fitting impossible. 
-    # flattened=scmpra_data.groupby()[too_low,["cre_id","cell_type"]]
-
-    #drop those flattened barcodes from the original
-
-    #scmpra_data=scmpra_data.drop(too_low).copy()
-
-    #if nrow(scmpra_data) ==0:
-    #   raise error("")
     
-    #!!do the fitting...!!
-    #model.fit will produce an object of type <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>
-    
-    #if !converged:
-    #   print("error, model failed to converge.")
+    #low-tech, maybe replace w/ enum
+    valid_formula_types=['auto','tfection_umi','custom_formula']
 
-    #if r^2 <= 0.6
-    #warnings.warn("be careful, model fit is pretty bad : pseudo-r^2 is only f{r^2}")
+    def __init__(self,scmpra_data,formula_type='auto',round_down_threshold=4,formula=None,broken_on=None):
+        #formula and broken_on allow creation of custom formulas.
+        #broken_on allows breaking into submodels on the basis of some column values
 
-    pass
+        #saving relevant info        
+        self.scmpra_data=scmpra_data
+        self.round_down_threshold=round_down_threshold
+        
+
+        if formula_type not in self.valid_formula_types:
+            assert False; 'Invalid formula type.'
+            
+        if formula_type=='auto':
+            #will try to guess formula type based on 
+            #table_type(scmpra_data)
+            assert False; 'unimplemented'
+
+            formula_type='whatever we just detected'
+
+        if formula_type=='dna':
+            #using plasmid DNA count as DNA count
+            assert False; 'unimplemented'
+        elif formula_type=='tfection_umi':
+            #using umis_transfection_bc as our proxy for DNA count...
+            self.formula="reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + \
+                umis_transfection_bc:C(cre_id) + umis_transfection_bc:C(cell_type):C(cre_id) -1"
+        elif formula_type=='num_mpra_bc':
+            #using the number of unique MPRA barcodes as our proxy for DNA count
+            assert False; 'unimplemented'
+
+        self.formula_type=formula_type
+
+    @unimplemented
+    @classmethod
+    def from_pickle(filepath,get_data):
+        #create instance by loading previously created model from disc
+        pass
+
+    @unimplemented
+    @classmethod
+    def to_pickle():
+        pass
+
+    @unimplemented
+    def fit():
+        # for all (cre, cell-type) combos with less than 4 umis:
+        #   add index to list `too_low`
+
+        #select out the cre-celltype combos we have to ditch because we have no UMIs making fitting impossible. 
+        # flattened=scmpra_data.groupby()[too_low,["cre_id","cell_type"]]
+
+        #drop those flattened barcodes from the original
+
+        #scmpra_data=scmpra_data.drop(too_low).copy()
+
+        #if nrow(scmpra_data) ==0:
+        #   raise error("")
+        
+        #!!do the fitting...!!
+        #model.fit will produce an object of type <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>
+        
+        #if !converged:
+        #   print("error, model failed to converge.")
+
+        #if r^2 <= 0.6
+        #warnings.warn("be careful, model fit is pretty bad : pseudo-r^2 is only f{r^2}")
+
+        pass
 
 @unimplemented
 def volcano(results):
