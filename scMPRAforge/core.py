@@ -57,23 +57,28 @@ def table_type(column_names):
     (We could extend to type-checking as well, but that seems a tad draconian.)
     """
     #Performs subset checking so that extra columns are allowed.
-    #Matching multiple definitions however is not allowed. 
+    #Matching multiple definitions however is NOT allowed. 
     
-    #If it matches no definitions the table is malformed: so this is the default. 
+    #If columns match no definitions the table is malformed: so this is the default. 
     ret='malformed'
     
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'umi', 'reads'}<=set(column_names):
+    #check mandatory columns of read-wise MPRA
+    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'mpra_umi', 'reads_mpra'}<=set(column_names):
         if ret=='malformed':
             ret='mpra_readwise'
         else:
             return 'malformed'
     
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'umis'}<=set(column_names):
+    #check mandatory columns of umi-wise full MPRA
+    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'umis_mpra_bc'}<=set(column_names):
         if ret=='malformed':
             ret='mpra_umiwise'
         else:
             return 'malformed'
     
+    #check mandatory columns of umi-wise flattened MPRA
+    #unimplemented
+
     return ret
 
 @unimplemented
