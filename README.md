@@ -11,6 +11,17 @@ Assumptions:
 
 Run `pydoc-markdown` in the repo root to update the docs. (Could automate this with a github action). 
 
+# install
+
+```
+conda create -n env_tensorzinb python=3.10
+conda activate env_tensorzinb
+echo "numpy <2" >> $CONDA_PREFIX/conda-meta/pinned
+#navigate to tensor zinb
+python setup.py install
+conda install matplotlib seaborn
+```
+
 # MPRA data formatting
 
 All on-disc data should be tsv or (some high-performace format to be chosen later).
@@ -125,3 +136,5 @@ scMPRA is a new technique and there are as of yet no standard flows for the init
 
  1. cell-filterer (kill from a list of low-quality cells)
  2. MPRABC-CRE association (assign CREs to UMIs on the basis of some lookup table generated from DNA-sequencing). 
+
+
