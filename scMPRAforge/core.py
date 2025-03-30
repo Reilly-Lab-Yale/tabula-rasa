@@ -12,6 +12,7 @@ import numpy as np
 import logging
 import statsmodels.discrete.count_model as smdc
 import patsy
+from tensorzinb.tensorzinb import TensorZINB
 
 #internal imports
 from .utils import unimplemented
@@ -307,7 +308,7 @@ class experiment_model:
             #table_type(scmpra_data)
             assert False; 'unimplemented'
 
-            formula_type='whatever we just detected'
+            #formula_type='whatever we just detected'
 
         if formula_type=='dna':
             #using plasmid DNA count as DNA count
@@ -333,7 +334,7 @@ class experiment_model:
     def to_pickle(self):
         pass
 
-    def fit(self):
+    def fit(self,library="tensor"):
         # for all (cre, cell-type) combos with less than 4 umis:
         #   add index to list `too_low`
 
@@ -349,20 +350,31 @@ class experiment_model:
         
         #!!do the fitting...!!
 
+        print("creating matrices...")
         y, X = patsy.dmatrices(self.formula,
                                 self.scmpra_data, return_type='dataframe')
         Z = patsy.dmatrix("C(rep_id)", self.scmpra_data, return_type='dataframe')
 
-        zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
+        if library =="statsmodels":
+            print("fitting with statsmodels")
 
-        n_count_params = zinb_model.exog.shape[1]      # Count model parameters
-        n_infl_params = zinb_model.exog_infl.shape[1]    # Inflation model parameters
-        n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
-        start_params = np.full(n_total, 0.1)
+            zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
 
-        self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
+            n_count_params = zinb_model.exog.shape[1]      # Count model parameters
+            n_infl_params = zinb_model.exog_infl.shape[1]    # Inflation model parameters
+            n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
+            start_params = np.full(n_total, 0.1)
 
-        #model.fit will produce an object of type <statsmodels.discrete.count_model.ZeroInflatedNegativeBinomialResultsWrapper>
+            self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
+        elif library=="tensor":
+            print("fitting with tensorzinb")
+            zinbo=TensorZINB(y.to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+            self.model=zinbo.fit(init_method="nb")
+        else:
+            assert False; "Invalid library value."
+
+
+        
         
         #if !converged:
         #   print("error, model failed to converge.")

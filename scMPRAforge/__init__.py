@@ -11,6 +11,7 @@ import logging
 import umi_tools
 import patsy
 import statsmodels.discrete.count_model as smdc
+from tensorzinb.tensorzinb import TensorZINB
 
 # Create a logger
 logger = logging.getLogger("scMPRAforge")
@@ -37,5 +38,6 @@ __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non
 __version__ = "-1"
 
 #Delete symbols used internally
-del pd, sns, plt, logging, umi_tools, patsy, smdc
+del pd, sns, plt, logging, umi_tools, patsy, smdc, TensorZINB
+
 
