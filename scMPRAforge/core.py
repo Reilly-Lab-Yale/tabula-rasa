@@ -13,6 +13,7 @@ import logging
 import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
+from formulaic import Formula
 
 #internal imports
 from .utils import unimplemented
@@ -351,9 +352,13 @@ class experiment_model:
         #!!do the fitting...!!
 
         print("creating matrices...")
-        y, X = patsy.dmatrices(self.formula,
-                                self.scmpra_data, return_type='dataframe')
-        Z = patsy.dmatrix("C(rep_id)", self.scmpra_data, return_type='dataframe')
+        #old patsy code
+        #y, X = patsy.dmatrices(self.formula,
+        #                        self.scmpra_data, return_type='dataframe')
+        #Z = patsy.dmatrix("C(rep_id)", self.scmpra_data, return_type='dataframe')
+
+        y, X=Formula(self.formula).get_model_matrix(self.scmpra_data,output='pandas')
+        Z=Formula('C(rep_id)').get_model_matrix(self.scmpra_data,output='pandas')
 
         if library =="statsmodels":
             print("fitting with statsmodels")
@@ -368,7 +373,7 @@ class experiment_model:
             self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
         elif library=="tensor":
             print("fitting with tensorzinb")
-            zinbo=TensorZINB(y.to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+            zinbo=TensorZINB(y['reads_mpra_bc'].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
             self.model=zinbo.fit(init_method="nb")
         else:
             assert False; "Invalid library value."
