@@ -21,6 +21,20 @@ echo "numpy <2" >> $CONDA_PREFIX/conda-meta/pinned
 python setup.py install
 conda install matplotlib seaborn
 ```
+At this point, it may work fine (apple silicon seems work fine at this point). However some environments (such as mccleary gpu nodes) may require some more fnagling to get GPU accel working. Perform the following:
+```
+conda install cudatoolkit=11.2 cudnn=8.1.0
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+```
+
+then deactivate, activate, and test with
+```
+python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+```
+
+If you see a device, you're good to go.
+
+(adapted from [mccleary docs](https://docs.ycrc.yale.edu/clusters-at-yale/guides/tensorflow/))
 
 # MPRA data formatting
 
