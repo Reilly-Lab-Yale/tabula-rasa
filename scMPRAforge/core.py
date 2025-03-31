@@ -288,7 +288,7 @@ class experiment_model:
     """
     
     #low-tech, maybe replace w/ enum
-    valid_formula_types=['auto','tfection_umi','custom_formula']
+    valid_formula_types=['auto','tfection_umi','custom_formula','simple_cell_and_cre']
 
     def __init__(self,scmpra_data,formula_type='auto',round_down_threshold=4,formula=None,broken_on=None):
         #formula and broken_on allow creation of custom formulas.
@@ -314,6 +314,8 @@ class experiment_model:
         if formula_type=='dna':
             #using plasmid DNA count as DNA count
             assert False; 'unimplemented'
+        elif formula_type=='simple_cell_and_cre':
+            self.formula='reads_mpra_bc ~ C(cell_type)*C(cre_id)'
         elif formula_type=='tfection_umi':
             #using umis_transfection_bc as our proxy for DNA count...
             self.formula="reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + \
