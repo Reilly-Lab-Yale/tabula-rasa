@@ -373,7 +373,7 @@ class experiment_model:
             self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
         elif library=="tensor":
             print("fitting with tensorzinb")
-            zinbo=TensorZINB(y['reads_mpra_bc'].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+            zinbo=TensorZINB(y['reads_mpra_bc'].to_numpy().reshape((-1,1)),X.to_numpy(),exog_infl=Z.to_numpy())#,same_dispersion=True
             self.model=zinbo.fit(init_method="nb")
         else:
             assert False; "Invalid library value."
