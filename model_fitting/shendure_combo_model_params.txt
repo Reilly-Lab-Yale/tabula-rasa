@@ -2,3 +2,7 @@
 2	zi_poisson	umis_mpra_bc~C(cre_id)+C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
 3	negative_binomial	umis_mpra_bc~C(cre_id)+C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
 4	zi_negative_binomial	umis_mpra_bc~C(cre_id)+C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
+5	poisson	umis_mpra_bc~C(cre_id)*C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
+6	zi_poisson	umis_mpra_bc~C(cre_id)*C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
+7	negative_binomial	umis_mpra_bc~C(cre_id)*C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq
+8	zi_negative_binomial	umis_mpra_bc~C(cre_id)*C(cell_type)+0	rep_id	50000	COMBO	ALL	shendure/shendure_mpra_counts_grouped.parq

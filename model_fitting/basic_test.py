@@ -3,6 +3,7 @@ import argparse
 import statsmodels.discrete.count_model as smdc
 import pandas as pd
 import numpy as np
+import sys
 
 class DataSet(dict):
     def __init__(self, path):
@@ -65,6 +66,7 @@ def boolean_string(s):
     return s == 'True'
 
 def main():
+    print('parse args')
     parser = argparse.ArgumentParser()
     parser.add_argument('--scmpra_counts_file', type=str)
     parser.add_argument('--model_choice', type=str)
@@ -74,7 +76,11 @@ def main():
     parser.add_argument('--temp_dir')
     parser.add_argument('--out_file', type=str)
     args = parser.parse_args()
+    print('load counts')
     scmpra_counts = DataSet(args.scmpra_counts_file)
+    print('counts file:')
+    print(sys.getsizeof(scmpra_counts))
+    
     formula = args.formula
     print('formula: %s' % formula)
     maxiter = args.maxiter
@@ -100,6 +106,8 @@ def main():
     # except:
     #     print('Failed to build %s model' % model_choice)
     #     return
+    print('model object:')
+    print(sys.getsizeof(scmpra_model))
     
     print(model_choice)
     if model_choice.split('_')[0] != 'zi':
@@ -117,17 +125,19 @@ def main():
             n_total = n_count_params + n_infl_params # no alpha in poisson 
             
         start_params = np.full(n_total, 0.1)
+    print('start fitting model')
+    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="lbfgs",maxiter=maxiter)
     
-    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="bfgs",maxiter=maxiter)
-
+    print('pickle file')
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
-
+    
+    print('save stats')
     model_info = [count,model_choice, formula, maxiter, zi_param]
     model_stats = get_stats(scmpra_model_fit)
     print(model_stats)
     print(model_info)
     out_list = model_info + model_stats[:-1]
-
+    print('write stats')
     with open("%s/%s_stats.txt" % (temp_dir, out_file), "w") as o:
         o.write("\t".join(str(x) for x in out_list))
         o.write("\n")
@@ -146,3 +156,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+    
+    
+    
+    

@@ -1,0 +1,8 @@
+1	poisson	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	HEPG2	seelig/cell_type/seelig_mpra_counts_HEPG2.parq
+2	zi_poisson	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	HEPG2	seelig/cell_type/seelig_mpra_counts_HEPG2.parq
+3	negative_binomial	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	HEPG2	seelig/cell_type/seelig_mpra_counts_HEPG2.parq
+4	zi_negative_binomial	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	HEPG2	seelig/cell_type/seelig_mpra_counts_HEPG2.parq
+5	poisson	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	K562	seelig/cell_type/seelig_mpra_counts_K562.parq
+6	zi_poisson	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	K562	seelig/cell_type/seelig_mpra_counts_K562.parq
+7	negative_binomial	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	K562	seelig/cell_type/seelig_mpra_counts_K562.parq
+8	zi_negative_binomial	umis_mpra_bc~C(cre_id)+0	rep_id	50000	Seelig_CELLTYPE	K562	seelig/cell_type/seelig_mpra_counts_K562.parq
