@@ -1,4 +1,7 @@
-# Note the use of wait(): dask's async is mostly obviated to faciliatate profiling
+#Script takes as its sole parameter a model ID & produces a fit model
+#And some raw benchmarking data (to be cooked into a report)
+
+#Note the use of wait(): dask's async is mostly obviated to faciliatate profiling
 #(note that this doesn't slow computation: wait is only used when the next step would)
 #require the previous step to finish anyway. It's not lazy evaluation if you need the data immediately. 
 
@@ -30,17 +33,6 @@ def statsmodels_fit(X,y,Z,method="bfgs"):
 
 
 
-def statsmodels_fit(X,y,Z):
-    zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
-
-    n_count_params = zinb_model.exog.shape[1]      # Count model parameters
-    n_infl_params = zinb_model.exog_infl.shape[1]    # Inflation model parameters
-    n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
-    start_params = np.full(n_total, 0.1)
-
-    zinb_result = zinb_model.fit(start_params=start_params,maxiter=1000,method="cg")
-
-    return zinb_result
 
 def load_data(path):
     return pd.read_csv(path,sep="\t")
@@ -122,7 +114,9 @@ def main():
 
     wait(dat_future)
 
-    #fprint(f'[+] Creating matricies {stamp()}')
+    fprint(f'[+] Creating matricies {stamp()}')
+
+
 
     #fprint(f'[+] Fitting {stamp()}')
 
