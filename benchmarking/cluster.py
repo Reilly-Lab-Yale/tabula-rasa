@@ -11,6 +11,7 @@ import sys
 import pandas as pd
 import numpy as np
 from formulaic import Formula
+from datetime import datetime
 
 #dask imports
 from dask_jobqueue import SLURMCluster
@@ -36,6 +37,11 @@ def statsmodels_fit(X,y,Z,method="bfgs"):
 
 def load_data(path):
     return pd.read_csv(path,sep="\t")
+
+def create_matricies(main_form,zin_form,data):
+    y, X=Formula(main_form).get_model_matrix(data,output='pandas')
+    Z=Formula(zin_form).get_model_matrix(data,output='pandas')
+    return(X, y, Z)
 
 ### Utility functions
 
@@ -82,17 +88,22 @@ def main():
 
     fprint(f'[+] Creating cluster {stamp()}')
     
+    now=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
     #Make sure memory per slurm job is large enough to hold the data...
     cluster=SLURMCluster(
             cores=2,#cores per slurm job
             memory="16G",#memory per slurm job
             processes=1,#dask workers per slurm job
-            job_extra_directives=["-p ycga", f"--job-name=simclust","--time=08:00:00"]
+            job_extra_directives=["-p ycga", 
+                f"--job-name=simclust",
+                "--time=08:00:00",
+                f"--output={model_code}_{now}_%j.out"]
         )
 
     client = Client(cluster)
 
-    fprint(f"Cluster started. Monitor on {cluster.dashboard_link}")
+    fprint(f"[!] Cluster started {stamp()}. Monitor on {cluster.dashboard_link}")
 
     
     #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
@@ -116,7 +127,13 @@ def main():
 
     fprint(f'[+] Creating matricies {stamp()}')
 
-
+    mats_future = client.submit(create_matricies,
+        data=dat_future,
+        zin_form=modelspecs.loc[model_code, "z_equ"],
+        main_form=modelspecs.loc[model_code, "main_equ"]
+    )
+    
+    wait(mats_future)
 
     #fprint(f'[+] Fitting {stamp()}')
 
