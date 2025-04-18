@@ -18,6 +18,16 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, wait
 from dask import delayed
 
+
+### Utility functions
+def fprint(string):
+    """Wraps print with flush=True"""
+    print(string,flush=True)
+
+def stamp():
+    """returns a formatted string with time since test start"""
+    return f'@ {time.time()-start_time:.2f}'
+
 ### Functions to be passed as jobs to dask
 
 def statsmodels_fit(X,y,Z,method="bfgs"):
@@ -34,8 +44,10 @@ def statsmodels_fit(X,y,Z,method="bfgs"):
 
 
 
+def load_csv(path):
+    return pd.read_csv(path)
 
-def load_data(path):
+def load_tsv(path):
     return pd.read_csv(path,sep="\t")
 
 def create_matricies(main_form,zin_form,data):
@@ -43,20 +55,10 @@ def create_matricies(main_form,zin_form,data):
     Z=Formula(zin_form).get_model_matrix(data,output='pandas')
     return(X, y, Z)
 
-### Utility functions
 
-def fprint(string):
-    """Wraps print with flush=True"""
-    print(string,flush=True)
-
-def stamp():
-    """returns a formatted string with time since test start"""
-    return f'@ {time.time()-start_time:.2f}'
-
-start_time=-1
 
 ### Main testing routine
-
+start_time=-1
 def main():
     global start_time
     start_time=time.time()
@@ -98,7 +100,7 @@ def main():
             job_extra_directives=["-p ycga", 
                 f"--job-name=simclust",
                 "--time=08:00:00",
-                f"--output={model_code}_{now}_%j.out"]
+                f"--output=slave_{model_code}_{now}_%j.out"]
         )
 
     client = Client(cluster)
@@ -115,9 +117,9 @@ def main():
     dat_future=None
 
     if "Fake" in modelspecs.loc[model_code, 'dataset']:
-        dat_future=client.submit(load_data,f"{data_root}/simulated/fake_cres.csv")
+        dat_future=client.submit(load_csv,f"{data_root}/simulated/fake_cres.csv")
     elif "Shendure" in modelspecs.loc[model_code, 'dataset']:
-        dat_future=client.submit(load_data,f"{data_root}/shendure/shendure_counts_grouped.txt")
+        dat_future=client.submit(load_tsv,f"{data_root}/shendure/shendure_counts_grouped.txt")
     else:
         fprint(f'[x] Unknown dataset. Aborting. {stamp()}')
         return -1
@@ -134,6 +136,8 @@ def main():
     )
     
     wait(mats_future)
+
+    print(mats_future)
 
     #fprint(f'[+] Fitting {stamp()}')
 
