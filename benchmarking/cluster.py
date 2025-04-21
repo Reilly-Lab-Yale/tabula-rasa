@@ -1,9 +1,10 @@
 #Script takes as its sole parameter a model ID & produces a fit model
-#and some raw benchmarking data (to be cooked into a report)
+#and some raw benchmarking data
 
-#Note the use of wait(): dask's async is mostly obviated to faciliatate profiling
+#Note the use of wait(): dask's async is mostly obviated
 #note that this doesn't slow computation: wait is only used when the next step would
 #require the previous step to finish anyway. It's not lazy evaluation if you need the data immediately. 
+#and it's all ufunc so there's no computation graph optimization
 
 #general imports
 import time
@@ -113,6 +114,7 @@ def main():
                 "--time=08:00:00",
                 f"--output=slave_{model_code}_{now}_%j.out"]
         )
+    MAX_PARALLEL=10
 
     client = Client(cluster)
 
@@ -140,33 +142,48 @@ def main():
         wait(dat_future)
         abort_on_failure(dat_future,client)
 
-        fprint(f'[+] Creating matricies {stamp()}')
+    
+        #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
+        if modelspecs.loc[model_code, 'broken_by'] is None:
+            fprint(f'[+] Creating matricies {stamp()}')
 
-        mats_future = client.submit(create_matricies,
-            data=dat_future,
-            zin_form=modelspecs.loc[model_code, "z_equ"],
-            main_form=modelspecs.loc[model_code, "main_equ"]
-        )
-        
-        wait(mats_future)
-        abort_on_failure(mats_future,client)
+            mats_future = client.submit(create_matricies,
+                data=dat_future,
+                zin_form=modelspecs.loc[model_code, "z_equ"],
+                main_form=modelspecs.loc[model_code, "main_equ"]
+            )
+            
+            wait(mats_future)
+            abort_on_failure(mats_future,client)
 
 
-        fprint(f'[+] Fitting {stamp()}')
+            fprint(f'[+] Fitting {stamp()}')
+            model_future=client.submit(statsmodels_fit,mats_future)
 
-        model_future=client.submit(statsmodels_fit,mats_future)
+            wait(model_future)
+            abort_on_failure(model_future,client)
 
-        
+            fprint(f'[+] Dumping model {stamp()}')
 
-        wait(model_future)
-        abort_on_failure(model_future,client)
-        
+            #'now' isn't now anymore, but this is easier for pairity/lookups...
+            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
+                pickle.dump(model_future.result(), f)
+        else:
+            #broken model. 
+            #First, get unique cell-types
+            celltypes_future = client.submit(lambda df: df['cell_type'].unique(), dat_future)
 
-        fprint(f'[+] Dumping model {stamp()}')
+            #wait & grab result (small enough for master node)
+            cell_types = celltypes_future.result()
+            abort_on_failure(celltypes_future,client)
+            print(cell_types)
 
-        #'now' isn't now anymore, but this is easier for pairity/lookups...
-        with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-            pickle.dump(model_future.result(), f)
+            #now scale up the cluster...
+
+            #cluster.scale(jobs=MAX_PARALLEL)
+
+    #end performance report (end of with block).
+
 
     fprint(f'[+] Shutting down {stamp()}')
 
