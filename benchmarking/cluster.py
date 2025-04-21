@@ -15,23 +15,13 @@ from datetime import datetime
 import importlib
 import pickle
 import os
-import functools
-import json
-import psutil
-
-#import time
-
-
-
-#import datetime
-#import uuid
 
 
 #dask imports
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, wait
 from dask.distributed import get_worker
-
+from dask.distributed import performance_report
 from dask import delayed
 
 
@@ -48,51 +38,6 @@ def abort_on_failure(future,client):
         client.shutdown()
         assert 1==2
 
-
-def log_usage(log_dir="dask_task_logs"):
-    """Decorator factory that profiles functions submitted to dask"""
-    os.makedirs(log_dir, exist_ok=True)
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            # Try to get the worker name/address
-            try:
-                worker = get_worker()
-                worker_name = worker.name or worker.address
-            except ValueError:
-                worker_name = "unknown"
-
-            start_wall = time.time()
-            start_cpu = psutil.Process().cpu_times()
-            process = psutil.Process()
-            mem_start = process.memory_info().rss
-
-            result = func(*args, **kwargs)
-
-            end_wall = time.time()
-            end_cpu = process.cpu_times()
-            mem_end = process.memory_info().rss
-            mem_peak = max(mem_start, mem_end)
-
-            stats = {
-                "function": func.__name__,
-                "worker": worker_name,
-                "wall_time_sec": end_wall - start_wall,
-                "cpu_user_time": end_cpu.user - start_cpu.user,
-                "cpu_system_time": end_cpu.system - start_cpu.system,
-                "mem_peak_rss": mem_peak,
-            }
-
-            safe_worker_name = str(worker_name).replace(":", "_").replace("/", "_")
-            fname = f"{func.__name__}_{safe_worker_name}_{uuid.uuid4().hex[:8]}.json"
-            fpath = os.path.join(log_dir, fname)
-            with open(fpath, "w") as f:
-                json.dump(stats, f, indent=2)
-
-            return result
-        return wrapper
-    return decorator
 
 def fprint(string):
     """Wraps print with flush=True"""
@@ -126,7 +71,6 @@ def load_csv(path):
 def load_tsv(path):
     return pd.read_csv(path,sep="\t")
 
-@log_usage()
 def create_matricies(main_form,zin_form,data):
     y, X=Formula(main_form).get_model_matrix(data,output='pandas')
     Z=Formula(zin_form).get_model_matrix(data,output='pandas')
@@ -137,6 +81,7 @@ def create_matricies(main_form,zin_form,data):
 ### Main testing routine
 start_time=-1
 def main():
+    
     global start_time
     start_time=time.time()
 
@@ -173,55 +118,55 @@ def main():
 
     fprint(f"[+] Cluster started {stamp()}. Monitor on {cluster.dashboard_link}")
 
-    
-    #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
+    with performance_report(filename=f"{model_code}_{now}_report.html"):
+        
+        #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
 
-    fprint(f'[+] Loading data {stamp()}')
-    
-    cluster.scale(jobs=1)
+        fprint(f'[+] Loading data {stamp()}')
+        
+        cluster.scale(jobs=1)
 
-    dat_future=None
+        dat_future=None
 
-    if "Fake" in modelspecs.loc[model_code, 'dataset']:
-        dat_future=client.submit(load_csv,f"{data_root}/simulated/fake_cres.csv")
-    elif "Shendure" in modelspecs.loc[model_code, 'dataset']:
-        dat_future=client.submit(load_tsv,f"{data_root}/shendure/shendure_counts_grouped.txt")
-    else:
-        fprint(f'[x] Unknown dataset. Aborting. {stamp()}')
-        return -1
-
-
-    wait(dat_future)
-    abort_on_failure(dat_future,client)
-
-    fprint(f'[+] Creating matricies {stamp()}')
-
-    mats_future = client.submit(create_matricies,
-        data=dat_future,
-        zin_form=modelspecs.loc[model_code, "z_equ"],
-        main_form=modelspecs.loc[model_code, "main_equ"]
-    )
-    
-    wait(mats_future)
-    abort_on_failure(mats_future,client)
+        if "Fake" in modelspecs.loc[model_code, 'dataset']:
+            dat_future=client.submit(load_csv,f"{data_root}/simulated/fake_cres.csv")
+        elif "Shendure" in modelspecs.loc[model_code, 'dataset']:
+            dat_future=client.submit(load_tsv,f"{data_root}/shendure/shendure_counts_grouped.txt")
+        else:
+            fprint(f'[x] Unknown dataset. Aborting. {stamp()}')
+            return -1
 
 
-    fprint(f'[+] Fitting {stamp()}')
+        wait(dat_future)
+        abort_on_failure(dat_future,client)
 
-    model_future=client.submit(statsmodels_fit,mats_future)
+        fprint(f'[+] Creating matricies {stamp()}')
 
-    
+        mats_future = client.submit(create_matricies,
+            data=dat_future,
+            zin_form=modelspecs.loc[model_code, "z_equ"],
+            main_form=modelspecs.loc[model_code, "main_equ"]
+        )
+        
+        wait(mats_future)
+        abort_on_failure(mats_future,client)
 
-    wait(model_future)
-    abort_on_failure(model_future,client)
-    
 
-    fprint(f'[+] Dumping model {stamp()}')
+        fprint(f'[+] Fitting {stamp()}')
 
-    #'now' isn't now anymore, but this is easier for pairity/lookups...
-    with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-        pickle.dump(model_future.result(), f)
-    
+        model_future=client.submit(statsmodels_fit,mats_future)
+
+        
+
+        wait(model_future)
+        abort_on_failure(model_future,client)
+        
+
+        fprint(f'[+] Dumping model {stamp()}')
+
+        #'now' isn't now anymore, but this is easier for pairity/lookups...
+        with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
+            pickle.dump(model_future.result(), f)
 
     fprint(f'[+] Shutting down {stamp()}')
 
