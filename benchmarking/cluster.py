@@ -150,9 +150,11 @@ def main():
         wait(dat_future)
         abort_on_failure(dat_future,client)
 
-    
+        model_future=None
+
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
-        if modelspecs.loc[model_code, 'broken_by'] is None:
+        if pd.isna(modelspecs.loc[model_code, 'broken_by']):
+            fprint(f'[*] Unified model : executing in one job.')
             fprint(f'[+] Creating matricies {stamp()}')
 
             mats_future = client.submit(create_matricies,
@@ -171,24 +173,47 @@ def main():
             wait(model_future)
             abort_on_failure(model_future,client)
 
-            fprint(f'[+] Dumping model {stamp()}')
-
-            #'now' isn't now anymore, but this is easier for pairity/lookups...
-            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-                pickle.dump(model_future.result(), f)
+            
         else:
+            fprint(f'[*] Broken model, parallelizing {stamp()}')
             #broken model. 
             #First, get unique cell-types
-            celltypes_future = client.submit(lambda df: df['cell_type'].unique(), dat_future)
+            types_future = client.submit(lambda df: df[modelspecs.loc[model_code, 'broken_by']].unique(), dat_future)
 
             #wait & grab result (small enough for master node)
-            cell_types = celltypes_future.result()
-            abort_on_failure(celltypes_future,client)
-            print(cell_types)
+            types = types_future.result()
+            abort_on_failure(types_future,client)
+            
+            fprint(f'[+] Proceeding for one model for each of {types} {stamp()}')
 
             #now scale up the cluster...
-
+            #workers=min(MAX_PARALLEL,len())
+            #fprint(f"[+] scaling up to")
             #cluster.scale(jobs=MAX_PARALLEL)
+            
+            fprint(f'[+] Creating matricies {stamp()}')
+
+            mats_futures = {
+                t: client.submit(
+                    create_matricies,
+                    data=client.submit(lambda df, t=t: df[df[modelspecs.loc[model_code, 'broken_by']] == t], dat_future, t),
+                    zin_form=modelspecs.loc[model_code, "z_equ"],
+                    main_form=modelspecs.loc[model_code, "main_equ"]
+                )
+                for t in types
+            }
+            wait(list(mats_futures.values()))
+            fprint(f'[+] Fitting {stamp()}')
+            #...
+
+        #end broken & unif modeling
+        fprint(f'[+] Dumping model {stamp()}')
+
+        #'now' isn't now anymore, but this is easier for pairity/lookups...
+        #move this to a function
+        with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
+            pickle.dump(model_future.result(), f)
+            
 
     #end performance report (end of with block).
 
