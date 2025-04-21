@@ -96,14 +96,14 @@ def main():
 
     #load model specification
     if len(sys.argv) !=2:
-        fprint("[x] Wrong number of arguments. Aborting.")
+        fprint("[!] Wrong number of arguments. Aborting.")
         return -1
     
     #useful paths
     data_root="/gpfs/gibbs/pi/reilly/tabula_data"
 
     model_code=sys.argv[1]
-    modelspecs=pd.read_csv("modelspecs.tsv",sep="\t",index_col=0)
+    modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
 
 
 
@@ -143,7 +143,7 @@ def main():
         elif "Shendure" in modelspecs.loc[model_code, 'dataset']:
             dat_future=client.submit(load_tsv,f"{data_root}/shendure/shendure_counts_grouped.txt")
         else:
-            fprint(f'[x] Unknown dataset. Aborting. {stamp()}')
+            fprint(f'[!] Unknown dataset. Aborting. {stamp()}')
             return -1
 
 
@@ -154,7 +154,7 @@ def main():
 
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
         if pd.isna(modelspecs.loc[model_code, 'broken_by']):
-            fprint(f'[*] Unified model : executing in one job.')
+            fprint(f'[i] Unified model : executing in one job.')
             fprint(f'[+] Creating matricies {stamp()}')
 
             mats_future = client.submit(create_matricies,
@@ -173,9 +173,10 @@ def main():
             wait(model_future)
             abort_on_failure(model_future,client)
 
+
             
         else:
-            fprint(f'[*] Broken model, parallelizing {stamp()}')
+            fprint(f'[i] Broken model, parallelizing {stamp()}')
             #broken model. 
             #First, get unique cell-types
             types_future = client.submit(lambda df: df[modelspecs.loc[model_code, 'broken_by']].unique(), dat_future)
@@ -184,14 +185,19 @@ def main():
             types = types_future.result()
             abort_on_failure(types_future,client)
             
+            #now scale up the cluster...
+            #num_workers=min(MAX_PARALLEL,len())
+            #fprint(f"[+] scaling up the cluster to {num_workers} workers")
+            #cluster.scale(jobs=num_workers)
+
             fprint(f'[+] Proceeding for one model for each of {types} {stamp()}')
 
-            #now scale up the cluster...
-            #workers=min(MAX_PARALLEL,len())
-            #fprint(f"[+] scaling up to")
-            #cluster.scale(jobs=MAX_PARALLEL)
+            #timestamp at future creation & execution separately so that
+            #we can see if there is substantial slowdown in the for loop
+            #or in subsetting
+            #which I am suspicious of
             
-            fprint(f'[+] Creating matricies {stamp()}')
+            fprint(f'[+] Creating matricies : creating futures {stamp()}')
 
             mats_futures = {
                 t: client.submit(
@@ -202,9 +208,23 @@ def main():
                 )
                 for t in types
             }
+
+            
+
+            fprint(f'[+] Creating matricies : execution {stamp()}')
             wait(list(mats_futures.values()))
-            fprint(f'[+] Fitting {stamp()}')
-            #...
+
+            fprint(f'[+] Fitting : creating futures {stamp()}')
+            model_future = {
+                t: client.submit(
+                        statsmodels_fit,
+                        mats_futures[t]
+                    )
+                for t in types
+            }
+            
+            fprint(f'[+] Fitting : execution {stamp()}')
+            wait(list(model_future.values()))
 
         #end broken & unif modeling
         fprint(f'[+] Dumping model {stamp()}')
