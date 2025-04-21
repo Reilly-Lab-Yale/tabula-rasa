@@ -33,6 +33,14 @@ def abort_on_failure(future,client):
     Call this function with a completed future that is strictly necessary for the task at hand.
     If it didn't work, we'll crash. 
     """
+    status=None
+    if type(future)==type([3]):
+        #if it's a list
+        if any(a_future.status=="error" for a_future in future):
+            status="error"
+    else:
+        #it's not a list, presumably just one future
+        status=future.status
     if future.status=="error":
         fprint("[!] Computation failed. Aborting.")
         fprint("[!] Check slave node logs for details.")
