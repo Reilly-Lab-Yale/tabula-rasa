@@ -173,7 +173,12 @@ def main():
             wait(model_future)
             abort_on_failure(model_future,client)
 
+            fprint(f'[+] Dumping model {stamp()}')
 
+            #'now' isn't now anymore, but this is easier for pairity/lookups...
+            #move this to a function
+            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
+                pickle.dump(model_future.result(), f)
             
         else:
             fprint(f'[i] Broken model, parallelizing {stamp()}')
@@ -226,13 +231,18 @@ def main():
             fprint(f'[+] Fitting : execution {stamp()}')
             wait(list(model_future.values()))
 
-        #end broken & unif modeling
-        fprint(f'[+] Dumping model {stamp()}')
+            fprint(f'[+] Dumping model {stamp()}')
+            
+            materalized_models = {
+                t:model_future[t].result()
+                for t in types
+            }
+            
+            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
+                pickle.dump(materalized_models, f)
 
-        #'now' isn't now anymore, but this is easier for pairity/lookups...
-        #move this to a function
-        with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-            pickle.dump(model_future.result(), f)
+        #end broken & unif modeling
+        
             
 
     #end performance report (end of with block).
