@@ -191,9 +191,9 @@ def main():
             abort_on_failure(types_future,client)
             
             #now scale up the cluster...
-            #num_workers=min(MAX_PARALLEL,len())
-            #fprint(f"[+] scaling up the cluster to {num_workers} workers")
-            #cluster.scale(jobs=num_workers)
+            num_workers=min(MAX_PARALLEL,len(types))
+            fprint(f"[+] scaling up the cluster to {num_workers} workers")
+            cluster.scale(jobs=num_workers)
 
             fprint(f'[+] Proceeding for one model for each of {types} {stamp()}')
 
