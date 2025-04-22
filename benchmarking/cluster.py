@@ -1,4 +1,4 @@
-#Script takes as its sole parameter a model ID & produces a fit model
+#Script takes as its a model ID & produces a fit model
 #and some raw benchmarking data
 
 #Note the use of wait(): dask's async is mostly obviated
@@ -25,6 +25,17 @@ from dask.distributed import get_worker
 from dask.distributed import performance_report
 from dask import delayed
 
+
+### constants
+
+data_root="/gpfs/gibbs/pi/reilly/tabula_data"
+
+WORKER_TIMES={
+        "c900090":1,
+        "c900010":1,
+        "c000000":20,
+        "c000010":20,
+    }
 
 ### Utility functions
 
@@ -100,7 +111,7 @@ def main():
         return -1
     
     #useful paths
-    data_root="/gpfs/gibbs/pi/reilly/tabula_data"
+    
 
     model_code=sys.argv[1]
     modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
@@ -112,6 +123,9 @@ def main():
     
     now=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+
+    
+
     #Make sure memory per slurm job is large enough to hold the data...
     cluster=SLURMCluster(
             cores=2,#cores per slurm job
@@ -119,7 +133,7 @@ def main():
             processes=1,#dask workers per slurm job
             job_extra_directives=["-p ycga", 
                 f"--job-name=simclust_worker",
-                "--time=08:00:00",
+                f"--time={WORKER_TIMES[model_code]}:00:00",
                 f"--output=slave_{model_code}_{now}_%j.out"]
         )
     MAX_PARALLEL=10
