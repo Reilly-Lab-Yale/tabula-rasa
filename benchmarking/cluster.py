@@ -35,17 +35,17 @@ data_root="/gpfs/gibbs/pi/reilly/tabula_data"
 #hard-coded max times for workers used to 
 #fit different models.
 WORKER_TIMES={
-        "c900090":1,
-        "c900010":1,
-        "c000000":12,
-        "c000010":12,
-    }
+    "c9100090":1,
+    "c9100010":1,
+    "c9200090":1,
+    "c9200010":1,
+    "c0100000":12,
+    "c0100010":12,
+    "c0200000":12,
+    "c0200010":12
+}
 
 STATSMODELS_MAXITER=5000
-
-OPTIMIZERS={
-    'c000010':'cg'
-}
 
 ### Utility functions
 
@@ -159,9 +159,7 @@ def main():
 
     fprint(f"[+] Cluster started {stamp()}. Monitor on {cluster.dashboard_link}")
 
-    method="bfgs"
-    if model_code in OPTIMIZERS.keys():
-        method=OPTIMIZERS[model_code]
+    method=modelspecs.loc[model_code,"sm_optimizer"].split("_")[1]
 
     with performance_report(filename=f"{model_code}_{now}_report.html"):
         
