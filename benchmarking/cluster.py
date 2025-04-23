@@ -89,7 +89,7 @@ def statsmodels_fit(p,method="bfgs"):
     n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
     start_params = np.full(n_total, 0.1)
 
-    zinb_result = zinb_model.fit(start_params=start_params,maxiter=1000,method=method)
+    zinb_result = zinb_model.fit(start_params=start_params,maxiter=STATSMODELS_MAXITER,method=method)
 
     return zinb_result
 
@@ -106,7 +106,17 @@ def create_matricies(main_form,zin_form,data):
     Z=Formula(zin_form).get_model_matrix(data,output='pandas')
     return(X, y, Z)
 
+def dump_unified_model(model_future,filename):
+    with open(filename, "wb") as f:
+        pickle.dump(model_future, f)
 
+def dump_broken_model(model_future,types,filename):
+	materalized_models = {
+        t:model_future[t]#.result()
+        for t in types
+    }
+	with open(filename, "wb") as f:
+		pickle.dump(materalized_models, f)
 
 ### Main testing routine
 start_time=-1
@@ -125,9 +135,6 @@ def main():
 
     model_code=sys.argv[1]
     modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
-
-
-
 
     fprint(f'[+] Creating cluster {stamp()}')
     
@@ -151,6 +158,10 @@ def main():
     client = Client(cluster)
 
     fprint(f"[+] Cluster started {stamp()}. Monitor on {cluster.dashboard_link}")
+
+    method="bfgs"
+    if model_code in OPTIMIZERS.keys():
+        method=OPTIMIZERS[model_code]
 
     with performance_report(filename=f"{model_code}_{now}_report.html"):
         
@@ -192,7 +203,10 @@ def main():
 
 
             fprint(f'[+] Fitting {stamp()}')
-            model_future=client.submit(statsmodels_fit,mats_future)
+
+            
+            
+            model_future=client.submit(statsmodels_fit,mats_future,method)
 
             wait(model_future)
             abort_on_failure(model_future,client)
@@ -200,9 +214,9 @@ def main():
             fprint(f'[+] Dumping model {stamp()}')
 
             #'now' isn't now anymore, but this is easier for pairity/lookups...
-            #move this to a function
-            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-                pickle.dump(model_future.result(), f)
+            
+            dump_ret=client.submit(dump_unified_model,model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+            wait(dump_ret)
             
         else:
             fprint(f'[i] Broken model, parallelizing {stamp()}')
@@ -247,7 +261,8 @@ def main():
             model_future = {
                 t: client.submit(
                         statsmodels_fit,
-                        mats_futures[t]
+                        mats_futures[t],
+                        method
                     )
                 for t in types
             }
@@ -257,13 +272,10 @@ def main():
 
             fprint(f'[+] Dumping model {stamp()}')
             
-            materalized_models = {
-                t:model_future[t].result()
-                for t in types
-            }
-            
-            with open(f"{data_root}/speed_test/models/{model_code}_{now}.pkl", "wb") as f:
-                pickle.dump(materalized_models, f)
+            dump_ret=client.submit(dump_broken_model,model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+
+            wait(dump_ret)
+        
 
         #end broken & unif modeling
         
@@ -272,7 +284,7 @@ def main():
     #end performance report (end of with block).
 
 
-    fprint(f'[+] Shutting down {stamp()}')
+    fprint(f'[+] Done with all tasks. Shutting down {stamp()}')
 
     client.shutdown()
 
