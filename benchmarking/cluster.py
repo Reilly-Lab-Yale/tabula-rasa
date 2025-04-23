@@ -112,7 +112,7 @@ def dump_unified_model(model_future,filename):
 
 def dump_broken_model(model_future,types,filename):
 	materalized_models = {
-        t:model_future[t]#.result()
+        t:model_future[t]
         for t in types
     }
 	with open(filename, "wb") as f:
