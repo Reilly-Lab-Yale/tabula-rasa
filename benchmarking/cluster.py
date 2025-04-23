@@ -30,12 +30,22 @@ from dask import delayed
 
 data_root="/gpfs/gibbs/pi/reilly/tabula_data"
 
+#not specified in model table since will req. optimization here
+
+#hard-coded max times for workers used to 
+#fit different models.
 WORKER_TIMES={
         "c900090":1,
         "c900010":1,
-        "c000000":20,
-        "c000010":20,
+        "c000000":12,
+        "c000010":12,
     }
+
+STATSMODELS_MAXITER=5000
+
+OPTIMIZERS={
+    'c000010':'cg'
+}
 
 ### Utility functions
 
