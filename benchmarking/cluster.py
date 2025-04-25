@@ -16,6 +16,7 @@ from datetime import datetime
 import importlib
 import pickle
 import os
+import dill
 
 
 #dask imports
@@ -49,6 +50,7 @@ STATSMODELS_MAXITER=5000
 
 ### Utility functions
 
+
 def abort_on_failure(future,client):
     """
     Call this function with a completed future that is strictly necessary for the task at hand.
@@ -79,7 +81,7 @@ def stamp():
 
 ### Functions to be passed as jobs to dask
 
-def statsmodels_fit(p,method="bfgs"):
+def statsmodels_fit(p,method,name):
     import statsmodels.discrete.count_model as smdc
     X,y,Z=p
     zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
@@ -89,9 +91,13 @@ def statsmodels_fit(p,method="bfgs"):
     n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
     start_params = np.full(n_total, 0.1)
 
+    fprint(f"[F] [+] Beginning fitting {name} {stamp()}")
+
     zinb_result = zinb_model.fit(start_params=start_params,maxiter=STATSMODELS_MAXITER,method=method)
 
-    return zinb_result
+    fprint(f"[F] [+] Done fitting {name}. Serializing result for transfer. {stamp()}")
+
+    return dill.dumps(zinb_result)
 
 
 
@@ -108,15 +114,18 @@ def create_matricies(main_form,zin_form,data):
 
 def dump_unified_model(model_future,filename):
     with open(filename, "wb") as f:
-        pickle.dump(model_future, f)
+        pickle.dump(dill.loads(model_future), f)
 
 def dump_broken_model(model_future,types,filename):
-	materalized_models = {
-        t:model_future[t]
+    print(f"[+] Materalizing & de-seralizing model {stamp()}")
+    
+    materalized_models = {
+        t:dill.loads(model_future[t])
         for t in types
     }
-	with open(filename, "wb") as f:
-		pickle.dump(materalized_models, f)
+    print(f"[+] Dumping to disc! {stamp()}")
+    with open(filename, "wb") as f:
+        pickle.dump(materalized_models, f)
 
 ### Main testing routine
 start_time=-1
@@ -204,7 +213,7 @@ def main():
 
             
             
-            model_future=client.submit(statsmodels_fit,mats_future,method)
+            model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
 
             wait(model_future)
             abort_on_failure(model_future,client)
@@ -260,7 +269,8 @@ def main():
                 t: client.submit(
                         statsmodels_fit,
                         mats_futures[t],
-                        method
+                        method,
+                        t
                     )
                 for t in types
             }
