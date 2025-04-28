@@ -19,8 +19,8 @@ RUN_SINGLE_PERMUTATION_SCRIPT="$BIN_PATH/run_permutation_single.sh"  # <-- NEW
 BIO_REP_MAP="$DATA_PATH/biol_rep_mapping.txt"
 OUTPUT_DIR_BOOTSTRAP="$DATA_PATH/bootstrapping"
 OUTPUT_DIR_PERMUTATION="$DATA_PATH/permutation"   # <-- NEW
-N_BOOTSTRAP=10 ## update to 10**4 after troubleshooting $((10**4))
-N_PERMUTATION=10  # you can change separately if you want $((10**4))
+N_BOOTSTRAP=$((10**4)) ## update to 10**4 after troubleshooting $((10**4))
+N_PERMUTATION=$((10**4))  # you can change separately if you want $((10**4))
 DATE_STR=$(date +%Y%m%d)
 
 # === Step 1: Generate lookups.txt ===
@@ -34,7 +34,7 @@ echo "Number of lookups to process: $NUM_LOOKUPS"
 # === Step 3: Submit array job for bootstrapping ===
 echo "Submitting array job for bootstrapping..."
 #"$NUM_LOOKUPS"
-array_jobid_bootstrap=$(sbatch --parsable --array=1-2 "$RUN_SINGLE_BOOTSTRAP_SCRIPT" \
+array_jobid_bootstrap=$(sbatch --parsable --array=1-"$NUM_LOOKUPS" "$RUN_SINGLE_BOOTSTRAP_SCRIPT" \
     "$LOOKUPS_FILE" \
     "$BOOTSTRAP_SCRIPT" \
     "$N_BOOTSTRAP" \
@@ -47,8 +47,8 @@ echo "Bootstrap array job submitted with Job ID: $array_jobid_bootstrap"
 
 # === Step 4: Submit array job for permutation ===
 echo "Submitting array job for permutation..."
-# "$NUM_LOOKUPS"
-array_jobid_permutation=$(sbatch --parsable --array=1-2 "$RUN_SINGLE_PERMUTATION_SCRIPT" \
+# 
+array_jobid_permutation=$(sbatch --parsable --array=1-"$NUM_LOOKUPS" "$RUN_SINGLE_PERMUTATION_SCRIPT" \
     "$LOOKUPS_FILE" \
     "$PERMUTATION_SCRIPT" \
     "$N_PERMUTATION" \

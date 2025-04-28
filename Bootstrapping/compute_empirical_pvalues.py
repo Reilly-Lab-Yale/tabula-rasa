@@ -49,8 +49,8 @@ def main():
                 continue
 
             # expression values
-            exp_cre = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_cluster_norm_mBC_UMI']
-            exp_min_noP = df_boot_oi[df_boot_oi['cre_id'].isin(["minP", "noP"])]['max_cluster_norm_mBC_UMI']
+            exp_cre = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_cluster_mBC_UMI']
+            exp_min_noP = df_boot_oi[df_boot_oi['cre_id'].isin(["minP", "noP"])]['max_cluster_mBC_UMI']
 
             if exp_cre.empty or exp_min_noP.empty:
                 continue
@@ -59,7 +59,7 @@ def main():
             empirical_pvals = calculate_empirical_pvals(exp_cre.values, exp_min_noP.values)
 
             # Most frequent cluster
-            max_clusters = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_norm_expression_cluster_id']
+            max_clusters = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_expression_cluster_id']
             if not max_clusters.empty:
                 most_common_cluster = Counter(max_clusters).most_common(1)[0][0]
                 freq_most_common = np.mean(max_clusters == most_common_cluster)
@@ -99,20 +99,20 @@ def main():
     for cre in CRE_list:
         for rep in biol_reps:
             df_boot_oi = df_boot[(df_boot['bootstrap_for_CRE'] == cre) & (df_boot['biol_rep'] == rep) & (df_boot['cre_id'] == cre)]
-            df_perm_oi = df_perm[(df_perm['cre_id'] == cre) & (df_perm['biol_rep'] == rep) & (df_perm['permuted'] == True)]
+            df_perm_oi = df_perm[(df_perm['cre_id'] == cre) & (df_perm['biol_rep'] == rep)]
 
             if df_boot_oi.empty or df_perm_oi.empty:
                 continue
 
             # FC (fold change) values
-            fc_boot = df_boot_oi['max_cluster_norm_FC_mBC_UMI'].fillna(1)
-            fc_perm = df_perm_oi['max_cluster_norm_FC_mBC_UMI'].fillna(1)
+            fc_boot = df_boot_oi['max_cluster_FC_mBC_UMI'].fillna(1)
+            fc_perm = df_perm_oi['max_cluster_FC_mBC_UMI'].fillna(1)
 
             # empirical p-value
             empirical_pvals = calculate_empirical_pvals(fc_boot.values, fc_perm.values)
 
             # Most frequent cluster
-            max_clusters = df_boot_oi['max_norm_expression_cluster_id']
+            max_clusters = df_boot_oi['max_expression_cluster_id']
             if not max_clusters.empty:
                 most_common_cluster = Counter(max_clusters).most_common(1)[0][0]
                 freq_most_common = np.mean(max_clusters == most_common_cluster)
