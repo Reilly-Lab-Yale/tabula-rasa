@@ -126,7 +126,7 @@ def main():
             
         start_params = np.full(n_total, 0.1)
     print('start fitting model')
-    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="lbfgs",maxiter=maxiter)
+    scmpra_model_fit = scmpra_model.fit(start_params=start_params, method="cg",maxiter=maxiter)
     
     print('pickle file')
     scmpra_model_fit.save("%s/%s_fit_model.pickle" % (temp_dir, out_file))
