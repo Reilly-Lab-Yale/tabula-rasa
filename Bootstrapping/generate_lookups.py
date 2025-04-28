@@ -28,8 +28,8 @@ def generate_lookups(counts_file, output_file):
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Generate a list of lookup strings from counts file.")
-    parser.add_argument('counts_file', type=str, help="Path to the counts file")
-    parser.add_argument('output_file', type=str, help="Path to save the generated lookups")
+    parser.add_argument('--counts_file', type=str, help="Path to the counts file")
+    parser.add_argument('--output_file', type=str, help="Path to save the generated lookups")
     
     # Parse arguments
     args = parser.parse_args()
