@@ -7,6 +7,6 @@ c9200090	Fake (9)	2_cg	statsmodels (0)	CPU (0)	No dna (0)	simple interaction (9)
 c9200010	Fake (9)	2_cg	statsmodels (0)	CPU (0)	No dna (0)	by cell-type (1)	replicate (0)	umis_mpra_bc  ~ C(cre_id)-1	C(rep_id)	cell_type
 c0200000	Shendure (0)	2_cg	statsmodels (0)	CPU (0)	No dna (0)	simple addition (0)	replicate (0)	umis_mpra_bc ~ C(cre_id) + C(cell_type) -1	C(rep_id)	
 c0200010	Shendure (0)	2_cg	statsmodels (0)	CPU (0)	No dna (0)	by cell-type (1)	replicate (0)	umis_mpra_bc ~ C(cre_id)-1	C(rep_id)	cell_type
-c0010000	Shendure (0)	0_default	tensorzinb (1)	A100 (1)	No dna (0)	simple addition (0)	replicate (0)	umis_mpra_bc ~ C(cre_id) + C(cell_type) -1	C(rep_id)	
+c0011000	Shendure (0)	0_default	tensorzinb (1)	1_A100	No dna (0)	simple addition (0)	replicate (0)	umis_mpra_bc ~ C(cre_id) + C(cell_type) -1	C(rep_id)	
 c9010090	Fake (9)	0_default	tensorzinb (1)	CPU (0)	No dna (0)	simple interaction (9)	replicate (0)	umis_mpra_bc  ~ C(cre_id) + C(cell_type) -1	C(rep_id)	
-c9011090	Fake (9)	0_default	tensorzinb (1)	A100 (1)	No dna (0)	simple interaction (9)	replicate (0)	umis_mpra_bc  ~ C(cre_id) + C(cell_type) -1	C(rep_id)	
+c9011090	Fake (9)	0_default	tensorzinb (1)	1_A100	No dna (0)	simple interaction (9)	replicate (0)	umis_mpra_bc  ~ C(cre_id) + C(cell_type) -1	C(rep_id)	

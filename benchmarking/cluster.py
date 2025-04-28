@@ -15,6 +15,7 @@ import string
 # installed imports
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from formulaic import Formula
 import dill
 
@@ -40,10 +41,12 @@ WORKER_TIMES={
     "c9200090":1,
     "c9200010":1,
     "c9010090":1,
+    "c9011090":1,
     "c0100000":12,
     "c0100010":12,
     "c0200000":12,
-    "c0200010":12
+    "c0200010":12,
+    "c0011000":12
 }
 
 STATSMODELS_MAXITER=1000
@@ -52,6 +55,10 @@ MAX_PARALLEL=10
 
 ### Utility functions
 
+def crash_if_no_gpu():
+    gpus = tf.config.list_physical_devices('GPU')
+    if not gpus:
+        raise RuntimeError("No GPU devices found, despite the fact that you asked for one.")
 
 def abort_on_failure(future,client):
     """
@@ -189,17 +196,31 @@ def main():
     cluster=None
 
     #Key decision in cluster creation is ± GPU
-
     #Make sure memory per slurm job is large enough to hold the data...
-    cluster=SLURMCluster(
-            cores=2,#cores per slurm job
-            memory="16G",#memory per slurm job
-            processes=1,#dask workers per slurm job
-            job_extra_directives=["-p ycga", 
-                f"--job-name=simclust_worker",
-                f"--time={WORKER_TIMES[model_code]}:00:00",
-                f"--output=slave_{model_code}_{now}_%j.out"]
-        )
+
+    hardware=modelspecs.loc[model_code,"hardware"].split("_")[1]
+
+    if hardware=="CPU":
+        cluster=SLURMCluster(
+                cores=2,#cores per slurm job
+                memory="16G",#memory per slurm job
+                processes=1,#dask workers per slurm job
+                job_extra_directives=["-p ycga", 
+                    f"--job-name=simclust_worker",
+                    f"--time={WORKER_TIMES[model_code]}:00:00",
+                    f"--output=slave_{model_code}_{now}_%j.out"]
+            )
+    elif hardware=="A100":
+        cluster=SLURMCluster(
+                cores=2,#cores per slurm job
+                memory="16G",#memory per slurm job
+                processes=1,#dask workers per slurm job
+                job_extra_directives=["-p gpu", 
+                    "--gpus=a100:1",
+                    "--job-name=simclust_worker",
+                    f"--time={WORKER_TIMES[model_code]}:00:00",
+                    f"--output=slave_{model_code}_{now}_%j.out"]
+            )
     
 
     client = Client(cluster)
