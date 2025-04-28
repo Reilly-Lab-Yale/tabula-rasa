@@ -1,10 +1,6 @@
 #Script takes as its a model ID & produces a fit model
 #and some raw benchmarking data
 
-#Note the use of wait(): dask's async is mostly obviated
-#note that this doesn't slow computation: wait is only used when the next step would
-#require the previous step to finish anyway. It's not lazy evaluation if you need the data immediately. 
-#and it's all ufunc so there's no computation graph optimization
 
 #general imports
 import time
@@ -65,23 +61,31 @@ def abort_on_failure(future,client):
         #it's not a list, presumably just one future
         status=future.status
     if future.status=="error":
-        fprint("[!] Computation failed. Aborting.")
-        fprint("[!] Check slave node logs for details.")
+        sprint("[!] Computation failed. Aborting.")
+        sprint("[!] Check slave node logs for details.")
         client.shutdown()
         assert 1==2
 
+#pesuto-logging functions for quick debugging
+def stamp():
+    """returns a formatted string with time since test start"""
+    return f'@ {time.time()-start_time:.2f}'
 
 def fprint(string):
     """Wraps print with flush=True"""
     print(string,flush=True)
 
-def stamp():
-    """returns a formatted string with time since test start"""
-    return f'@ {time.time()-start_time:.2f}'
+def sprint(string):
+    """stamp-print"""
+    fprint(f"{string} {stamp()}")
+
+
 
 ### Functions to be passed as jobs to dask
 
 def statsmodels_fit(p,method,name):
+    sprint(f"[W] [+] Beginning fitting {name}")
+    
     import statsmodels.discrete.count_model as smdc
     X,y,Z=p
     zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
@@ -91,42 +95,43 @@ def statsmodels_fit(p,method,name):
     n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
     start_params = np.full(n_total, 0.1)
 
-    fprint(f"[F] [+] Beginning fitting {name} {stamp()}")
-
     zinb_result = zinb_model.fit(start_params=start_params,maxiter=STATSMODELS_MAXITER,method=method)
 
-    fprint(f"[F] [+] Done fitting {name}. Serializing result for transfer. {stamp()}")
+    sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
 
     return dill.dumps(zinb_result)
 
 
-
 def load_csv(path):
+    sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path)
 
 def load_tsv(path):
+    sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path,sep="\t")
 
 def create_matricies(main_form,zin_form,data):
+    sprint("[W] [+] Creating matrix")
     y, X=Formula(main_form).get_model_matrix(data,output='pandas')
     Z=Formula(zin_form).get_model_matrix(data,output='pandas')
     return(X, y, Z)
 
 def dump_unified_model(model_future,filename):
+    sprint("[W] [+] Dumping unified model")
     with open(filename, "wb") as f:
         dill.dump(dill.loads(model_future), f)
         f.flush()
         os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
-    print(f"[+] Materalizing & de-seralizing model {stamp()}")
+    print(f"[W] [+] Materalizing & de-seralizing model {stamp()}")
     
     materalized_models = {
         t:dill.loads(model_future[t])
         for t in types
     }
 
-    print(f"[+] Dumping to disc! {stamp()}")
+    print(f"[W] [+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
         dill.dump(materalized_models, f)
         f.flush()
@@ -150,11 +155,9 @@ def main():
     model_code=sys.argv[1]
     modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
 
-    fprint(f'[+] Creating cluster {stamp()}')
+    sprint(f'[+] Creating cluster')
     
     now=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-
     
 
     #Make sure memory per slurm job is large enough to hold the data...
@@ -171,7 +174,7 @@ def main():
 
     client = Client(cluster)
 
-    fprint(f"[+] Cluster started. Monitor on {cluster.dashboard_link} {stamp()}")
+    sprint(f"[+] Cluster started. Monitor on {cluster.dashboard_link}")
 
     method=modelspecs.loc[model_code,"sm_optimizer"].split("_")[1]
 
@@ -179,7 +182,6 @@ def main():
         
         #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
 
-        fprint(f'[+] Loading data {stamp()}')
         
         cluster.scale(jobs=1)
 
@@ -194,9 +196,6 @@ def main():
             return -1
 
 
-        wait(dat_future)
-        abort_on_failure(dat_future,client)
-
         model_future=None
 
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
@@ -210,20 +209,10 @@ def main():
                 main_form=modelspecs.loc[model_code, "main_equ"]
             )
             
-            wait(mats_future)
-            abort_on_failure(mats_future,client)
-
-
-            fprint(f'[+] Fitting {stamp()}')
-
-            
+         
             
             model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
 
-            wait(model_future)
-            abort_on_failure(model_future,client)
-
-            fprint(f'[+] Dumping model {stamp()}')
 
             #'now' isn't now anymore, but this is easier for pairity/lookups...
             
@@ -231,7 +220,7 @@ def main():
             wait(dump_ret)
             
         else:
-            fprint(f'[i] Broken model, parallelizing {stamp()}')
+            sprint(f'[i] Broken model, parallelizing')
             #broken model. 
             #First, get unique cell-types
             types_future = client.submit(lambda df: df[modelspecs.loc[model_code, 'broken_by']].unique(), dat_future)
@@ -242,17 +231,16 @@ def main():
             
             #now scale up the cluster...
             num_workers=min(MAX_PARALLEL,len(types))
-            fprint(f"[+] scaling up the cluster to {num_workers} workers")
+            sprint(f"[+] scaling up the cluster to {num_workers} workers")
             cluster.scale(jobs=num_workers)
 
-            fprint(f'[+] Proceeding for one model for each of {types} {stamp()}')
+            sprint(f'[+] Proceeding for one model for each of {types}')
 
             #timestamp at future creation & execution separately so that
             #we can see if there is substantial slowdown in the for loop
             #or in subsetting
             #which I am suspicious of
             
-            fprint(f'[+] Creating matricies : creating futures {stamp()}')
 
             mats_futures = {
                 t: client.submit(
@@ -265,11 +253,6 @@ def main():
             }
 
             
-
-            fprint(f'[+] Creating matricies : execution {stamp()}')
-            wait(list(mats_futures.values()))
-
-            fprint(f'[+] Fitting : creating futures {stamp()}')
             model_future = {
                 t: client.submit(
                         statsmodels_fit,
@@ -280,10 +263,6 @@ def main():
                 for t in types
             }
             
-            fprint(f'[+] Fitting : execution {stamp()}')
-            wait(list(model_future.values()))
-
-            fprint(f'[+] Dumping model {stamp()}')
             
             dump_ret=client.submit(dump_broken_model,model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
 
@@ -297,7 +276,7 @@ def main():
     #end performance report (end of with block).
 
 
-    fprint(f'[+] Done with all tasks. Shutting down {stamp()}')
+    sprint(f'[+] Done with all tasks. Shutting down')
 
     client.shutdown()
 
