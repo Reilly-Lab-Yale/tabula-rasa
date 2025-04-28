@@ -39,6 +39,7 @@ WORKER_TIMES={
     "c9100010":1,
     "c9200090":1,
     "c9200010":1,
+    "c9010090":1,
     "c0100000":12,
     "c0100010":12,
     "c0200000":12,
@@ -46,6 +47,8 @@ WORKER_TIMES={
 }
 
 STATSMODELS_MAXITER=1000
+
+MAX_PARALLEL=10
 
 ### Utility functions
 
@@ -113,6 +116,20 @@ def statsmodels_fit(p,method,name):
 
     return dill.dumps(zinb_result)
 
+def tensorzinb_fit(p,method,name):
+    sprint(f"[W] [+] Beginning tensor fitting {name}")
+    
+    from tensorzinb.tensorzinb import TensorZINB
+    X,y,Z=p
+
+    zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+    zinb_result=zinbo.fit(init_method="nb")
+
+    sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
+    
+    fprint(zinb_result)
+
+    return dill.dumps(zinb_result)
 
 def load_csv(path):
     sprint(f"[W] [+] Loading {path}")
@@ -136,7 +153,7 @@ def dump_unified_model(model_future,filename):
         os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
-    print(f"[W] [+] Materalizing & de-seralizing model {stamp()}")
+    sprint(f"[W] [+] Materalizing & de-seralizing model")
     
     materalized_models = {
         t:dill.loads(model_future[t])
@@ -162,8 +179,6 @@ def main():
         return -1
     
     #useful paths
-    
-
     model_code=sys.argv[1]
     modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
 
@@ -171,6 +186,9 @@ def main():
     
     now=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
+    cluster=None
+
+    #Key decision in cluster creation is ± GPU
 
     #Make sure memory per slurm job is large enough to hold the data...
     cluster=SLURMCluster(
@@ -182,7 +200,7 @@ def main():
                 f"--time={WORKER_TIMES[model_code]}:00:00",
                 f"--output=slave_{model_code}_{now}_%j.out"]
         )
-    MAX_PARALLEL=10
+    
 
     client = Client(cluster)
 
@@ -190,11 +208,12 @@ def main():
 
     method=modelspecs.loc[model_code,"sm_optimizer"].split("_")[1]
 
+    #start logging!
     with performance_report(filename=f"{model_code}_{now}_report.html"):
         
         #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
 
-        
+        #initial scaling for init tasks : loading data
         cluster.scale(jobs=1)
 
         dat_future=None
@@ -212,7 +231,7 @@ def main():
 
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
         if pd.isna(modelspecs.loc[model_code, 'broken_by']):
-            fprint(f'[i] Unified model : executing in one job.')
+            sprint(f'[i] Unified model : executing in one job.')
 
             mats_future = client.submit(create_matricies,
                 data=dat_future,
@@ -220,9 +239,16 @@ def main():
                 main_form=modelspecs.loc[model_code, "main_equ"]
             )
             
-         
+            model_future=None
+            #two options: statsmodels & tensorzinb. pick one & proceed...
+            if modelspecs.loc[model_code, "lib"] == "statsmodels (0)":
+                model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
+            elif modelspecs.loc[model_code, "lib"] == "tensorzinb (1)":
+                model_future=client.submit(tensorzinb_fit,mats_future,method,"UNIFIED")
+            else:
+                sprint("[!] Unknown modeling library. Aborting.")
+                return -1
             
-            model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
 
 
             #'now' isn't now anymore, but this is easier for pairity/lookups...
@@ -230,7 +256,7 @@ def main():
             dump_ret=client.submit(dump_unified_model,model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
             wait(dump_ret)
             
-        else:
+        else:#end unified model, begin broken model
             sprint(f'[i] Broken model, parallelizing')
             #broken model. 
             #First, get unique cell-types
@@ -281,10 +307,8 @@ def main():
         
 
         #end broken & unif modeling
-        
-            
 
-    #end performance report (end of with block).
+    #end logging performance report (end of with block).
 
 
     sprint(f'[+] Done with all tasks. Shutting down')
