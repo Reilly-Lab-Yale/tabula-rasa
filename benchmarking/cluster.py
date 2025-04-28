@@ -2,18 +2,21 @@
 #and some raw benchmarking data
 
 
-#general imports
+#stock imports
 import time
 import sys
+import os
+from datetime import datetime
+import pickle
+import importlib
+import random
+import string
+
+# installed imports
 import pandas as pd
 import numpy as np
 from formulaic import Formula
-from datetime import datetime
-import importlib
-import pickle
-import os
 import dill
-
 
 #dask imports
 from dask_jobqueue import SLURMCluster
@@ -67,17 +70,26 @@ def abort_on_failure(future,client):
         assert 1==2
 
 #pesuto-logging functions for quick debugging
+def rand_tag(length=6):
+    """
+    Some of my print statements seem to be getting duplicated
+    so I'm going to stamp them with a random string...
+    """
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
 def stamp():
     """returns a formatted string with time since test start"""
-    return f'@ {time.time()-start_time:.2f}'
+    return f'@ {time.time()-start_time:.4f}'
 
 def fprint(string):
     """Wraps print with flush=True"""
     print(string,flush=True)
 
 def sprint(string):
-    """stamp-print"""
-    fprint(f"{string} {stamp()}")
+    """
+    stamp-print
+    """
+    fprint(f"{string} {rand_tag()} {stamp()}")
 
 
 
@@ -201,7 +213,6 @@ def main():
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
         if pd.isna(modelspecs.loc[model_code, 'broken_by']):
             fprint(f'[i] Unified model : executing in one job.')
-            fprint(f'[+] Creating matricies {stamp()}')
 
             mats_future = client.submit(create_matricies,
                 data=dat_future,
