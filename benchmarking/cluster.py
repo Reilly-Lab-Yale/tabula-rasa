@@ -46,7 +46,7 @@ WORKER_TIMES={
     "c0200010":12
 }
 
-STATSMODELS_MAXITER=5000
+STATSMODELS_MAXITER=1000
 
 ### Utility functions
 
@@ -114,7 +114,9 @@ def create_matricies(main_form,zin_form,data):
 
 def dump_unified_model(model_future,filename):
     with open(filename, "wb") as f:
-        pickle.dump(dill.loads(model_future), f)
+        dill.dump(dill.loads(model_future), f)
+        f.flush()
+        os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
     print(f"[+] Materalizing & de-seralizing model {stamp()}")
@@ -123,9 +125,12 @@ def dump_broken_model(model_future,types,filename):
         t:dill.loads(model_future[t])
         for t in types
     }
+
     print(f"[+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
-        pickle.dump(materalized_models, f)
+        dill.dump(materalized_models, f)
+        f.flush()
+        os.fsync(f.fileno())
 
 ### Main testing routine
 start_time=-1
@@ -166,7 +171,7 @@ def main():
 
     client = Client(cluster)
 
-    fprint(f"[+] Cluster started {stamp()}. Monitor on {cluster.dashboard_link}")
+    fprint(f"[+] Cluster started. Monitor on {cluster.dashboard_link} {stamp()}")
 
     method=modelspecs.loc[model_code,"sm_optimizer"].split("_")[1]
 
