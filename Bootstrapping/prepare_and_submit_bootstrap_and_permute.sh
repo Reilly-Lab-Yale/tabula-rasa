@@ -66,34 +66,34 @@ echo "Skipping permutation step, submitting dummy job for dependency handling...
 array_jobid_permutation=$(sbatch --parsable --job-name=dummy_permutation_done --wrap="sleep 1")
 
 # === Step 5: Submit combination jobs (optional) ===
-echo "Submitting combine jobs after bootstrap and permutation finish..."
+# echo "Submitting combine jobs after bootstrap and permutation finish..."
 
-COMBINE_BOOTSTRAP_SCRIPT="$BIN_PATH/combine_bootstraps.py"
-COMBINE_PERMUTATION_SCRIPT="$BIN_PATH/combine_permutations.py"  
+# COMBINE_BOOTSTRAP_SCRIPT="$BIN_PATH/combine_bootstraps.py"
+# COMBINE_PERMUTATION_SCRIPT="$BIN_PATH/combine_permutations.py"  
 
-combine_jobid_bootstrap=$(sbatch --parsable --partition=ycga --time=08:00:00 --dependency=afterok:$array_jobid_bootstrap --job-name=combine_bootstrap_outputs --wrap="\
-module load miniconda; \
-conda activate scmpra; \
-python $COMBINE_BOOTSTRAP_SCRIPT --input_dir $OUTPUT_DIR_BOOTSTRAP --output_file $OUTPUT_DIR_BOOTSTRAP/combined_bootstrap_allCREs_${DATE_STR}.tsv")
+# combine_jobid_bootstrap=$(sbatch --parsable --partition=ycga --time=08:00:00 --dependency=afterok:$array_jobid_bootstrap --job-name=combine_bootstrap_outputs --wrap="\
+# module load miniconda; \
+# conda activate scmpra; \
+# python $COMBINE_BOOTSTRAP_SCRIPT --input_dir $OUTPUT_DIR_BOOTSTRAP --output_file $OUTPUT_DIR_BOOTSTRAP/combined_bootstrap_allCREs_${DATE_STR}.tsv")
 
-combine_jobid_permutation=$(sbatch --parsable --partition=ycga --time=08:00:00 --dependency=afterok:$array_jobid_permutation --job-name=combine_permutation_outputs --wrap="\
-module load miniconda; \
-conda activate scmpra; \
-python $COMBINE_PERMUTATION_SCRIPT --input_dir $OUTPUT_DIR_PERMUTATION --output_file $OUTPUT_DIR_PERMUTATION/combined_permutation_allCREs_${DATE_STR}.tsv")
+# combine_jobid_permutation=$(sbatch --parsable --partition=ycga --time=08:00:00 --dependency=afterok:$array_jobid_permutation --job-name=combine_permutation_outputs --wrap="\
+# module load miniconda; \
+# conda activate scmpra; \
+# python $COMBINE_PERMUTATION_SCRIPT --input_dir $OUTPUT_DIR_PERMUTATION --output_file $OUTPUT_DIR_PERMUTATION/combined_permutation_allCREs_${DATE_STR}.tsv")
 
-echo "Combine bootstrap job submitted with Job ID: $combine_jobid_bootstrap"
-echo "Combine permutation job submitted with Job ID: $combine_jobid_permutation"
+# echo "Combine bootstrap job submitted with Job ID: $combine_jobid_bootstrap"
+# echo "Combine permutation job submitted with Job ID: $combine_jobid_permutation"
 
 # === Step 6: Submit empirical p-value calculation job ===
 echo "Submitting empirical p-value job..."
 
 EMP_PVAL_SCRIPT="$BIN_PATH/compute_empirical_pvalues.py"
-EMP_PVAL_OUTPUT_activity="$DATA_PATH/empirical_pvals_activity_${DATE_STR}.tsv"
-EMP_PVAL_OUTPUT_specificity="$DATA_PATH/empirical_pvals_activity_${DATE_STR}.tsv"
+EMP_PVAL_OUTPUT_activity="$DATA_PATH/empirical_pvalues/empirical_pvals_activity_${DATE_STR}.tsv"
+EMP_PVAL_OUTPUT_specificity="$DATA_PATH/empirical_pvalues/empirical_pvals_specificity_${DATE_STR}.tsv"
 
 mkdir -p "$DATA_PATH/empirical_pvalues"  # make output dir if needed
-
-empirical_pval_jobid=$(sbatch --parsable --time=08:00:00 --partition=ycga --dependency=afterok:$combine_jobid_bootstrap,$combine_jobid_permutation --job-name=empirical_pvals --wrap="\
+# --dependency=afterok:$combine_jobid_bootstrap,$combine_jobid_permutation
+empirical_pval_jobid=$(sbatch --parsable --time=08:00:00 --partition=ycga --job-name=empirical_pvals --wrap="\
 module load miniconda; \
 conda activate scmpra; \
 python $EMP_PVAL_SCRIPT --bootstrap_file $OUTPUT_DIR_BOOTSTRAP/combined_bootstrap_allCREs_${DATE_STR}.tsv \
