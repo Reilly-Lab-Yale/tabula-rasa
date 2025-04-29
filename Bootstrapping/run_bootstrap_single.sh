@@ -2,8 +2,8 @@
 #SBATCH --job-name=bootstrap_array
 #SBATCH --output=/gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/stdout/bootstrap_array_%A_%a.out
 #SBATCH --error=/gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/stdout/bootstrap_array_%A_%a.err
-#SBATCH --time=02:00:00
-#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --mem=2G
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=ycga
 

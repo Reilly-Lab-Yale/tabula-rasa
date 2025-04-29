@@ -46,8 +46,9 @@ def main():
             df_boot_oi = df_boot[(df_boot['bootstrap_for_CRE'] == cre) & (df_boot['biol_rep'] == rep)]
 
             if df_boot_oi.empty:
+                print(f"Warning: Missing data for cre {cre}, rep {rep}")
                 continue
-
+                   
             # expression values
             exp_cre = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_cluster_mBC_UMI']
             exp_min_noP = df_boot_oi[df_boot_oi['cre_id'].isin(["minP", "noP"])]['max_cluster_mBC_UMI']
@@ -102,6 +103,7 @@ def main():
             df_perm_oi = df_perm[(df_perm['cre_id'] == cre) & (df_perm['biol_rep'] == rep)]
 
             if df_boot_oi.empty or df_perm_oi.empty:
+                print(f"Warning: Missing data for cre {cre}, rep {rep}")
                 continue
 
             # FC (fold change) values

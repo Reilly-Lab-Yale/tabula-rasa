@@ -102,9 +102,12 @@ def main(lookup_str, n_bootstrap, date_str, counts_file, output_dir, control_cre
         if df_biol.empty:
             print(f"No data for biological replicate {biol_r}, skipping.")
             continue
-        idx_CRE_oi = df_biol[df_biol['cre_id'] == CRE_oi].index
-        idx_controls = [df_biol[df_biol['cre_id'] == ctrl].index for ctrl in control_cres]
 
+        idx_controls = [df_biol[df_biol['cre_id'] == ctrl].index for ctrl in control_cres]
+        idx_CRE_oi = df_biol[df_biol['cre_id'] == CRE_oi].index
+        if idx_CRE_oi.empty:
+            print(f"No instances of {CRE_oi} in {biol_r}, skipping.")
+            continue
         print(f"Biol rep: {biol_r}")
         print(f"  idx_CRE_oi size: {len(idx_CRE_oi)}")
         print(f"  idx_controls sizes: {[len(x) for x in idx_controls]}")
@@ -129,7 +132,18 @@ def main(lookup_str, n_bootstrap, date_str, counts_file, output_dir, control_cre
         f'bootstrap_subsampling_{CRE_type}_{CRE_oi}_{date_str}.txt'
     )
     final_df.to_csv(output_file, sep='\t', index=False)
+    # Optional: check if any CREs are missing biological replicates
+    if 'cre_id' in final_df.columns and 'biol_rep' in final_df.columns:
+        cre_rep_counts = final_df.groupby('cre_id')['biol_rep'].nunique()
+        expected_reps = final_df['biol_rep'].nunique()
+        missing_reps = cre_rep_counts[cre_rep_counts < expected_reps]
+        
+        if not missing_reps.empty:
+            print("Warning: Some CREs are missing biological replicates:")
+            print(missing_reps)
+
     print(f'Saved final output to {output_file}')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Bootstrap subsampling for MPRA data.")
