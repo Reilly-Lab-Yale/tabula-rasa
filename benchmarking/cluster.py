@@ -22,7 +22,7 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, wait
 from dask.distributed import get_worker
 from dask.distributed import performance_report
-from dask import delayed
+#from dask import delayed
 
 
 ### constants
@@ -100,11 +100,15 @@ def sprint(string):
     """
     fprint(f"{string} {rand_tag()} {stamp()}")
 
-
+def strip_training_data(model_result):
+    model = model_result.model
+    model.endog = None
+    model.exog = None
+    model.exog_infl = None
+    return model_result
 
 ### Functions to be passed as jobs to dask
 
-@delayed
 def statsmodels_fit(p,method,name):
     sprint(f"[W] [+] Beginning fitting {name}")
     
@@ -121,10 +125,8 @@ def statsmodels_fit(p,method,name):
 
     sprint(f"[W] [+] Done fitting {name}.")
 
-    return zinb_result
-    return zinb_result
+    return strip_training_data(zinb_result)
 
-@delayed
 def tensorzinb_fit(p,method,name):
     sprint(f"[W] [+] Beginning tensor fitting {name}")
     
@@ -140,17 +142,14 @@ def tensorzinb_fit(p,method,name):
 
     return zinb_result
 
-@delayed
 def load_csv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path)
 
-@delayed
 def load_tsv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path,sep="\t")
 
-@delayed
 def create_matricies(main_form,zin_form,data):
     sprint("[W] [+] Creating matrix")
     y, X=Formula(main_form).get_model_matrix(data,output='pandas')
@@ -160,25 +159,18 @@ def create_matricies(main_form,zin_form,data):
 ## To be used locally
 
 def dump_unified_model(model_future,filename):
-    wait(model_future)#buck stops here
-    sprint("[W] [+] Dumping unified model")
-    fprint("----")
-    fprint(type(model_future))
-    fprint(model_future)
-    fprint(type(model_future.result()))
-    fprint(model_future.result())
-    fprint("----")
+    sprint("[W] [+] Called to dump unified model")
 
     with open(filename, "wb") as f:
-        pickle.dump(model_future, f)
+        pickle.dump(model_future.result(), f)
         f.flush()
         os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
-    sprint(f"[W] [+] Materalizing & de-seralizing model")
+    sprint("[W] [+] Called to dump separated model")
     
     materalized_models = {
-        t:model_future[t]
+        t:model_future[t].result()
         for t in types
     }
 
@@ -290,8 +282,8 @@ def main():
             #'now' isn't now anymore, but this is easier for pairity/lookups...
             
             
-            dump_ret=client.submit(dump_unified_model,model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
-            wait(dump_ret)
+            dump_unified_model(model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+        
             
         else:#end unified model, begin broken model
             sprint(f'[i] Broken model, parallelizing')
@@ -338,9 +330,8 @@ def main():
             }
             
             
-            dump_ret=client.submit(dump_broken_model,model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+            dump_broken_model(model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
 
-            wait(dump_ret)
         
 
         #end broken & unif modeling
