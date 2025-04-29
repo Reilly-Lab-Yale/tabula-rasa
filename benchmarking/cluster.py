@@ -78,7 +78,10 @@ def abort_on_failure(future,client):
         client.shutdown()
         assert 1==2
 
-#pesuto-logging functions for quick debugging
+
+
+
+#pseudo-logging functions for quick debugging
 def rand_tag(length=6):
     """
     Some of my print statements seem to be getting duplicated
@@ -142,13 +145,16 @@ def tensorzinb_fit(p,method,name):
 
     return zinb_result
 
+
 def load_csv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path)
 
+
 def load_tsv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path,sep="\t")
+
 
 def create_matricies(main_form,zin_form,data):
     sprint("[W] [+] Creating matrix")
@@ -159,7 +165,7 @@ def create_matricies(main_form,zin_form,data):
 ## To be used locally
 
 def dump_unified_model(model_future,filename):
-    sprint("[W] [+] Called to dump unified model")
+    sprint("[+] Called to dump unified model")
 
     with open(filename, "wb") as f:
         pickle.dump(model_future.result(), f)
@@ -167,14 +173,14 @@ def dump_unified_model(model_future,filename):
         os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
-    sprint("[W] [+] Called to dump separated model")
+    sprint("[+] Called to dump separated model")
     
     materalized_models = {
         t:model_future[t].result()
         for t in types
     }
 
-    print(f"[W] [+] Dumping to disc! {stamp()}")
+    print(f"[+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
         pickle.dump(materalized_models, f)
         f.flush()
@@ -230,7 +236,10 @@ def main():
             )
     
 
-    client = Client(cluster)
+    client = Client(cluster,
+        timeout=f"{5*60}s",   # Client <-> scheduler timeout 
+        heartbeat_interval="20s"  # Worker heartbeat interval
+    )
 
     sprint(f"[+] Cluster started. Monitor on {cluster.dashboard_link}")
 
