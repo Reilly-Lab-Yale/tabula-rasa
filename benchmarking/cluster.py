@@ -17,7 +17,6 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from formulaic import Formula
-import dill
 
 #dask imports
 from dask_jobqueue import SLURMCluster
@@ -121,7 +120,7 @@ def statsmodels_fit(p,method,name):
 
     sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
 
-    return dill.dumps(zinb_result)
+    return zinb_result
 
 def tensorzinb_fit(p,method,name):
     sprint(f"[W] [+] Beginning tensor fitting {name}")
@@ -136,7 +135,7 @@ def tensorzinb_fit(p,method,name):
     
     fprint(zinb_result)
 
-    return dill.dumps(zinb_result)
+    return zinb_result
 
 def load_csv(path):
     sprint(f"[W] [+] Loading {path}")
@@ -155,7 +154,7 @@ def create_matricies(main_form,zin_form,data):
 def dump_unified_model(model_future,filename):
     sprint("[W] [+] Dumping unified model")
     with open(filename, "wb") as f:
-        dill.dump(dill.loads(model_future), f)
+        pickle.dump(model_future, f)
         f.flush()
         os.fsync(f.fileno())
 
@@ -163,13 +162,13 @@ def dump_broken_model(model_future,types,filename):
     sprint(f"[W] [+] Materalizing & de-seralizing model")
     
     materalized_models = {
-        t:dill.loads(model_future[t])
+        t:model_future[t]
         for t in types
     }
 
     print(f"[W] [+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
-        dill.dump(materalized_models, f)
+        pickle.dump(materalized_models, f)
         f.flush()
         os.fsync(f.fileno())
 
