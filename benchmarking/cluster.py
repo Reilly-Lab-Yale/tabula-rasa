@@ -142,9 +142,8 @@ def tensorzinb_fit(p,method,name):
     zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
     zinb_result=zinbo.fit(init_method="nb")
 
-    sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
+    sprint(f"[W] [+] Done fitting {name}.ls")
     
-    fprint(zinb_result)
 
     return zinb_result
 
@@ -175,13 +174,16 @@ def dump_unified_model(model_future,filename):
         f.flush()
         os.fsync(f.fileno())
 
-def dump_broken_model(model_future,types,filename):
+def dump_broken_model(model_future,types,filename,sent=False):
     sprint("[+] Called to dump separated model")
     
     materalized_models = {
         t:model_future[t].result()
         for t in types
     }
+
+    if sent:
+        materalized_models["multi_sent"]=True
 
     print(f"[+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
@@ -358,6 +360,7 @@ def main():
             }
 
             #split control flow here on the basis of library
+            sent=False
             model_future=None
             if modelspecs.loc[model_code,"lib"]=="statsmodels (0)":
                 model_future = {
@@ -370,6 +373,8 @@ def main():
                     for t in types
                 }
             elif modelspecs.loc[model_code,"lib"]=="tensorzinb (1)":
+                sent=True
+                #broken model + tensorzinb = requires sentinal value
                 model_future = {
                     t: client.submit(
                             tensorzinb_fit,
@@ -384,7 +389,7 @@ def main():
                 return -1
 
             
-            dump_broken_model(model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+            dump_broken_model(model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl",sent=sent)
 
         
 
