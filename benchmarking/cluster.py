@@ -40,16 +40,19 @@ WORKER_TIMES={
     "c9200010":1,
     "c9010090":1,
     "c9011090":1,
+    "c9011010":1,
     "c0100000":12,
     "c0100010":12,
     "c0200000":12,
     "c0200010":12,
-    "c0011000":12
+    "c0011000":12,
+    "c0012010":12
 }
 
 STATSMODELS_MAXITER=1000
 
 MAX_PARALLEL=10
+MAX_A100=3
 
 ### Utility functions
 
@@ -211,7 +214,7 @@ def main():
     #Key decision in cluster creation is ± GPU
     #Make sure memory per slurm job is large enough to hold the data...
 
-    hardware=modelspecs.loc[model_code,"hardware"].split("_")[1]
+    hardware_code,hardware=modelspecs.loc[model_code,"hardware"].split("_")
 
     if hardware=="CPU":
         cluster=SLURMCluster(
@@ -305,7 +308,34 @@ def main():
             abort_on_failure(types_future,client)
             
             #now scale up the cluster...
-            num_workers=min(MAX_PARALLEL,len(types))
+            #how many nodes we request will depend on particular hardware
+            #(we request less of scarcer hardware....)
+            
+            num_workers=-1
+
+            hardware_choice=modelspecs.loc[model_code,"hardware"]
+
+            #given initial profiling, I think video memory is the limiting factor
+            #so I'm not sure if pooling multiple workers per task will really make a difference..?
+
+            if hardware_choice=="0_CPU":
+                #CPUs are cheap. Just make as many workers as there are models to fit,
+                #up to MAX_PARALLEL
+                num_workers=min(MAX_PARALLEL,len(types))
+            elif hardware_choice=="1_A100":
+                #1_A100 is the "get a job fast for debugging" setting
+                num_workers=1
+            elif hardware_choice=="2_A100":
+                #this is the "let's be serious and allocate a bunch of A100s" mode
+                num_workers=min(MAX_A100,len(types))
+            elif hardware_choice=="3_A100":
+                #this is "try pooling" mode. 
+                sprint("[!] Unimplemented hardware choice, aborting.")
+            else:
+                sprint("[!] Unrecognized hardware choice, aborting.")
+                return -1
+
+            
             sprint(f"[+] scaling up the cluster to {num_workers} workers")
             cluster.scale(jobs=num_workers)
 
@@ -327,17 +357,32 @@ def main():
                 for t in types
             }
 
-            
-            model_future = {
-                t: client.submit(
-                        statsmodels_fit,
-                        mats_futures[t],
-                        method,
-                        t
-                    )
-                for t in types
-            }
-            
+            #split control flow here on the basis of library
+            model_future=None
+            if modelspecs.loc[model_code,"lib"]=="statsmodels (0)":
+                model_future = {
+                    t: client.submit(
+                            statsmodels_fit,
+                            mats_futures[t],
+                            method,
+                            t
+                        )
+                    for t in types
+                }
+            elif modelspecs.loc[model_code,"lib"]=="tensorzinb (1)":
+                model_future = {
+                    t: client.submit(
+                            tensorzinb_fit,
+                            mats_futures[t],
+                            method,
+                            t
+                        )
+                    for t in types
+                }#p method name
+            else:
+                sprint("[!] Unrecognized library choice, aborting.")
+                return -1
+
             
             dump_broken_model(model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
 
