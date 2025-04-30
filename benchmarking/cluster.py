@@ -16,14 +16,13 @@ import string
 import pandas as pd
 import numpy as np
 from formulaic import Formula
-import dill
 
 #dask imports
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, wait
 from dask.distributed import get_worker
 from dask.distributed import performance_report
-from dask import delayed
+#from dask import delayed
 
 
 ### constants
@@ -39,16 +38,26 @@ WORKER_TIMES={
     "c9100010":1,
     "c9200090":1,
     "c9200010":1,
+    "c9010090":1,
+    "c9011090":1,
     "c0100000":12,
     "c0100010":12,
     "c0200000":12,
-    "c0200010":12
+    "c0200010":12,
+    "c0011000":12
 }
 
 STATSMODELS_MAXITER=1000
 
+MAX_PARALLEL=10
+
 ### Utility functions
 
+def crash_if_no_gpu():
+    import tensorflow as tf
+    gpus = tf.config.list_physical_devices('GPU')
+    if not gpus:
+        raise RuntimeError("No GPU devices found, despite the fact that you asked for one.")
 
 def abort_on_failure(future,client):
     """
@@ -69,7 +78,10 @@ def abort_on_failure(future,client):
         client.shutdown()
         assert 1==2
 
-#pesuto-logging functions for quick debugging
+
+
+
+#pseudo-logging functions for quick debugging
 def rand_tag(length=6):
     """
     Some of my print statements seem to be getting duplicated
@@ -91,7 +103,12 @@ def sprint(string):
     """
     fprint(f"{string} {rand_tag()} {stamp()}")
 
-
+def strip_training_data(model_result):
+    model = model_result.model
+    model.endog = None
+    model.exog = None
+    model.exog_infl = None
+    return model_result
 
 ### Functions to be passed as jobs to dask
 
@@ -109,18 +126,35 @@ def statsmodels_fit(p,method,name):
 
     zinb_result = zinb_model.fit(start_params=start_params,maxiter=STATSMODELS_MAXITER,method=method)
 
-    sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
+    sprint(f"[W] [+] Done fitting {name}.")
 
-    return dill.dumps(zinb_result)
+    return strip_training_data(zinb_result)
+
+def tensorzinb_fit(p,method,name):
+    sprint(f"[W] [+] Beginning tensor fitting {name}")
+    
+    from tensorzinb.tensorzinb import TensorZINB
+    X,y,Z=p
+
+    zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+    zinb_result=zinbo.fit(init_method="nb")
+
+    sprint(f"[W] [+] Done fitting {name}. Serializing result for transfer")
+    
+    fprint(zinb_result)
+
+    return zinb_result
 
 
 def load_csv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path)
 
+
 def load_tsv(path):
     sprint(f"[W] [+] Loading {path}")
     return pd.read_csv(path,sep="\t")
+
 
 def create_matricies(main_form,zin_form,data):
     sprint("[W] [+] Creating matrix")
@@ -128,24 +162,27 @@ def create_matricies(main_form,zin_form,data):
     Z=Formula(zin_form).get_model_matrix(data,output='pandas')
     return(X, y, Z)
 
+## To be used locally
+
 def dump_unified_model(model_future,filename):
-    sprint("[W] [+] Dumping unified model")
+    sprint("[+] Called to dump unified model")
+
     with open(filename, "wb") as f:
-        dill.dump(dill.loads(model_future), f)
+        pickle.dump(model_future.result(), f)
         f.flush()
         os.fsync(f.fileno())
 
 def dump_broken_model(model_future,types,filename):
-    print(f"[W] [+] Materalizing & de-seralizing model {stamp()}")
+    sprint("[+] Called to dump separated model")
     
     materalized_models = {
-        t:dill.loads(model_future[t])
+        t:model_future[t].result()
         for t in types
     }
 
-    print(f"[W] [+] Dumping to disc! {stamp()}")
+    print(f"[+] Dumping to disc! {stamp()}")
     with open(filename, "wb") as f:
-        dill.dump(materalized_models, f)
+        pickle.dump(materalized_models, f)
         f.flush()
         os.fsync(f.fileno())
 
@@ -162,8 +199,6 @@ def main():
         return -1
     
     #useful paths
-    
-
     model_code=sys.argv[1]
     modelspecs=pd.read_csv(f"{data_root}/speed_test/modelspecs.tsv",sep="\t",index_col=0)
 
@@ -171,30 +206,51 @@ def main():
     
     now=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
+    cluster=None
 
+    #Key decision in cluster creation is ± GPU
     #Make sure memory per slurm job is large enough to hold the data...
-    cluster=SLURMCluster(
-            cores=2,#cores per slurm job
-            memory="16G",#memory per slurm job
-            processes=1,#dask workers per slurm job
-            job_extra_directives=["-p ycga", 
-                f"--job-name=simclust_worker",
-                f"--time={WORKER_TIMES[model_code]}:00:00",
-                f"--output=slave_{model_code}_{now}_%j.out"]
-        )
-    MAX_PARALLEL=10
 
-    client = Client(cluster)
+    hardware=modelspecs.loc[model_code,"hardware"].split("_")[1]
+
+    if hardware=="CPU":
+        cluster=SLURMCluster(
+                cores=2,#cores per slurm job
+                memory="16G",#memory per slurm job
+                processes=1,#dask workers per slurm job
+                job_extra_directives=["-p ycga", 
+                    f"--job-name=simclust_worker",
+                    f"--time={WORKER_TIMES[model_code]}:00:00",
+                    f"--output=slave_{model_code}_{now}_%j.out"]
+            )
+    elif hardware=="A100":
+        cluster=SLURMCluster(
+                cores=2,#cores per slurm job
+                memory="16G",#memory per slurm job
+                processes=1,#dask workers per slurm job
+                job_extra_directives=["-p gpu", 
+                    "--gpus=a100:1",
+                    "--job-name=simclust_worker",
+                    f"--time={WORKER_TIMES[model_code]}:00:00",
+                    f"--output=slave_{model_code}_{now}_%j.out"]
+            )
+    
+
+    client = Client(cluster,
+        timeout=f"{5*60}s",   # Client <-> scheduler timeout 
+        heartbeat_interval="20s"  # Worker heartbeat interval
+    )
 
     sprint(f"[+] Cluster started. Monitor on {cluster.dashboard_link}")
 
     method=modelspecs.loc[model_code,"sm_optimizer"].split("_")[1]
 
+    #start logging!
     with performance_report(filename=f"{model_code}_{now}_report.html"):
         
         #cluster.adapt(minimum_jobs=1, maximum_jobs=10)
 
-        
+        #initial scaling for init tasks : loading data
         cluster.scale(jobs=1)
 
         dat_future=None
@@ -212,7 +268,7 @@ def main():
 
         #for a unified model, we just fit on one node. For a broken model, we will run in parallel.
         if pd.isna(modelspecs.loc[model_code, 'broken_by']):
-            fprint(f'[i] Unified model : executing in one job.')
+            sprint(f'[i] Unified model : executing in one job.')
 
             mats_future = client.submit(create_matricies,
                 data=dat_future,
@@ -220,17 +276,25 @@ def main():
                 main_form=modelspecs.loc[model_code, "main_equ"]
             )
             
-         
+            model_future=None
+            #two options: statsmodels & tensorzinb. pick one & proceed...
+            if modelspecs.loc[model_code, "lib"] == "statsmodels (0)":
+                model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
+            elif modelspecs.loc[model_code, "lib"] == "tensorzinb (1)":
+                model_future=client.submit(tensorzinb_fit,mats_future,method,"UNIFIED")
+            else:
+                sprint("[!] Unknown modeling library. Aborting.")
+                return -1
             
-            model_future=client.submit(statsmodels_fit,mats_future,method,"UNIFIED")
 
 
             #'now' isn't now anymore, but this is easier for pairity/lookups...
             
-            dump_ret=client.submit(dump_unified_model,model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
-            wait(dump_ret)
             
-        else:
+            dump_unified_model(model_future,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+        
+            
+        else:#end unified model, begin broken model
             sprint(f'[i] Broken model, parallelizing')
             #broken model. 
             #First, get unique cell-types
@@ -275,16 +339,13 @@ def main():
             }
             
             
-            dump_ret=client.submit(dump_broken_model,model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
+            dump_broken_model(model_future,types,f"{data_root}/speed_test/models/{model_code}_{now}.pkl")
 
-            wait(dump_ret)
         
 
         #end broken & unif modeling
-        
-            
 
-    #end performance report (end of with block).
+    #end logging performance report (end of with block).
 
 
     sprint(f'[+] Done with all tasks. Shutting down')
