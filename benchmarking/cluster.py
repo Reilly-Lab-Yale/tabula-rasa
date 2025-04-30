@@ -41,18 +41,26 @@ WORKER_TIMES={
     "c9010090":1,
     "c9011090":1,
     "c9011010":1,
-    "c0100000":12,
-    "c0100010":12,
-    "c0200000":12,
-    "c0200010":12,
-    "c0011000":12,
-    "c0012010":12
+    "c9200020":1,
+    "c020020":4,
+    "c0100000":4,
+    "c0100010":4,
+    "c0200000":4,
+    "c0200010":4,
+    "c0011000":4,
+    "c0012010":4,
+    "c0010010":4,
+    "c0100020":4,
+    "c0011020":4,
+    "c0010020":4
 }
 
 STATSMODELS_MAXITER=1000
 
 MAX_PARALLEL=10
 MAX_A100=3
+
+MIN_PTS=3
 
 ### Utility functions
 
@@ -107,19 +115,31 @@ def sprint(string):
     fprint(f"{string} {rand_tag()} {stamp()}")
 
 def strip_training_data(model_result):
+    """Fix me"""
     model = model_result.model
     model.endog = None
     model.exog = None
     model.exog_infl = None
     return model_result
 
+def toosmall(y):
+    if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
+        return True
+    else:
+        return False
+
+
 ### Functions to be passed as jobs to dask
 
 def statsmodels_fit(p,method,name):
     sprint(f"[W] [+] Beginning fitting {name}")
+    X,y,Z=p
+    if toosmall(y):
+        sprint(f"[W] [+] Not enough data for {name}")
+        return "too_small"
     
     import statsmodels.discrete.count_model as smdc
-    X,y,Z=p
+    
     zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
 
     n_count_params = zinb_model.exog.shape[1]      # Count model parameters
@@ -135,12 +155,20 @@ def statsmodels_fit(p,method,name):
 
 def tensorzinb_fit(p,method,name):
     sprint(f"[W] [+] Beginning tensor fitting {name}")
-    
-    from tensorzinb.tensorzinb import TensorZINB
     X,y,Z=p
+    if toosmall(y):
+        sprint(f"[W] [+] Not enough data for {name}")
+        return "too_small"
+
+    from tensorzinb.tensorzinb import TensorZINB
 
     zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
-    zinb_result=zinbo.fit(init_method="nb")
+    zinb_result=None
+    try:
+        zinb_result=zinbo.fit(init_method="nb")
+    except InvalidIndexError:
+        sprint(f"[W] [!] Index error in {name}") 
+        return "index_error"
 
     sprint(f"[W] [+] Done fitting {name}.ls")
     
@@ -333,6 +361,7 @@ def main():
             elif hardware_choice=="3_A100":
                 #this is "try pooling" mode. 
                 sprint("[!] Unimplemented hardware choice, aborting.")
+                return -1
             else:
                 sprint("[!] Unrecognized hardware choice, aborting.")
                 return -1
@@ -374,7 +403,7 @@ def main():
                 }
             elif modelspecs.loc[model_code,"lib"]=="tensorzinb (1)":
                 sent=True
-                #broken model + tensorzinb = requires sentinal value
+                #broken model + tensorzinb = requires sentinel value
                 model_future = {
                     t: client.submit(
                             tensorzinb_fit,
