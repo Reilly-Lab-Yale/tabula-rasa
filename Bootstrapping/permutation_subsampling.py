@@ -24,26 +24,42 @@ def permute_cell_types(df_biol):
     return permuted_df
 
 def summarize_clusters(df_perm, group_cols, cell_types):
-    # Adding pseudocount to all 'mean_umis_mpra_bc' values to avoid division by zero
-    df_perm['umis_mpra_bc'] = df_perm['umis_mpra_bc'].replace(0, 1)  # Replace zero counts with 1 (or another small value like 0.1)
-    
+        # Add pseudocount to avoid zero division
+    df_perm['umis_mpra_bc'] = df_perm['umis_mpra_bc'] + 1
+
+    # Calculate expression in each cluster
     summary_cluster = df_perm.groupby(group_cols).apply(
         lambda g: summarize_group(g, suffix=''),
         include_groups=False
     ).reset_index()
 
+    # Now calculate expression in "not that cluster"
     summary_not_cluster = []
     for cell_type in cell_types:
+        df_in_cluster = df_perm[df_perm['cell_type'] == cell_type]
         df_not_cluster = df_perm[df_perm['cell_type'] != cell_type]
-        temp_summary = df_not_cluster.groupby(group_cols).apply(
+
+        group_vals = df_in_cluster[group_cols].drop_duplicates()
+        group_vals = group_vals.copy()
+        group_vals['cell_type'] = cell_type  # preserve the cluster label
+
+        temp_summary = df_not_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
             lambda g: summarize_group(g, suffix='_not_cluster'),
             include_groups=False
         ).reset_index()
-        temp_summary['cell_type'] = cell_type
+
+        # Expand temp_summary to match cluster cell_type
+        temp_summary = temp_summary.merge(group_vals[['cre_id', 'cre_class', 'biol_rep', 'cell_type']], 
+                                          on=['cre_id', 'cre_class', 'biol_rep'], how='right')
+
         summary_not_cluster.append(temp_summary)
 
     summary_not_cluster_df = pd.concat(summary_not_cluster)
+
+    # Merge cluster and not_cluster summaries
     merged_summary = summary_cluster.merge(summary_not_cluster_df, on=group_cols)
+
+    # Compute fold change
     merged_summary['FC_cluster_mBC_UMI'] = (
         merged_summary['mean_umis_mpra_bc'] / merged_summary['mean_umis_mpra_bc_not_cluster']
     )
