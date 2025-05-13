@@ -19,8 +19,8 @@ RUN_SINGLE_PERMUTATION_SCRIPT="$BIN_PATH/run_permutation_single.sh"  # <-- NEW
 BIO_REP_MAP="$DATA_PATH/biol_rep_mapping.txt"
 OUTPUT_DIR_BOOTSTRAP="$DATA_PATH/bootstrapping"
 OUTPUT_DIR_PERMUTATION="$DATA_PATH/permutation"   # <-- NEW
-N_BOOTSTRAP=10 #$((10**4)) ## update to 10**4 after troubleshooting $((10**4))
-N_PERMUTATION=10 #$((10**4))  # you can change separately if you want $((10**4))
+N_BOOTSTRAP=$((10**4)) ## update to 10**4 after troubleshooting $((10**4))
+N_PERMUTATION=$((10**4))  # you can change separately if you want $((10**4))
 DATE_STR=$(date +%Y%m%d)
 
 # === Step 1: Generate lookups.txt ===
