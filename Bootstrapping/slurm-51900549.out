@@ -1,9 +1,0 @@
-
-CondaError: Run 'conda init' before 'conda deactivate'
-
-Looking for bootstrap_subsampling files in /gpfs/gibbs/pi/reilly/tabula_data/shendure/bootstrapping...
-Found 212 bootstrap files to combine.
-Warning: /gpfs/gibbs/pi/reilly/tabula_data/shendure/bootstrapping/bootstrap_subsampling_devCRE_Col1a2_chr6_65_20250512.txt has different number of columns (expected 8)
-Saved combined file to /gpfs/gibbs/pi/reilly/tabula_data/shendure/bootstrapping/combined_bootstrap_allCREs_20250512.tsv
-Files with unexpected number of columns:
-  - /gpfs/gibbs/pi/reilly/tabula_data/shendure/bootstrapping/bootstrap_subsampling_devCRE_Col1a2_chr6_65_20250512.txt
