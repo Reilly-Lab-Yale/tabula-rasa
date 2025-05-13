@@ -12,10 +12,11 @@ def extract_true_uniques_from_str_series(series):
     return np.unique(all_values)
 
 def summarize_group(df, suffix=''):
+    ## going forward from here mean_umis is always referring to gex normalized mpra umis 
     true_uniques = extract_true_uniques_from_str_series(df['transfection_bc'])
     return pd.Series({
         f'n_integrations{suffix}': len(true_uniques),
-        f'mean_umis_mpra_bc{suffix}': df['umis_mpra_bc'].mean()
+        f'mean_umis_mpra_bc{suffix}': df['normalized_umis_mpra_bc'].mean()
     })
 
 def bootstrap_sample(df_biol, idx_CRE_oi, idx_controls, n_integration_oi):
@@ -26,11 +27,11 @@ def bootstrap_sample(df_biol, idx_CRE_oi, idx_controls, n_integration_oi):
 
 def summarize_clusters(df_boot, group_cols, cell_types):
     # Add pseudocount to avoid zero division
-    df_boot['umis_mpra_bc'] = df_boot['umis_mpra_bc'] + 1
+    df_boot['normalized_umis_mpra_bc'] = df_boot['normalized_umis_mpra_bc'] + 1
 
     # Calculate expression in each cluster
     summary_cluster = df_boot.groupby(group_cols).apply(
-        lambda g: summarize_group(g, suffix=''),
+        lambda g: summarize_group(g, suffix=''), ## going forward from here mean_umis is always referring to gex normalized mpra umis 
         include_groups=False
     ).reset_index()
 
@@ -45,7 +46,7 @@ def summarize_clusters(df_boot, group_cols, cell_types):
         group_vals['cell_type'] = cell_type  # preserve the cluster label
 
         temp_summary = df_not_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
-            lambda g: summarize_group(g, suffix='_not_cluster'),
+            lambda g: summarize_group(g, suffix='_not_cluster'),## going forward from here mean_umis is always referring to gex normalized mpra umis 
             include_groups=False
         ).reset_index()
 
@@ -65,22 +66,6 @@ def summarize_clusters(df_boot, group_cols, cell_types):
         merged_summary['mean_umis_mpra_bc'] / merged_summary['mean_umis_mpra_bc_not_cluster']
     )
 
-# ########## I think this is wrong somehow. Seems like all cell types are in the cluster and then the not is separate or something 
-#     summary_not_cluster = []
-#     for cell_type in cell_types:
-#         df_not_cluster = df_boot[df_boot['cell_type'] != cell_type]
-#         temp_summary = df_not_cluster.groupby(group_cols).apply(
-#             lambda g: summarize_group(g, suffix='_not_cluster'),
-#             include_groups=False
-#         ).reset_index()
-#         temp_summary['cell_type'] = cell_type
-#         summary_not_cluster.append(temp_summary)
-
-#     summary_not_cluster_df = pd.concat(summary_not_cluster)
-#     merged_summary = summary_cluster.merge(summary_not_cluster_df, on=group_cols)
-#     merged_summary['FC_cluster_mBC_UMI'] = (
-#         merged_summary['mean_umis_mpra_bc'] / merged_summary['mean_umis_mpra_bc_not_cluster']
-#     )
     return merged_summary
 
 def summarize_final(merged_summary):
@@ -153,7 +138,7 @@ def main(lookup_str, n_bootstrap, date_str, counts_file, output_dir, control_cre
         print(f"  n_integration_oi: {n_integration_oi}")
         for boot in range(n_bootstrap):
             df_boot = bootstrap_sample(df_biol, idx_CRE_oi, idx_controls, n_integration_oi)
-            merged_summary = summarize_clusters(df_boot, group_cols, cell_types)
+            merged_summary = summarize_clusters(df_boot, group_cols, cell_types) ## going forward from here mean_umis is always referring to gex normalized mpra umis 
             final_summary = summarize_final(merged_summary)
 
             final_summary['boot_id'] = boot + 1

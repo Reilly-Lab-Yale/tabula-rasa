@@ -9,7 +9,7 @@ DATA_PATH="/gpfs/gibbs/pi/reilly/tabula_data/shendure"
 BIN_PATH="/gpfs/gibbs/project/reilly/eng26/scmpra/bin/tabula-rasa/Bootstrapping"
 
 # === Specific files/folders ===
-COUNTS_FILE="$DATA_PATH/shendure_counts_grouped.txt"
+COUNTS_FILE="$DATA_PATH/shendure_counts_not_grouped.txt" #choose grouped or not grouped here
 LOOKUPS_FILE="$DATA_PATH/bootstrapping/lookups.txt"
 BOOTSTRAP_SCRIPT="$BIN_PATH/bootstrap_subsampling.py"
 PERMUTATION_SCRIPT="$BIN_PATH/permutation_subsampling.py"   # <-- NEW

@@ -7,6 +7,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=ycga
 
+echo "start bootstrap job"
+
 set -euo pipefail
 
 module load miniconda

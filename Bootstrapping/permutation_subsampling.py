@@ -11,11 +11,12 @@ def extract_true_uniques_from_str_series(series):
             all_values.extend(parts)
     return np.unique(all_values)
 
-def summarize_group(df, suffix=''):
+def summarize_group(df, suffix=''):     ## going forward from here mean_umis is always referring to gex normalized mpra umis 
+
     true_uniques = extract_true_uniques_from_str_series(df['transfection_bc'])
     return pd.Series({
         f'n_integrations{suffix}': len(true_uniques),
-        f'mean_umis_mpra_bc{suffix}': df['umis_mpra_bc'].mean()
+        f'mean_umis_mpra_bc{suffix}': df['normalized_umis_mpra_bc'].mean()
     })
 
 def permute_cell_types(df_biol):
@@ -23,9 +24,10 @@ def permute_cell_types(df_biol):
     permuted_df['cell_type'] = np.random.permutation(permuted_df['cell_type'].values)
     return permuted_df
 
-def summarize_clusters(df_perm, group_cols, cell_types):
+def summarize_clusters(df_perm, group_cols, cell_types):     ## going forward from here mean_umis is always referring to gex normalized mpra umis 
+
         # Add pseudocount to avoid zero division
-    df_perm['umis_mpra_bc'] = df_perm['umis_mpra_bc'] + 1
+    df_perm['normalized_umis_mpra_bc'] = df_perm['normalized_umis_mpra_bc'] + 1
 
     # Calculate expression in each cluster
     summary_cluster = df_perm.groupby(group_cols).apply(
@@ -116,7 +118,8 @@ def main(lookup_str, n_permutations, date_str, counts_file, output_dir, control_
 
         for perm in range(n_permutations):
             df_perm = permute_cell_types(df_biol)
-            merged_summary = summarize_clusters(df_perm, group_cols, cell_types)
+            merged_summary = summarize_clusters(df_perm, group_cols, cell_types)     ## going forward from here mean_umis is always referring to gex normalized mpra umis 
+
             final_summary = summarize_final(merged_summary)
 
             final_summary['perm_id'] = perm + 1
