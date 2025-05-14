@@ -1,3 +1,4 @@
+Keep it functional. Classes here are glorified structs. 
 (Low priority) reminder : change asserts to thrown errors. 
 
 Assumptions:
