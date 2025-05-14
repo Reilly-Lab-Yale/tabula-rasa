@@ -9,11 +9,15 @@ import matplotlib.pyplot as plt
 
 import pandas as pd
 import numpy as np
+
 import logging
+
 import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
+
+from enum import Enum
 
 #internal imports
 from .utils import unimplemented
@@ -279,120 +283,80 @@ def flatten_mpra_barcodes(scmpra_data):
     return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
 
 
+"""
+ortho
+- contains multiple experimental models for the same dataset
+- useful sets are 
+    - criss-cross
+    - criss-cross subsetted to hypothesis test...
+
+fit()
+- takes a client & model params
+- internally defines 
+- returns an experiment_model
+
+experiment_model
+- mostly just an elaborate struct : minimal code, mostly results...
+- no more SM, only tzinb
+- will contain 1x model
+- will NOT keep data
+- lazy eval
+- parameter extraction pulls triples from model
+- self-description
+	- model decisions : each is a / string. Strings compared against supported
+        - nb form
+        - zi form
+        - split by
+    - str dataset name (incl. source)
+    - metadata
+		- additional unstructured metadata in a dictionary
+
+"""
+
+#suggested formulas. 
+#SUGGESTED_NB=['reads_mpra_bc ~ C(cell_type)*C(cre_id)',
+#    'reads_mpra_bc ~ C(cell_type)',
+#    'reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + umis_transfection_bc:C(cre_id) + umis_transfection_bc:C(cell_type):C(cre_id) -1']
+#SUGGESTED_ZI=['C(replicate)']
+#SUGGESTED_BREAKBY=['']
+
+
+
+def fit(client,
+    nb_formula:str,
+    zi_formula:str,
+    broken_on:str,
+    round_down_threshold:int=4,
+    dry:bool=False):
+    """
+    dry = dry run: don't actually fit anything, just return an experiment_model 
+    object initalized
+    """
+    ret=experiment_model(nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
+    if dry:
+        return ret
+    
+    
+
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 class experiment_model:
     """
-        type 
     """
-    
-    #low-tech, maybe replace w/ enum
-    valid_formula_types=['auto','tfection_umi','custom_formula','simple_cell_and_cre']
 
-    def __init__(self,scmpra_data,formula_type='auto',round_down_threshold=4,formula=None,broken_on=None):
-        #formula and broken_on allow creation of custom formulas.
-        #broken_on allows breaking into submodels on the basis of some column values
+    def __init__(self,nb_formula:str,
+            zi_formula:str,
+            broken_on:str,
+            round_down_threshold:int=4):
 
-        #saving relevant info        
-        self.scmpra_data=scmpra_data
         self.round_down_threshold=round_down_threshold
         self.model=None
         #(creating from scratch so no model until after fit is called)
         
 
-        if formula_type not in self.valid_formula_types:
-            assert False; 'Invalid formula type.'
-            
-        if formula_type=='auto':
-            #will try to guess formula type based on 
-            #table_type(scmpra_data)
-            assert False; 'unimplemented'
-
-            #formula_type='whatever we just detected'
-
-        if formula_type=='dna':
-            #using plasmid DNA count as DNA count
-            assert False; 'unimplemented'
-        elif formula_type=='simple_cell_and_cre':
-            self.formula='reads_mpra_bc ~ C(cell_type)*C(cre_id)'
-        elif formula_type=='tfection_umi':
-            #using umis_transfection_bc as our proxy for DNA count...
-            self.formula="reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + \
-                umis_transfection_bc:C(cre_id) + umis_transfection_bc:C(cell_type):C(cre_id) -1"
-        elif formula_type=='num_mpra_bc':
-            #using the number of unique MPRA barcodes as our proxy for DNA count
-            assert False; 'unimplemented'
-
-        self.formula_type=formula_type
-
-    @unimplemented
-    @classmethod
-    def from_pickle(filepath,get_data):
-        #create instance by loading previously created model from disc
-        pass
-
-    @unimplemented
-    @classmethod
-    def to_pickle(self):
-        pass
-
-    def fit(self,library="tensor"):
-        # for all (cre, cell-type) combos with less than 4 umis:
-        #   add index to list `too_low`
-
-        #select out the cre-celltype combos we have to ditch because we have no UMIs making fitting impossible. 
-        # flattened=scmpra_data.groupby()[too_low,["cre_id","cell_type"]]
-
-        #drop those flattened barcodes from the original
-
-        #scmpra_data=scmpra_data.drop(too_low).copy()
-
-        #if nrow(scmpra_data) ==0:
-        #   raise error("")
-        
-        #!!do the fitting...!!
-
-        print("creating matrices...")
-        #old patsy code
-        #y, X = patsy.dmatrices(self.formula,
-        #                        self.scmpra_data, return_type='dataframe')
-        #Z = patsy.dmatrix("C(rep_id)", self.scmpra_data, return_type='dataframe')
-
-        y, X=Formula(self.formula).get_model_matrix(self.scmpra_data,output='pandas')
-        Z=Formula('C(rep_id)').get_model_matrix(self.scmpra_data,output='pandas')
-
-        if library =="statsmodels":
-            print("fitting with statsmodels")
-
-            zinb_model = smdc.ZeroInflatedNegativeBinomialP(y, X, exog_infl=Z)
-
-            n_count_params = zinb_model.exog.shape[1]      # Count model parameters
-            n_infl_params = zinb_model.exog_infl.shape[1]    # Inflation model parameters
-            n_total = n_count_params + n_infl_params + 1 # adding 1 for alpha
-            start_params = np.full(n_total, 0.1)
-
-            self.model = zinb_model.fit(start_params=start_params,maxiter=1000)
-        elif library=="tensor":
-            print("fitting with tensorzinb")
-            zinbo=TensorZINB(y['reads_mpra_bc'].to_numpy().reshape((-1,1)),X.to_numpy(),exog_infl=Z.to_numpy())#,same_dispersion=True
-            self.model=zinbo.fit(init_method="nb")
-        else:
-            assert False; "Invalid library value."
-
-
-        
-        
-        #if !converged:
-        #   print("error, model failed to converge.")
-
-        #if r^2 <= 0.6
-        #warnings.warn("be careful, model fit is pretty bad : pseudo-r^2 is only f{r^2}")
-
-        pass
-
 @unimplemented
-def volcano(results):
+def volcano(results:experiment_model):
     """
     Volcano plot of p value versus log fold change
     """
