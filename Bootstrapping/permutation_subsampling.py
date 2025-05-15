@@ -3,19 +3,10 @@ import pandas as pd
 import numpy as np
 import os
 
-def extract_true_uniques_from_str_series(series):
-    all_values = []
-    for val in series.dropna():
-        if isinstance(val, str):
-            parts = [v.strip() for v in val.split(',')]
-            all_values.extend(parts)
-    return np.unique(all_values)
-
-def summarize_group(df, suffix=''):     ## going forward from here mean_umis is always referring to gex normalized mpra umis 
-
-    true_uniques = extract_true_uniques_from_str_series(df['transfection_bc'])
+def summarize_group(df, suffix=''):
+    ## going forward from here mean_umis is always referring to gex normalized mpra umis 
     return pd.Series({
-        f'n_integrations{suffix}': len(true_uniques),
+        f'n_integrations{suffix}': df[['cell_bc', 'transfection_bc']].drop_duplicates().shape[0],
         f'mean_umis_mpra_bc{suffix}': df['normalized_umis_mpra_bc'].mean()
     })
 
@@ -30,7 +21,7 @@ def summarize_clusters(df_perm, group_cols, cell_types):     ## going forward fr
     df_perm['normalized_umis_mpra_bc'] = df_perm['normalized_umis_mpra_bc'] + 1
 
     # Calculate expression in each cluster
-    summary_cluster = df_perm.groupby(group_cols).apply(
+    summary_cluster = df_perm[df_perm['cell_type'] == cell_type].groupby(group_cols).apply(
         lambda g: summarize_group(g, suffix=''),
         include_groups=False
     ).reset_index()
@@ -108,13 +99,17 @@ def main(lookup_str, n_permutations, date_str, counts_file, output_dir, control_
     print(f"Subset size: {df_subset.shape[0]}")
 
     results = []
-
     for biol_r in biol_rep_list:
         print(f'Processing biological replicate: {biol_r}')
         df_biol = df_subset[df_subset['biol_rep'] == biol_r]
         if df_biol.empty:
             print(f"No data for biological replicate {biol_r}, skipping.")
             continue
+        un_sum = summarize_clusters(df_biol, group_cols, cell_types)
+        unperm_summary = summarize_final(un_sum)
+        unperm_summary['perm_id'] = 'OBS'
+        unperm_summary['permutation_for_CRE'] = CRE_oi
+        results.append(unperm_summary)
 
         for perm in range(n_permutations):
             df_perm = permute_cell_types(df_biol)
