@@ -24,6 +24,8 @@ from .utils import unimplemented
 from .utils import bcs_to_lut
 logger = logging.getLogger("scMPRAforge")
 
+MIN_PTS=3
+
 #functions
 @unimplemented
 def always_unfinished():
@@ -311,6 +313,10 @@ experiment_model
     - metadata
 		- additional unstructured metadata in a dictionary
 
+extract_triples()
+
+triples
+
 """
 
 #suggested formulas. 
@@ -322,37 +328,153 @@ experiment_model
 
 
 
+def create_matricies(nb_formula,zi_formula,data):
+    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
+    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
+    return(X, y, Z)
+
+def abort_on_failure(future,client):
+    """
+    Call this function with a completed future that is strictly necessary for the task at hand.
+    If it didn't work, we'll crash. 
+    """
+    status=None
+    if type(future)==type([3]):
+        #if it's a list
+        if any(a_future.status=="error" for a_future in future):
+            status="error"
+    else:
+        #it's not a list, presumably just one future
+        status=future.status
+    if future.status=="error":
+        sprint("[!] Computation failed. Aborting.")
+        sprint("[!] Check slave node logs for details.")
+        client.shutdown()
+        assert 1==2
+
+
+def toosmall(y):
+    if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
+        return True
+    else:
+        return False
+
+def tensorzinb_fit(p):
+    X,y,Z=p
+    if toosmall(y):
+        return "too_small"
+
+    from tensorzinb.tensorzinb import TensorZINB
+
+    zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
+    zinb_result=None
+    try:
+        zinb_result=zinbo.fit(init_method="nb")
+    except InvalidIndexError:
+        return "index_error"
+
+
+    return zinb_result
+
+
 def fit(client,
+    data,
     nb_formula:str,
     zi_formula:str,
     broken_on:str,
     round_down_threshold:int=4,
     dry:bool=False):
     """
-    dry = dry run: don't actually fit anything, just return an experiment_model 
-    object initalized
+    dry : dry run: don't actually fit anything, just return an experiment_model 
+    broken_on : "unified" for one model, or put the name of a column 
     """
-    ret=experiment_model(nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
+    ret=experiment_model(model={},uniq_predictor={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
     if dry:
         return ret
     
-    
+    ###create design matricies###
+    types=None
+    mats_futures=None
+    if broken_on == "unified":
+        #unified model
+        types=["unified"]
+        mats_futures = {'unified':client.submit(create_matricies,
+            data=data,
+            zi_formula=zi_formula,
+            nb_formula=nb_formula
+        )}
+    else:
+        #not a unified model : let's get all the proper types
+        #that is : the name of each value for the column we split on
+        types_future = client.submit(lambda df: df[broken_on].unique(), data)
+        #wait & grab result (small enough for master node)
+        types = types_future.result()
+        abort_on_failure(types_future,client)
+
+        #now that we have the types, submit jobs to create design matrices from each data slice
+        #we do the slicing in a little sumbitted lambda
+        mats_futures = {
+            t: client.submit(
+                create_matricies,
+                data=client.submit(lambda df, t=t: df[df[broken_on] == t], data, t),
+                zi_formula=zi_formula,
+                nb_formula=nb_formula
+            )
+            for t in types
+        }
+
+
+    ### create uniq_predictor ### 
+    uniq_predictor_futures
+
+    ###create statsmodel futures###
+    tzinb_futures = {
+        t: client.submit(
+                tensorzinb_fit,
+                mats_futures[t]
+            )
+        for t in types
+    }
+
+    ###put data in proper class and return###
+    model_future=client.submit(
+        experiment_model,
+        model=tzinb_futures,
+        uniq_predictor=uniq_predictor,
+        nb_formula=nb_formula,
+        zi_formula=zi_formula,
+        broken_on=broken_on,
+        round_down_threshold=round_down_threshold
+    )
+
+    return model_future
+
+
+
 
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 class experiment_model:
     """
+    uniq_predictor stores...
     """
 
-    def __init__(self,nb_formula:str,
+    def __init__(self,
+            model,
+            uniq_predictor,
+            nb_formula:str,
             zi_formula:str,
             broken_on:str,
             round_down_threshold:int=4):
 
+        self.nb_formula=nb_formula
+        self.zi_formula=zi_formula
+        self.broken_on=broken_on
         self.round_down_threshold=round_down_threshold
-        self.model=None
-        #(creating from scratch so no model until after fit is called)
+        self.model=model
+        self.uniq_predictor=uniq_predictor
+        
         
 
 @unimplemented
