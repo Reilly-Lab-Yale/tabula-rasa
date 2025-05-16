@@ -91,7 +91,6 @@ def abort_on_failure(future,client):
 
 
 
-
 #pseudo-logging functions for quick debugging
 def rand_tag(length=6):
     """
@@ -171,7 +170,6 @@ def tensorzinb_fit(p,method,name):
         return "index_error"
 
     sprint(f"[W] [+] Done fitting {name}.ls")
-    
 
     return zinb_result
 
@@ -425,10 +423,7 @@ def main():
         #end broken & unif modeling
 
     #end logging performance report (end of with block).
-
-
     sprint(f'[+] Done with all tasks. Shutting down')
-
     client.shutdown()
 
 if __name__=="__main__":
