@@ -1,8 +1,9 @@
 #!/bin/bash
-set -euo pipefail
+# set -euo pipefail
 
 module load miniconda
 conda activate scmpra
+
 
 # === Global Paths ===
 DATA_PATH="/gpfs/gibbs/pi/reilly/tabula_data/shendure"
@@ -94,7 +95,7 @@ EMP_PVAL_OUTPUT_specificity="$DATA_PATH/empirical_pvalues/empirical_pvals_specif
 
 mkdir -p "$DATA_PATH/empirical_pvalues"  # make output dir if needed
 #
-empirical_pval_jobid=$(sbatch --parsable --dependency=afterok:$combine_jobid_bootstrap,$combine_jobid_permutation --time=08:00:00 --partition=ycga --job-name=empirical_pvals --wrap="\
+empirical_pval_jobid=$(sbatch --parsable --mem=16G --dependency=afterok:$combine_jobid_bootstrap,$combine_jobid_permutation --time=08:00:00 --partition=ycga --job-name=empirical_pvals --wrap="\
 module load miniconda; \
 conda activate scmpra; \
 python $EMP_PVAL_SCRIPT --bootstrap_file $OUTPUT_DIR_BOOTSTRAP/combined_bootstrap_allCREs_${DATE_STR}.tsv \

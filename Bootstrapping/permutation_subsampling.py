@@ -17,17 +17,14 @@ def permute_cell_types(df_biol):
 
 def summarize_clusters(df_perm, group_cols, cell_types):     ## going forward from here mean_umis is always referring to gex normalized mpra umis 
 
-        # Add pseudocount to avoid zero division
-    df_perm['normalized_umis_mpra_bc'] = df_perm['normalized_umis_mpra_bc'] + 1
 
-    # Calculate expression in each cluster
-    summary_cluster = df_perm[df_perm['cell_type'] == cell_type].groupby(group_cols).apply(
-        lambda g: summarize_group(g, suffix=''),
-        include_groups=False
-    ).reset_index()
+        # Add pseudocount to avoid zero division
+    # df_biol['normalized_umis_mpra_bc'] = df_biol['normalized_umis_mpra_bc'] + 1
+
 
     # Now calculate expression in "not that cluster"
-    summary_not_cluster = []
+    summary = []
+
     for cell_type in cell_types:
         df_in_cluster = df_perm[df_perm['cell_type'] == cell_type]
         df_not_cluster = df_perm[df_perm['cell_type'] != cell_type]
@@ -36,27 +33,29 @@ def summarize_clusters(df_perm, group_cols, cell_types):     ## going forward fr
         group_vals = group_vals.copy()
         group_vals['cell_type'] = cell_type  # preserve the cluster label
 
-        temp_summary = df_not_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
+        temp_summary_not = df_not_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
             lambda g: summarize_group(g, suffix='_not_cluster'),
             include_groups=False
         ).reset_index()
+        temp_summary = df_in_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
+            lambda g: summarize_group(g, suffix=''),
+            include_groups=False
+        ).reset_index()
+        temp_summary['cell_type'] = cell_type
 
         # Expand temp_summary to match cluster cell_type
-        temp_summary = temp_summary.merge(group_vals[['cre_id', 'cre_class', 'biol_rep', 'cell_type']], 
-                                          on=['cre_id', 'cre_class', 'biol_rep'], how='right')
+        temp_summary = temp_summary_not.merge(temp_summary, 
+                                            on=['cre_id', 'cre_class', 'biol_rep'], how='right')
 
-        summary_not_cluster.append(temp_summary)
+        summary.append(temp_summary)
 
-    summary_not_cluster_df = pd.concat(summary_not_cluster)
-
-    # Merge cluster and not_cluster summaries
-    merged_summary = summary_cluster.merge(summary_not_cluster_df, on=group_cols)
+    summary_df = pd.concat(summary).reset_index(drop=True)
 
     # Compute fold change
-    merged_summary['FC_cluster_mBC_UMI'] = (
-        merged_summary['mean_umis_mpra_bc'] / merged_summary['mean_umis_mpra_bc_not_cluster']
-    )
-    return merged_summary
+    summary_df['FC_cluster_mBC_UMI'] = (
+        summary_df['mean_umis_mpra_bc'] / summary_df['mean_umis_mpra_bc_not_cluster']
+)
+    return summary_df
 
 def summarize_final(merged_summary):
     final_summary = merged_summary.groupby(['biol_rep', 'cre_id', 'cre_class']).apply(
@@ -93,7 +92,7 @@ def main(lookup_str, n_permutations, date_str, counts_file, output_dir, control_
 
     # Subset for CRE of interest + control CREs
     cre_set = [CRE_oi] + control_cres
-    df_subset = df[df['cre_id'].isin(cre_set)]
+    df_subset = df[df['cre_id']==CRE_oi]
 
     print(f"Running for CRE: {CRE_oi}")
     print(f"Subset size: {df_subset.shape[0]}")
@@ -105,11 +104,16 @@ def main(lookup_str, n_permutations, date_str, counts_file, output_dir, control_
         if df_biol.empty:
             print(f"No data for biological replicate {biol_r}, skipping.")
             continue
-        un_sum = summarize_clusters(df_biol, group_cols, cell_types)
-        unperm_summary = summarize_final(un_sum)
-        unperm_summary['perm_id'] = 'OBS'
-        unperm_summary['permutation_for_CRE'] = CRE_oi
-        results.append(unperm_summary)
+
+        idx_controls = [df_biol[df_biol['cre_id'] == ctrl].index for ctrl in control_cres]
+        idx_CRE_oi = df_biol[df_biol['cre_id'] == CRE_oi].index
+        if idx_CRE_oi.empty:
+            print(f"No instances of {CRE_oi} in {biol_r}, skipping.")
+            continue
+        
+        print(f"Biol rep: {biol_r}")
+        print(f"  idx_CRE_oi size: {len(idx_CRE_oi)}")
+        print(f"  idx_controls sizes: {[len(x) for x in idx_controls]}")    
 
         for perm in range(n_permutations):
             df_perm = permute_cell_types(df_biol)
@@ -119,6 +123,7 @@ def main(lookup_str, n_permutations, date_str, counts_file, output_dir, control_
 
             final_summary['perm_id'] = perm + 1
             final_summary['permutation_for_CRE'] = CRE_oi
+            final_summary['permuted'] = True
             results.append(final_summary)
 
     final_df = pd.concat(results)
