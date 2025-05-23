@@ -51,7 +51,7 @@ def main():
                    
             # expression values
             exp_cre = df_boot_oi[df_boot_oi['cre_id'] == cre]['max_cluster_mBC_UMI']
-            exp_min_noP = df_boot_oi[df_boot_oi['cre_id'].isin(["minP", "noP"])]['max_cluster_mBC_UMI']
+            exp_min_noP = df_boot_oi[df_boot_oi['bootstrap_for_CRE'] == cre]['max_cluster_mBC_UMI']
 
             if exp_cre.empty or exp_min_noP.empty:
                 continue
@@ -99,22 +99,22 @@ def main():
 
     for cre in CRE_list:
         for rep in biol_reps:
-            df_obs_oi = df_perm[(df_perm['permutation_for_CRE'] == cre) & (df_perm['biol_rep'] == rep) & (df_boot['cre_id'] == cre) & (df_boot['perm_id'] == 'OBS')]
-            df_perm_oi = df_perm[(df_perm['permutation_for_CRE'] == cre) & (df_perm['biol_rep'] == rep) & (df_boot['cre_id'] == cre) & (df_boot['perm_id'] != 'OBS')]
+            df_boot_oi = df_boot[(df_boot['bootstrap_for_CRE'] == cre) & (df_boot['biol_rep'] == rep) & (df_boot['cre_id'] == cre)]
+            df_perm_oi = df_perm[(df_perm['permutation_for_CRE'] == cre) & (df_perm['biol_rep'] == rep) & (df_perm['cre_id'] == cre) & (df_perm['perm_id'] != 'OBS')]
 
             if df_perm_oi.empty:
                 print(f"Warning: Missing data for cre {cre}, rep {rep}")
                 continue
 
             # FC (fold change) values
-            fc_obs = df_obs_oi['max_cluster_FC_mBC_UMI'].fillna(1)
+            fc_boot = df_boot_oi['max_cluster_FC_mBC_UMI'].fillna(1)
             fc_perm = df_perm_oi['max_cluster_FC_mBC_UMI'].fillna(1)
 
             # empirical p-value
-            empirical_pvals = calculate_empirical_pvals(fc_obs.values, fc_perm.values)
+            empirical_pvals = calculate_empirical_pvals(fc_boot.values, fc_perm.values)
 
             # Most frequent cluster
-            max_clusters = df_obs_oi['max_expression_cluster_id']
+            max_clusters = df_boot_oi['max_expression_cluster_id']
             if not max_clusters.empty:
                 most_common_cluster = Counter(max_clusters).most_common(1)[0][0]
                 freq_most_common = np.mean(max_clusters == most_common_cluster)
@@ -125,9 +125,9 @@ def main():
             specificity_results.append({
                 "cre_id": cre,
                 "biol_rep": rep,
-                "q25_bootstrap_FC_norm": np.quantile(fc_obs, 0.25),
-                "q50_bootstrap_FC_norm": np.quantile(fc_obs, 0.5),
-                "q75_bootstrap_FC_norm": np.quantile(fc_obs, 0.75),
+                "q25_bootstrap_FC_norm": np.quantile(fc_boot, 0.25),
+                "q50_bootstrap_FC_norm": np.quantile(fc_boot, 0.5),
+                "q75_bootstrap_FC_norm": np.quantile(fc_boot, 0.75),
                 "empirical_permute_gex_cluster_p_val": np.mean(empirical_pvals),
                 "most_frequent_max_exp_cluster": most_common_cluster,
                 "frequency_most_frequent_max_exp_cluster": freq_most_common

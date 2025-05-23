@@ -16,38 +16,45 @@ def bootstrap_sample(df_biol, idx_CRE_oi, idx_controls, n_integration_oi):
     )
     return df_biol.loc[sample_idx]
 
-def summarize_clusters(df_boot, group_cols, cre_set):
+def summarize_clusters(df_boot, group_cols, cell_types):
     # Add pseudocount to avoid zero division
-    df_boot['normalized_umis_mpra_bc'] = df_boot['normalized_umis_mpra_bc'] + 1
-    CRE_oi = cre_set[0]
-    # Calculate expression in each cluster
-    summary_cluster = df_boot[df_boot['cre_id'] == CRE_oi].groupby(group_cols).apply(
-        lambda g: summarize_group(g, suffix=''), ## going forward from here mean_umis is always referring to gex normalized mpra umis 
-        include_groups=False
-    ).reset_index()
+    # df_boot['normalized_umis_mpra_bc'] = df_boot['normalized_umis_mpra_bc'] + 1
 
     # Now calculate expression in "not that cluster"
-    summary_not_cluster = []
+    summary = []
 
-    df_in_cluster = df_boot[df_boot['cre_id'] == CRE_oi]
-    df_not_cluster = df_boot[df_boot['cre_id'] != CRE_oi]
+    for cell_type in cell_types:
+        df_in_cluster = df_boot[df_boot['cell_type'] == cell_type]
+        df_not_cluster = df_boot[df_boot['cell_type'] != cell_type]
 
+        group_vals = df_in_cluster[group_cols].drop_duplicates()
+        group_vals = group_vals.copy()
+        group_vals['cell_type'] = cell_type  # preserve the cluster label
 
-    summary_not_cluster = df_not_cluster.groupby(['cre_class', 'biol_rep', 'cell_type']).apply(
-        lambda g: summarize_group(g, suffix='_not_cluster'),## going forward from here mean_umis is always referring to gex normalized mpra umis 
-        include_groups=False
-    ).reset_index()
+        temp_summary_not = df_not_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
+            lambda g: summarize_group(g, suffix='_not_cluster'),
+            include_groups=False
+        ).reset_index()
+        temp_summary = df_in_cluster.groupby(['cre_id', 'cre_class', 'biol_rep']).apply(
+            lambda g: summarize_group(g, suffix=''),
+            include_groups=False
+        ).reset_index()
+        temp_summary['cell_type'] = cell_type
 
+        # Expand temp_summary to match cluster cell_type
+        temp_summary = temp_summary_not.merge(temp_summary, 
+                                            on=['cre_id', 'cre_class', 'biol_rep'], how='right')
 
-    # Merge cluster and not_cluster summaries
-    merged_summary = summary_cluster.merge(summary_not_cluster, on=['biol_rep', 'cell_type'])
+        summary.append(temp_summary)
+
+    summary_df = pd.concat(summary).reset_index(drop=True)
 
     # Compute fold change
-    merged_summary['FC_cluster_mBC_UMI'] = (
-        merged_summary['mean_umis_mpra_bc'] / merged_summary['mean_umis_mpra_bc_not_cluster']
-    )
+    summary_df['FC_cluster_mBC_UMI'] = (
+        summary_df['mean_umis_mpra_bc'] / summary_df['mean_umis_mpra_bc_not_cluster']
+)
 
-    return merged_summary
+    return summary_df
 
 def summarize_final(merged_summary):
     final_summary = merged_summary.groupby(['biol_rep', 'cre_id']).apply(
@@ -119,11 +126,12 @@ def main(lookup_str, n_bootstrap, date_str, counts_file, output_dir, control_cre
         print(f"  n_integration_oi: {n_integration_oi}")
         for boot in range(n_bootstrap):
             df_boot = bootstrap_sample(df_biol, idx_CRE_oi, idx_controls, n_integration_oi)
-            merged_summary = summarize_clusters(df_boot, group_cols, cre_set) ## going forward from here mean_umis is always referring to gex normalized mpra umis 
+            merged_summary = summarize_clusters(df_boot, group_cols, cell_types) ## going forward from here mean_umis is always referring to gex normalized mpra umis 
             final_summary = summarize_final(merged_summary)
 
             final_summary['boot_id'] = boot + 1
             final_summary['bootstrap_for_CRE'] = CRE_oi
+            final_summary['permuted'] = False
             results.append(final_summary)
 
     final_df = pd.concat(results)

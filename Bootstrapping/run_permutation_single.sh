@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=ycga
 
-set -euo pipefail
+# set -euo pipefail
 
 LOOKUP_FILE=$1
 PERMUTATION_SCRIPT=$2

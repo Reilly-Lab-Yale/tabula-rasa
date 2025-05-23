@@ -9,11 +9,12 @@
 
 echo "start bootstrap job"
 
-set -euo pipefail
-
+# set -euo pipefail
+echo "load modules"
 module load miniconda
 conda activate scmpra
 
+echo "set variables"
 LOOKUP_FILE="$1"
 BOOTSTRAP_SCRIPT="$2"
 N_BOOTSTRAP="$3"
@@ -24,6 +25,7 @@ BIO_REP_MAP="$7"
 
 LOOKUP=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$LOOKUP_FILE")
 
+echo "check if lookout file is empty"
 if [[ -z "$LOOKUP" ]]; then
   echo "Error: LOOKUP is empty! Check your LOOKUP_FILE and SLURM_ARRAY_TASK_ID."
   exit 1
@@ -31,6 +33,7 @@ fi
 
 echo "Processing CRE: $LOOKUP"
 
+echo "launch python"
 python "$BOOTSTRAP_SCRIPT" \
     --lookup_str "$LOOKUP" \
     --n_bootstrap "$N_BOOTSTRAP" \
