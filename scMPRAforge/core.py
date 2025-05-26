@@ -481,8 +481,94 @@ class experiment_model:
         self.round_down_threshold=round_down_threshold
         self.model=model
         self.uniq_predictor=uniq_predictor
+
+
+
+class ortho:
+    """
+    Stores multiple models of the same data.
+    Not to be used with multiple datasets. 
+    stores hypothesis sets & coresp. models
+    """
+    def __init__(self):
+        self.by_cre=None
+        self.by_cre_parameters=None
         
+        self.by_cell_type=None
+        self.by_cell_type_parameters=None
+
+    
+    def criss_cross(self,client,dat):
+        """
+        Note: a little computationally intensive...
+        """
+        self.by_cre=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",dry=False)
+        self.by_cell_type=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",dry=False)
+
+    def extract_params(self,client):
+        """Extracts parameters for all models in the object"""
+        if not self.by_cre is None:
+            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre)
         
+        if not self.by_cell_type is None:
+            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
+
+
+def model_to_parameters(model):
+    """
+    A function to extract model parameter triples from simple model.
+    Currently pretty bespoke: be careful with more complicated models... 
+    """
+    #currently assuming a single theta per model (equal variances within a model).
+    #also does not intelligently sum for interaction effects : so just use for non-interaction for now...
+    #Need also to test with incomplete matricies (non-cartesian product) : applying labels will probably break
+
+    #recall the order within each tuple: (X,y,Z), but here we skip y
+    #so it is just X, Z
+    
+    zi={}
+    nb={}
+    theta={}
+
+    for key in model.model:
+        ## theta ##
+        theta[key]=model.model[key]['weights']['theta'].squeeze()
+        
+        ## ZI ##
+        #extract min design matrix & sort
+        #We need to sort to match the order in the tensorzinb model...
+        zi_df=model.uniq_predictor[key][1]
+        zi_df=zi_df.sort_values(zi_df.columns.tolist(),ascending=False)
+
+        #multiply out & undo link
+        result=(zi_df.values @ model.model[key]["weights"]["x_pi"]).squeeze()
+        result=1/(1+np.exp(-result))
+        result=pd.Series(result,index=model.uniq_predictor[key][1].columns)
+        zi[key]=result
+
+        ## NB ##
+        #extract min design matrix & sort
+        nb_df=model.uniq_predictor[key][0]
+        nb_df=nb_df.sort_values(nb_df.columns.tolist(),ascending=False)
+
+        #multiply out & undo link
+        result=(nb_df.values @ model.model[key]['weights']['x_mu']).squeeze()
+        result=np.exp(result)
+        result=pd.Series(result,index=model.uniq_predictor[key][0].columns)
+        nb[key]=result
+
+    #patch up the dataframes and return them.
+
+    zi=pd.DataFrame(zi)
+    zi.columns.name="zero inflation fraction"
+
+    nb=pd.DataFrame(nb)
+    nb.columns.name="mean parameter"
+
+    theta=pd.Series(theta)
+    #theta.columns.name="theta dispersion"
+    
+    return {"nb":nb,"zi":zi,"theta":theta}
 
 @unimplemented
 def volcano(results:experiment_model):
