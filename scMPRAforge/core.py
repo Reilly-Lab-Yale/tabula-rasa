@@ -513,6 +513,17 @@ class ortho:
         if not self.by_cell_type is None:
             self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
 
+class parameters:
+    def __init__(self, nb, zi, theta):
+        self.nb=nb
+        self.zi=zi
+        self.theta=theta
+
+        assert nb.keys() == zi.keys()
+        assert zi.keys() == theta.keys()
+
+        self.keys=nb.keys()
+
 
 def model_to_parameters(model):
     """
@@ -543,8 +554,10 @@ def model_to_parameters(model):
         #multiply out & undo link
         result=(zi_df.values @ model.model[key]["weights"]["x_pi"]).squeeze()
         result=1/(1+np.exp(-result))
-        result=pd.Series(result,index=model.uniq_predictor[key][1].columns)
-        zi[key]=result
+        #add nb parameter reconstructions to multi-hot
+        zi_df["zi"]=result
+        #add to dictionary...
+        zi[key]=zi_df
 
         ## NB ##
         #extract min design matrix & sort
@@ -554,21 +567,15 @@ def model_to_parameters(model):
         #multiply out & undo link
         result=(nb_df.values @ model.model[key]['weights']['x_mu']).squeeze()
         result=np.exp(result)
-        result=pd.Series(result,index=model.uniq_predictor[key][0].columns)
-        nb[key]=result
+        #add zi parameter reconstruction to multi-hot
+        nb_df["nb"]=result
+        #add to dictionary
+        nb[key]=nb_df
 
-    #patch up the dataframes and return them.
 
-    zi=pd.DataFrame(zi)
-    zi.columns.name="zero inflation fraction"
-
-    nb=pd.DataFrame(nb)
-    nb.columns.name="mean parameter"
-
-    theta=pd.Series(theta)
-    #theta.columns.name="theta dispersion"
     
-    return {"nb":nb,"zi":zi,"theta":theta}
+    return parameters(nb=nb, zi=zi, theta=theta)
+
 
 @unimplemented
 def volcano(results:experiment_model):
