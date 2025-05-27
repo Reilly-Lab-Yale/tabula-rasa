@@ -383,7 +383,8 @@ def fit(client,
     zi_formula:str,
     broken_on:str,
     round_down_threshold:int=4,
-    dry:bool=False):
+    dry:bool=False,
+    return_design_matricies=False):
     """
     dry : dry run: don't actually fit anything, just return an experiment_model 
     broken_on : "unified" for one model, or put the name of a column 
@@ -453,8 +454,10 @@ def fit(client,
         broken_on=broken_on,
         round_down_threshold=round_down_threshold
     )
-
-    return model_future
+    if return_design_matricies:
+        return(model_future,mats_futures)
+    else:
+        return model_future
 
 
 
@@ -498,12 +501,17 @@ class ortho:
         self.by_cell_type_parameters=None
 
     
-    def criss_cross(self,client,dat):
+    def criss_cross(self,client,dat,retain_design_matricies=False):
         """
         Note: a little computationally intensive...
         """
-        self.by_cre=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",dry=False)
-        self.by_cell_type=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",dry=False)
+        if retain_design_matricies:
+            #mostly for debugging
+            self.by_cre, self.by_cre_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
+            self.by_cell_type, self.by_cell_type_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
+        else:
+            self.by_cre=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
+            self.by_cell_type=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
@@ -530,6 +538,8 @@ def model_to_parameters(model):
     A function to extract model parameter triples from simple model.
     Currently pretty bespoke: be careful with more complicated models... 
     """
+    #should rework to use multi-indexes instead of sorting & assuming they are the same
+    
     #currently assuming a single theta per model (equal variances within a model).
     #also does not intelligently sum for interaction effects : so just use for non-interaction for now...
     #Need also to test with incomplete matricies (non-cartesian product) : applying labels will probably break
