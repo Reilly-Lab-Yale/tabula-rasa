@@ -564,8 +564,12 @@ def model_to_parameters(model):
         #multiply out & undo link
         result=(zi_df.values @ model.model[key]["weights"]["x_pi"]).squeeze()
         result=1/(1+np.exp(-result))
+        #save multi-hot column names
+        col=zi_df.columns.to_list()
         #add nb parameter reconstructions to multi-hot
         zi_df["zi"]=result
+        #set all columns other than zi to be a multi-index indexing the zi estimates
+        zi_df.set_index(col,inplace=True)
         #add to dictionary...
         zi[key]=zi_df
 
@@ -577,8 +581,12 @@ def model_to_parameters(model):
         #multiply out & undo link
         result=(nb_df.values @ model.model[key]['weights']['x_mu']).squeeze()
         result=np.exp(result)
+        #save multi-hot column names
+        col=nb_df.columns.to_list()
         #add zi parameter reconstruction to multi-hot
         nb_df["nb"]=result
+        #set all columns other than nb to be a multi-index indexing the nb estimates
+        nb_df.set_index(col,inplace=True)
         #add to dictionary
         nb[key]=nb_df
 
