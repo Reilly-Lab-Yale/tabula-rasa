@@ -4,6 +4,8 @@
 import functools
 import logging
 import umi_tools
+import re
+
 
 logger = logging.getLogger("scMPRAforge")
 
