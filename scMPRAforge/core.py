@@ -716,7 +716,9 @@ def simulate_from_description(description):
 
     #simulate zero inflation
     probabilities = working_exploded['zi'].to_dask_array(lengths=True)
-    bernoulli_trials = da.random.binomial(n=1, p=probabilities, size=probabilities.shape[0], chunks=probabilities.chunks)
+    bernoulli_trials = da.random.binomial(n=1, p=1-probabilities, size=probabilities.shape[0], chunks=probabilities.chunks)
+    #1- probabilities since this function represents 'success' with 1, when we are simulating from P(dropout)
+    #where "dropped out" = 0
 
     #combine the two to get the final samples
     zinb_samples=nb_samples * bernoulli_trials
@@ -729,8 +731,7 @@ def simulate_from_description(description):
     working_exploded['zinb_sample'] = zinb_sample_df['zinb_sample']
 
     #remove the index column added by reset_index
-    working_exploded = working_exploded.drop(columns=['index'])
-    
+    working_exploded = working_exploded.drop('index',axis=1)
     return working_exploded
 
 @unimplemented
