@@ -28,6 +28,7 @@ logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
 
+
 #functions
 @unimplemented
 def always_unfinished():
@@ -596,6 +597,23 @@ def model_to_parameters(model):
     
     return parameters(nb=nb, zi=zi, theta=theta)
 
+
+def describe_parameters(client,parameters,dat,split):
+    """
+    Produces a convienient single-dataframe description of one split model. 
+    'parameters' is a parameters object
+    Requires that you pass original data as dat to compute cell-numbers
+    Leaves non-split columns as one-hot.
+    """
+    cell_counts=get_cell_counts(client,dat,split=split)
+    flattened_param=flatten_param_representation(client,parameters,split=split)
+    
+    working=cell_counts.join(flattened_param)
+    working["r"]=np.exp(working["theta"])
+    working["sigmasquare"]=working["nb"]**2/working["r"]+working["nb"]
+    working["p"]=working["nb"]/working["sigmasquare"]
+    working=working.reset_index()
+    return working
 
 def flatten_param_representation(client: Client, params, split: str):
     
