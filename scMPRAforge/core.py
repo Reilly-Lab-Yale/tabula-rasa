@@ -19,6 +19,7 @@ from formulaic import Formula
 
 from dask.distributed import Client
 import dask.dataframe as dd
+import dask.array as da
 
 from enum import Enum
 
@@ -694,6 +695,35 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     target_bytes = target_mb_per_partition * 1_000_000
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
+
+def simulate_from_description(description):
+    """
+    Simulate from a description dataframe.
+    """
+    #there is probably a more efficient way to do nb draws only for non-zinfl cells
+    #but given this solution has numpy speed, the required data carpentry for the alternative would be too slow. 
+
+    #explode first to enable vectorized operations.
+    def explode_cells(df):
+        return df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
+
+    working_exploded=description.map_partitions(explode_cells)
+    working_exploded=working_exploded.reset_index(drop=True)
+    #^key! Otherwise we get garbage index.
+
+    #simulate negative binomial
+    r = working_exploded['r'].to_dask_array(lengths=True)
+    p = working_exploded['p'].to_dask_array(lengths=True)
+    nb_samples = da.random.negative_binomial(n=r, p=p, size=r.shape[0], chunks=r.chunks)
+
+    #simulate zero inflation
+    probabilities = working_exploded['zi'].to_dask_array(lengths=True)
+    bernoulli_trials = da.random.binomial(n=1, p=probabilities, size=probabilities.shape[0], chunks=probabilities.chunks)
+
+    #add to the df & ret
+    zinb_samples=nb_samples * bernoulli_trials
+    working_exploded['zinb_sample'] = dd.from_dask_array(zinb_samples, columns='zinb_sample')
+    return working_exploded
 
 @unimplemented
 def volcano(results:experiment_model):
