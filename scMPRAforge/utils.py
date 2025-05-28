@@ -85,6 +85,34 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
 
     return ret
 
+def undo_one_hot_encoding(df):
+    df=df.copy()
+    # Step 1: Group one-hot columns by prefix
+    one_hot_groups = {}
+    pattern = re.compile(r'^C\((.+?)\)\[(.+?)\]$')
+
+    for col in df.columns:
+        match = pattern.match(col)
+        if match:
+            var, level = match.groups()
+            one_hot_groups.setdefault(var, []).append((col, level))
+
+    # Step 2: For each group, find active column and map back to category
+    for var, cols_levels in one_hot_groups.items():
+        cols, levels = zip(*cols_levels)
+        subdf = df[list(cols)]
+        
+        # Get the index of the 1 in each row
+        inferred = subdf.idxmax(axis=1)
+        # Map column name back to category level
+        level_map = {col: level for col, level in cols_levels}
+        df[var] = inferred.map(level_map)
+
+        # Optionally: drop the one-hot columns
+        df.drop(columns=list(cols), inplace=True)
+
+    return df
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():
@@ -94,3 +122,4 @@ def one_versus_all():
     Useful for a quick "which elements are expressed". 
     """
     pass
+
