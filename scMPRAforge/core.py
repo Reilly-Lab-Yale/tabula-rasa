@@ -18,6 +18,7 @@ from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
 
 from dask.distributed import Client
+import dask.dataframe as dd
 
 from enum import Enum
 
@@ -612,7 +613,8 @@ def describe_parameters(client,parameters,dat,split):
     working["r"]=np.exp(working["theta"])
     working["sigmasquare"]=working["nb"]**2/working["r"]+working["nb"]
     working["p"]=working["nb"]/working["sigmasquare"]
-    working=working.reset_index()
+
+
     return working
 
 def flatten_param_representation(client: Client, params, split: str):
@@ -687,6 +689,7 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
     Minimum of 2!
     """
+    pdf=pdf.reset_index()#dask doesn't like multi-indexes, so reset to single index.
     est_bytes = pdf.memory_usage(index=True, deep=True).sum()
     target_bytes = target_mb_per_partition * 1_000_000
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
