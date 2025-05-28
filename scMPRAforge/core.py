@@ -641,6 +641,12 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         mat = pd.DataFrame(mat)
         mat = mat.rename({'count': 'cells'}, axis=1)
         mat[split] = np.repeat(key, len(mat))
+
+        #fix the index to include the split-on column...
+        old_index=mat.index.names
+        mat.reset_index(inplace=True)
+        mat.set_index(old_index+[split],inplace=True)
+        
         return mat
 
     keys = dat[split].unique()
