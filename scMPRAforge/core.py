@@ -635,8 +635,10 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
 
     def process_key(key, dat):
         relevant_subset = dat[dat[split] == key]
+
         formula = Formula("umis_mpra_bc ~ C(cell_type) + C(rep_id) - 1")
-        _, mat = formula.get_model_matrix(relevant_subset, output='pandas')
+        _, mat = formula.get_model_matrix(relevant_subset, output='pandas',ensure_full_rank=False)
+        
         mat = mat.value_counts()
         mat = pd.DataFrame(mat)
         mat = mat.rename({'count': 'cells'}, axis=1)
