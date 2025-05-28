@@ -27,7 +27,7 @@ from .utils import bcs_to_lut
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
-
+PARTITION_SIZE_MB=50
 
 #functions
 @unimplemented
@@ -673,6 +673,24 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
     futures = [client.submit(process_key, key, dat_future) for key in keys]
     results = client.gather(futures)
     return pd.concat(results)
+
+def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
+    """
+    Convert a pandas DataFrame to a Dask DataFrame with automatic partition sizing.
+    
+    Parameters:
+    - pdf: input pandas DataFrame
+    - target_mb_per_partition: desired memory usage per partition (in megabytes)
+    
+    Returns:
+    - ddf: Dask DataFrame with chosen number of partitions
+
+    Minimum of 2!
+    """
+    est_bytes = pdf.memory_usage(index=True, deep=True).sum()
+    target_bytes = target_mb_per_partition * 1_000_000
+    npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
+    return dd.from_pandas(pdf, npartitions=npartitions)
 
 @unimplemented
 def volcano(results:experiment_model):
