@@ -708,8 +708,6 @@ def simulate_from_description(description):
         return df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
 
     working_exploded=description.map_partitions(explode_cells)
-    working_exploded=working_exploded.reset_index(drop=True)
-    #^key! Otherwise we get garbage index.
 
     #simulate negative binomial
     r = working_exploded['r'].to_dask_array(lengths=True)
@@ -720,9 +718,19 @@ def simulate_from_description(description):
     probabilities = working_exploded['zi'].to_dask_array(lengths=True)
     bernoulli_trials = da.random.binomial(n=1, p=probabilities, size=probabilities.shape[0], chunks=probabilities.chunks)
 
-    #add to the df & ret
+    #combine the two to get the final samples
     zinb_samples=nb_samples * bernoulli_trials
-    working_exploded['zinb_sample'] = dd.from_dask_array(zinb_samples, columns='zinb_sample')
+
+    #add to the df & ret
+    zinb_sample_df = dd.from_dask_array(zinb_samples, columns='zinb_sample')
+    zinb_sample_df = zinb_sample_df.reset_index()
+    
+    working_exploded = working_exploded.reset_index() 
+    working_exploded['zinb_sample'] = zinb_sample_df['zinb_sample']
+
+    #remove the index column added by reset_index
+    working_exploded = working_exploded.drop(columns=['index'])
+    
     return working_exploded
 
 @unimplemented
