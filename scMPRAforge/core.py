@@ -17,6 +17,8 @@ import patsy
 from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
 
+from dask.distributed import Client
+
 from enum import Enum
 
 #internal imports
@@ -594,6 +596,57 @@ def model_to_parameters(model):
     
     return parameters(nb=nb, zi=zi, theta=theta)
 
+
+def flatten_param_representation(client: Client, params, split: str):
+    
+    params_future = client.scatter(params, broadcast=True)
+    # probably want to change this later once dat is always a future
+    keys = params.keys  # assume this is list-like
+
+    def process_key(key, params):
+        nb_reset = params.nb[key].reset_index()
+        zi_reset = params.zi[key].reset_index()
+        cartesian = nb_reset.merge(zi_reset, how='cross')
+
+        cartesian[split] = np.repeat(key, len(cartesian))
+        cartesian['theta'] = np.repeat(params.theta[key], len(cartesian))
+
+        index_cols = (
+            params.nb[key].index.names +
+            params.zi[key].index.names +
+            [split]
+        )
+        cartesian.set_index(index_cols, inplace=True)
+        return cartesian
+
+    futures = [
+        client.submit(process_key, key, params_future)
+        for key in keys
+    ]
+    results = client.gather(futures)
+    return pd.concat(results)
+
+
+
+def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
+    # Broadcast dat to all workers once
+    # probably want to change this later once dat is always a future
+    dat_future = client.scatter(dat, broadcast=True)
+
+    def process_key(key, dat):
+        relevant_subset = dat[dat[split] == key]
+        formula = Formula("umis_mpra_bc ~ C(cell_type) + C(rep_id) - 1")
+        _, mat = formula.get_model_matrix(relevant_subset, output='pandas')
+        mat = mat.value_counts()
+        mat = pd.DataFrame(mat)
+        mat = mat.rename({'count': 'cells'}, axis=1)
+        mat[split] = np.repeat(key, len(mat))
+        return mat
+
+    keys = dat[split].unique()
+    futures = [client.submit(process_key, key, dat_future) for key in keys]
+    results = client.gather(futures)
+    return pd.concat(results)
 
 @unimplemented
 def volcano(results:experiment_model):
