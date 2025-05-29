@@ -88,6 +88,7 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     return ret
 
 def undo_one_hot_encoding(df):
+    """should work for dask and pandas dataframes."""
     df=df.copy()
     # Step 1: Group one-hot columns by prefix
     one_hot_groups = {}
@@ -110,8 +111,8 @@ def undo_one_hot_encoding(df):
         level_map = {col: level for col, level in cols_levels}
         df[var] = inferred.map(level_map)
 
-        # Optionally: drop the one-hot columns
-        df.drop(columns=list(cols), inplace=True)
+        # drop the one-hot columns
+        df=df.drop(columns=list(cols))
 
     return df
 
