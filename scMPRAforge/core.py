@@ -609,7 +609,6 @@ def describe_parameters(client,parameters,dat,split):
     """
     cell_counts=get_cell_counts(client,dat,split=split)
     flattened_param=flatten_param_representation(client,parameters,split=split)
-    
     working=cell_counts.join(flattened_param)
     working["r"]=np.exp(working["theta"])
     working["sigmasquare"]=working["nb"]**2/working["r"]+working["nb"]
@@ -648,8 +647,25 @@ def flatten_param_representation(client: Client, params, split: str):
     return pd.concat(results)
 
 
+def anti_split(split):
+    """ 
+    Returns the opposite split for a given split.
+    If splits are extended beyond 'cre_id' and 'cell_type',
+    this function should be extended to handle those cases.
+    Specifcally, all but split should be returned.
+    """
+    if split == "cre_id":
+        return "cell_type"
+    elif split == "cell_type":
+        return "cre_id"
+    else:
+        raise ValueError(f"Unsupported split: {split}")
+
 
 def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
+    """
+    Takes a dask client and a pandas DataFrame `dat` containing MPRA data.
+    """
     # Broadcast dat to all workers once
     # probably want to change this later once dat is always a future
     dat_future = client.scatter(dat, broadcast=True)
@@ -657,10 +673,14 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
     def process_key(key, dat):
         relevant_subset = dat[dat[split] == key]
 
-        formula = Formula("umis_mpra_bc ~ C(cell_type) + C(rep_id) - 1")
+        relevant_subset=relevant_subset.drop(columns=[split])
+
+        anti=anti_split(split)
+        formula = Formula(f"umis_mpra_bc ~ {anti} + C(rep_id) - 1")
         _, mat = formula.get_model_matrix(relevant_subset, output='pandas',ensure_full_rank=False)
         
         mat = mat.value_counts()
+
         mat = pd.DataFrame(mat)
         mat = mat.rename({'count': 'cells'}, axis=1)
         mat[split] = np.repeat(key, len(mat))
@@ -669,6 +689,7 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         old_index=mat.index.names
         mat.reset_index(inplace=True)
         mat.set_index(old_index+[split],inplace=True)
+
         
         return mat
 
