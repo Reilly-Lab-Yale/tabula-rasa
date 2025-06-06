@@ -263,32 +263,6 @@ def hypothesis_tester(scmpra_models, hypotheses, flavor="wald"):
     assert table_type(hypotheses.columns) == "hypotheses"
     pass
 
-def flatten_mpra_barcodes(scmpra_data):
-    """
-    Arguments
-        scmpra_data : <pd.DataFrame> of umi-wise, full MPRA
-    returns
-        <pd.DataFrame> of umi-wise, flattened MPRA
-    """
-    
-    assert table_type(scmpra_data.columns)=="mpra_umiwise","Malformed table."
-    
-    # sum umi counts across MPRA barcodes
-    # - if reads present, sum that too
-
-    grouping_columns = [col for col in scmpra_data.columns if col not in ['reads', 'umis','mpra_bc']]
-
-
-    aggregations={
-        'umis':('umis','sum'),
-        'mpra_bcs':('mpra_bc','nunique')
-    }
-
-    if "reads" in scmpra_data.columns:
-        aggregations['reads']=('reads','sum')
-    
-    return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
-
 
 """
 ortho
