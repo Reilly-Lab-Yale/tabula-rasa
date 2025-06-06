@@ -22,7 +22,6 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, wait
 from dask.distributed import get_worker
 from dask.distributed import performance_report
-#from dask import delayed
 
 
 ### constants
