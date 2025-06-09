@@ -26,7 +26,7 @@
       "version": 391,
       "versionNonce": 849054050,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154685920,
       "link": null,
       "locked": false,
@@ -63,7 +63,7 @@
       "version": 179,
       "versionNonce": 526554878,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154275798,
       "link": null,
       "locked": false,
@@ -100,7 +100,7 @@
       "version": 370,
       "versionNonce": 1927810338,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154685920,
       "link": null,
       "locked": false,
@@ -137,7 +137,7 @@
       "version": 30,
       "versionNonce": 2124276542,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154109160,
       "link": null,
       "locked": false,
@@ -261,10 +261,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        8.54296875,
-        451.3828125
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "Uvec_W1qsquAfWGBjFF-h",
@@ -289,7 +286,7 @@
       "version": 29,
       "versionNonce": 1540400958,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154110192,
       "link": null,
       "locked": false,
@@ -409,10 +406,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        477.84375,
-        16.328125
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "4rB8iJtmkPmnSRXdBmPBF",
@@ -437,7 +431,7 @@
       "version": 14,
       "versionNonce": 1936161534,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154113639,
       "link": null,
       "locked": false,
@@ -474,7 +468,7 @@
       "version": 298,
       "versionNonce": 1687379938,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154797392,
       "link": null,
       "locked": false,
@@ -511,7 +505,7 @@
       "version": 131,
       "versionNonce": 1181620450,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154685920,
       "link": null,
       "locked": false,
@@ -548,7 +542,7 @@
       "version": 83,
       "versionNonce": 1729523106,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154386726,
       "link": null,
       "locked": false,
@@ -585,7 +579,7 @@
       "version": 32,
       "versionNonce": 603146402,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154365880,
       "link": null,
       "locked": false,
@@ -717,10 +711,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        -66.6015625,
-        390.10546875
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "NnYD2JcuEZJhjZNSSI01V",
@@ -745,7 +736,7 @@
       "version": 24,
       "versionNonce": 649731518,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154366625,
       "link": null,
       "locked": false,
@@ -845,10 +836,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        194.58203125,
-        3.50390625
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "MXclyV1BnsJVTKiwKTJpb",
@@ -873,7 +861,7 @@
       "version": 23,
       "versionNonce": 660891902,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154367204,
       "link": null,
       "locked": false,
@@ -969,10 +957,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        -0.9453125,
-        55.83984375
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "FxN8us7HKtW4QXlLICKLo",
@@ -997,7 +982,7 @@
       "version": 85,
       "versionNonce": 852698110,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154369806,
       "link": null,
       "locked": false,
@@ -1341,10 +1326,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        160.94140625,
-        -25.3359375
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "w5i5gsfvDtwknw1VuxH_l",
@@ -1369,7 +1351,7 @@
       "version": 90,
       "versionNonce": 1599309666,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154372193,
       "link": null,
       "locked": false,
@@ -1733,10 +1715,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        138.0390625,
-        -32.66796875
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "DGU6YMopGNHo72Zn4uOyP",
@@ -1761,7 +1740,7 @@
       "version": 53,
       "versionNonce": 1190117474,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154373824,
       "link": null,
       "locked": false,
@@ -1977,10 +1956,7 @@
       ],
       "pressures": [],
       "simulatePressure": true,
-      "lastCommittedPoint": [
-        142.8671875,
-        -2.18359375
-      ]
+      "lastCommittedPoint": null
     },
     {
       "id": "bfTlDBUWzOsJhmU5gy1I1",
@@ -2005,7 +1981,7 @@
       "version": 50,
       "versionNonce": 631598014,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154383292,
       "link": null,
       "locked": false,
@@ -2042,7 +2018,7 @@
       "version": 213,
       "versionNonce": 1541338530,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154520007,
       "link": null,
       "locked": false,
@@ -2081,7 +2057,7 @@
       "version": 25,
       "versionNonce": 1431615870,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154502372,
       "link": null,
       "locked": false,
@@ -2263,7 +2239,7 @@
       "version": 23,
       "versionNonce": 1151566718,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154518356,
       "link": null,
       "locked": false,
@@ -2302,7 +2278,7 @@
       "version": 88,
       "versionNonce": 631967422,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154525640,
       "link": null,
       "locked": false,
@@ -2350,7 +2326,7 @@
       "version": 152,
       "versionNonce": 235419262,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154558584,
       "link": null,
       "locked": false,
@@ -2387,7 +2363,7 @@
       "version": 517,
       "versionNonce": 1162123774,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749154920259,
       "link": null,
       "locked": false,
@@ -2398,6 +2374,43 @@
       "verticalAlign": "top",
       "containerId": null,
       "originalText": "does flattening barcodes cause inflation of strength estimate of CREs which happened \nto be cloned w/ more barcodes?\n- assuming all barcodes for one CRE are drawing from same NB : then just \"more samples from distro\"\n  not \"higher \"\n- for \"flattening\" = \"removing barcode information\" NOT sum (which would maybe increase a little if multi\nbc for one cre in one cell). ",
+      "autoResize": true,
+      "lineHeight": 1.25
+    },
+    {
+      "id": "J-l6pgUZzD-Iea9hvsZFr",
+      "type": "text",
+      "x": 2504.3920385901615,
+      "y": 542.4966365551284,
+      "width": 376.0797424316406,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "index": "aT",
+      "roundness": null,
+      "seed": 1126974117,
+      "version": 106,
+      "versionNonce": 1897737291,
+      "isDeleted": false,
+      "boundElements": null,
+      "updated": 1749499221091,
+      "link": null,
+      "locked": false,
+      "text": "compare to existing methods: \nif much worse, implement improvements!",
+      "fontSize": 20,
+      "fontFamily": 5,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "containerId": null,
+      "originalText": "compare to existing methods: \nif much worse, implement improvements!",
       "autoResize": true,
       "lineHeight": 1.25
     }
