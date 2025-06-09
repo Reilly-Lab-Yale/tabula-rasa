@@ -105,6 +105,13 @@ def undo_one_hot_encoding(df):
         cols, levels = zip(*cols_levels)
         subdf = df[list(cols)]
         
+        # Check for multi-hot rows (more than one '1' per row)
+        multi_hot = subdf.sum(axis=1) > 1
+        if multi_hot.any():
+            raise ValueError(
+                f"Multi-hot encoding detected in variable '{var}'. Each row must have only one active level."
+            )
+        
         # Get the index of the 1 in each row
         inferred = subdf.idxmax(axis=1)
         # Map column name back to category level
@@ -125,4 +132,3 @@ def one_versus_all():
     Useful for a quick "which elements are expressed". 
     """
     pass
-

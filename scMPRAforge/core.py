@@ -579,7 +579,7 @@ def describe_parameters(client,parameters,dat,split):
     Produces a convienient single-dataframe description of one split model. 
     'parameters' is a parameters object
     Requires that you pass original data as dat to compute cell-numbers
-    Leaves non-split columns as one-hot.
+    Leaves non-split columns as one-hot. Returns "split" column as str categorical
     """
     cell_counts=get_cell_counts(client,dat,split=split)
     flattened_param=flatten_param_representation(client,parameters,split=split)
@@ -650,7 +650,7 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         relevant_subset=relevant_subset.drop(columns=[split])
 
         anti=anti_split(split)
-        formula = Formula(f"umis_mpra_bc ~ {anti} + C(rep_id) - 1")
+        formula = Formula(f"umis_mpra_bc ~ C({anti}) + C(rep_id) - 1")
         _, mat = formula.get_model_matrix(relevant_subset, output='pandas',ensure_full_rank=False)
         
         mat = mat.value_counts()
@@ -736,6 +736,3 @@ def volcano(results:experiment_model):
     """
     pass
 
-@unimplemented
-def extract_parameters():
-    pass
