@@ -68,7 +68,7 @@ UMI = unique molecular identifier
 | reads_transfection_bc | int              | number transfection reporter reads   | F          |
 | reads_DNA             | int              | DNA library reads (for MPRA barcode) | F          |
 
-**Umi-wise, full MPRA**
+**Umi-wise**
 | Column name           | Type             | Description                                                      | Mandatory? |
 | --------------------- | ---------------- | ---------------------------------------------------------------- | ---------- |
 | cell_bc               | str (nucleotide) | cell barcode                                                     | T          |
@@ -83,20 +83,7 @@ UMI = unique molecular identifier
 | reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs       | F          |
 | reads_DNA             | int              | DNA library reads (for MPRA barcode)                             | F          |
 
-**Umi-wise, flattened MPRA**
-| Column name           | Type             | Description                                                 | Mandatory? |
-| --------------------- | ---------------- | ----------------------------------------------------------- | ---------- |
-| cell_bc               | str (nucleotide) | cell barcode                                                | T          |
-| rep_id                | str              | replicate id                                                | T          |
-| cre_id                | str              | CRE id or name                                              | T          |
-| cell_type             | str              | cell-type                                                   | T          |
-| umis_mpra_bc          | int              | number of unique molecular identifiers                      | T          |
-| mpra_bcs              | int              | Numer of MPRA barcodes                                      | F          |
-| reads_mpra_bc         | int              | number of reads, summed across all UMIs                     | F          |
-| transfection_bcs      | int              | number of transfection barcodes                             | F          |
-| umis_transfection_bc  | int              | number transfection reporter UMIs                           | F          |
-| reads_transfection_bc | int              | number transfection reporter reads, summed across all UMIs  | F          |
-| reads_DNA             | int              | DNA library reads (summed across ALL MPRA barcodes)         | F          |
+(Though MPRA barcodes cannot be modeled individually, its undersierable to sum across to remove them : since this would inflate strength estimates of CREs with more MPRA barcodes)
 
 Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
 This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
