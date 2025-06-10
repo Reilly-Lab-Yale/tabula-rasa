@@ -693,7 +693,7 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
 def simulate_from_description(description):
     """
-    Simulate from a description dataframe.
+    Simulate from a description dask dataframe.
     """
     #there is probably a more efficient way to do nb draws only for non-zinfl cells
     #but given this solution has numpy speed, the required data carpentry for the alternative would be too slow. 
