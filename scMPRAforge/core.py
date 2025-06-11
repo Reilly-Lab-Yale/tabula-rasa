@@ -69,7 +69,7 @@ def table_type(column_names):
 
     Is kind with respect to extra columns & optional columns. 
     
-    (We could extend to type-checking as well, but that seems a tad draconian.)
+    (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
     """
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
@@ -342,7 +342,8 @@ def toosmall(y):
 def tensorzinb_fit(p):
     X,y,Z=p
     if toosmall(y):
-        return "too_small"
+        raise ValueError("One of the models doesn't have enough data for a good fit. Did you run `filter_low_umi_count`?")
+        #return "too_small"
 
     from tensorzinb.tensorzinb import TensorZINB
 
