@@ -333,6 +333,36 @@ def abort_on_failure(future,client):
         assert 1==2
 
 
+def filter_low_umi_count(mpra_data: pd.DataFrame, 
+                         group_by: list[str] = ['cre_id', 'cell_type']):
+    """
+    Takes a umiwise MPRA dataframe and drops rows which would correspond to models
+    with not enough cells (observations) to model.
+
+    Returns:
+        filtered: the filtered DataFrame
+        dropped_groups: a dict mapping each column in group_by to a list of dropped group values
+    """
+    tabtype = table_type(mpra_data.columns)
+    assert tabtype == "mpra_umiwise", "Malformed table."
+
+    filtered = mpra_data.copy()
+    dropped_groups = {}
+
+    for col in group_by:
+        # Find groups with too few nonzero UMIs
+        low_count_mask = (
+            filtered.groupby(col)["umis_mpra_bc"]
+            .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
+        )
+        dropped = low_count_mask[low_count_mask].index.tolist()
+        dropped_groups[col] = dropped
+
+        # Keep only valid rows
+        filtered = filtered[~filtered[col].isin(dropped)]
+
+    return filtered, dropped_groups
+
 def toosmall(y):
     if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
         return True
