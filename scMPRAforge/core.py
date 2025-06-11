@@ -581,6 +581,9 @@ def describe_parameters(client,parameters,dat,split):
     Requires that you pass original data as dat to compute cell-numbers
     Leaves non-split columns as one-hot. Returns "split" column as str categorical
     """
+
+    #change to return a dask instead of pandas dataframe
+
     cell_counts=get_cell_counts(client,dat,split=split)
     flattened_param=flatten_param_representation(client,parameters,split=split)
     working=cell_counts.join(flattened_param)
