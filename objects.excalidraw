@@ -1101,11 +1101,16 @@
         "type": 3
       },
       "seed": 1714053578,
-      "version": 498,
-      "versionNonce": 1329030026,
+      "version": 501,
+      "versionNonce": 1936920845,
       "isDeleted": false,
-      "boundElements": [],
-      "updated": 1749575652379,
+      "boundElements": [
+        {
+          "id": "GsclfoBLU172Pc42fDaYo",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1749669307471,
       "link": null,
       "locked": false
     },
@@ -1132,7 +1137,7 @@
       "version": 98,
       "versionNonce": 116770838,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749576251708,
       "link": null,
       "locked": false,
@@ -1211,7 +1216,7 @@
       "version": 145,
       "versionNonce": 2146498826,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749575738637,
       "link": null,
       "locked": false,
@@ -1285,7 +1290,7 @@
       "version": 169,
       "versionNonce": 507935958,
       "isDeleted": false,
-      "boundElements": null,
+      "boundElements": [],
       "updated": 1749576274356,
       "link": null,
       "locked": false,
@@ -1336,6 +1341,126 @@
       "fixedSegments": null,
       "startIsSpecial": null,
       "endIsSpecial": null
+    },
+    {
+      "id": "GsclfoBLU172Pc42fDaYo",
+      "type": "arrow",
+      "x": -269.96675481794756,
+      "y": 1144.5305962258979,
+      "width": 226.22143511074654,
+      "height": 174.00150562446697,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "dotted",
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "index": "aZ",
+      "roundness": null,
+      "seed": 830805923,
+      "version": 72,
+      "versionNonce": 509037453,
+      "isDeleted": false,
+      "boundElements": null,
+      "updated": 1749669311600,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -226.22143511074654,
+          0
+        ],
+        [
+          -226.22143511074654,
+          174.00150562446697
+        ],
+        [
+          -0.008716641519015411,
+          174.00150562446697
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "fUis_C1Xd2SyoZ_qhdhXq",
+        "fixedPoint": [
+          -0.009066395030145485,
+          0.15552842183696658
+        ],
+        "focus": 0,
+        "gap": 0
+      },
+      "endBinding": {
+        "elementId": "fUis_C1Xd2SyoZ_qhdhXq",
+        "fixedPoint": [
+          -0.009083036027011385,
+          0.8379787547538077
+        ],
+        "focus": 0,
+        "gap": 0
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": true,
+      "fixedSegments": [
+        {
+          "index": 2,
+          "start": [
+            -226.22143511074654,
+            0
+          ],
+          "end": [
+            -226.22143511074654,
+            174.00150562446697
+          ]
+        }
+      ],
+      "startIsSpecial": false,
+      "endIsSpecial": false
+    },
+    {
+      "id": "ldhGTDv14c1j5G-OxGrMl",
+      "type": "text",
+      "x": -699.9709764909543,
+      "y": 1185.6148509047405,
+      "width": 172.41986083984375,
+      "height": 100,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "dotted",
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "index": "aa",
+      "roundness": null,
+      "seed": 1081593699,
+      "version": 136,
+      "versionNonce": 165560717,
+      "isDeleted": false,
+      "boundElements": null,
+      "updated": 1749669333310,
+      "link": null,
+      "locked": false,
+      "text": "simulate barcodes\nsimulate reads\n\n(unimplemented)",
+      "fontSize": 20,
+      "fontFamily": 5,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "containerId": null,
+      "originalText": "simulate barcodes\nsimulate reads\n\n(unimplemented)",
+      "autoResize": true,
+      "lineHeight": 1.25
     }
   ],
   "appState": {
