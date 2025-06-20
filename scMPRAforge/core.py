@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 
 import logging
+import time
 
 import statsmodels.discrete.count_model as smdc
 import patsy
@@ -370,22 +371,34 @@ def toosmall(y):
         return False
 
 def tensorzinb_fit(p):
-    X,y,Z=p
+    X, y, Z = p
     if toosmall(y):
         raise ValueError("One of the models doesn't have enough data for a good fit. Did you run `filter_low_umi_count`?")
-        #return "too_small"
+        # return "too_small"
 
     from tensorzinb.tensorzinb import TensorZINB
 
-    zinbo=TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1,1)),X,exog_infl=Z.to_numpy())#,same_dispersion=True
-    zinb_result=None
+    zinbo = TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1, 1)), X, exog_infl=Z.to_numpy())  # ,same_dispersion=True
+    zinb_result = None
     try:
-        zinb_result=zinbo.fit(init_method="nb")
+        zinb_result = zinbo.fit(init_method="nb")
     except InvalidIndexError:
         return "index_error"
 
-
     return zinb_result
+
+# Timed tensorzinb_fit wrapper
+
+def timed_tensorzinb_fit(p, label=None):
+    start = time.time()
+    try:
+        result = tensorzinb_fit(p)
+    except Exception as e:
+        result = e
+    end = time.time()
+    duration = end - start
+    logger.warning(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
+    return result
 
 
 def fit(client,
@@ -449,8 +462,9 @@ def fit(client,
     ###create statsmodel futures###
     tzinb_futures = {
         t: client.submit(
-                tensorzinb_fit,
-                mats_futures[t]
+                timed_tensorzinb_fit,
+                mats_futures[t],
+                label=t
             )
         for t in types
     }
