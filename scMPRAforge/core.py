@@ -12,6 +12,8 @@ import numpy as np
 
 import logging
 import time
+import pickle
+from pathlib import Path
 
 import statsmodels.discrete.count_model as smdc
 import patsy
@@ -19,6 +21,8 @@ from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
 
 from dask.distributed import Client
+from dask.distributed import Future
+
 import dask.dataframe as dd
 import dask.array as da
 
@@ -874,7 +878,6 @@ class simulation_batch:
     def simulate_many(self,client,n):
         """
         simulates n replicates
-        Depends on 
         """
         #add parallel scatter-gather here!
         for _ in range(0,n):
