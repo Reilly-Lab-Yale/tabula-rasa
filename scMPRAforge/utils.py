@@ -5,7 +5,7 @@ import functools
 import logging
 import umi_tools
 import re
-
+from dask.distributed import Future
 
 logger = logging.getLogger("scMPRAforge")
 
@@ -122,6 +122,50 @@ def undo_one_hot_encoding(df):
         df=df.drop(columns=list(cols))
 
     return df
+
+
+
+def find_dask_future_paths(obj, seen=None, path=""):
+    """
+    Recursively find paths to all Dask Future objects in a structure.
+    Doesn't explore futures themselves, so check those yourself.
+
+    Returns a list of string paths like ['foo.bar', "baz[0]['x']"]
+    """
+    if seen is None:
+        seen = set()
+
+    results = []
+
+    obj_id = id(obj)
+    if obj_id in seen:
+        return results
+    seen.add(obj_id)
+
+    if isinstance(obj, Future):
+        results.append(path or "<root>")
+        return results
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key_str = repr(k)
+            subpath = f"{path}[{key_str}]" if path else f"[{key_str}]"
+            results.extend(find_dask_future_paths(v, seen, subpath))
+        return results
+
+    if isinstance(obj, (list, tuple, set)):
+        for i, v in enumerate(obj):
+            subpath = f"{path}[{i}]" if path else f"[{i}]"
+            results.extend(find_dask_future_paths(v, seen, subpath))
+        return results
+
+    if hasattr(obj, '__dict__'):
+        for attr, val in vars(obj).items():
+            subpath = f"{path}.{attr}" if path else attr
+            results.extend(find_dask_future_paths(val, seen, subpath))
+        return results
+
+    return results
 
 ## tools for easy generation of hypotheses
 @unimplemented
