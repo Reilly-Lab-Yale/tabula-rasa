@@ -796,7 +796,7 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe using map_partitions instead of da.random for speed.
+    Simulate from a description dask dataframe
     """
 
     def simulate_partition(df):
@@ -815,6 +815,9 @@ def simulate_from_description(description):
         repeated_df['zinb_sample'] = zinb
         return repeated_df
 
+    # Use auto_partition to repartition the description DataFrame
+    #description = auto_partition(description)
+    description=description.repartition(partition_size="100KB")#5KB
     return description.map_partitions(simulate_partition)
 
 class simulation_batch:
