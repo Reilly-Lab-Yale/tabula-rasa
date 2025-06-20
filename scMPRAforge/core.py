@@ -525,10 +525,60 @@ class ortho:
         self.by_cell_type=None
         self.by_cell_type_parameters=None
 
-    
+    def save(self,path,name):
+        """
+        For now, just dumps 
+        ['by_cre', 'by_cre_parameters', 'by_cell_type', 'by_cell_type_parameters']
+        to pickles
+
+        Will block & wait for results if not done computing
+
+        creates directory 'name' in 'path'
+        """
+        full_path=Path(path)/name
+        full_path.mkdir(parents=True)
+
+        def _dump(obj,filename):
+            with open(full_path/filename,"wb") as f:
+                
+                if isinstance(obj,Future):
+                    pickle.dump(obj.result(),f)
+                else:
+                    pickle.dump(obj,f)
+
+        _dump(self.by_cre,"by_cre.pkl")
+        _dump(self.by_cre_parameters,"by_cre_parameters.pkl")
+        _dump(self.by_cell_type,"by_cell_type.pkl")
+        _dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+
+    @classmethod
+    def load(cls,client,path,name):
+        """
+        loads from a filepath, wrapping in futures on the provided cluster where appropriate
+        looks for directory path/name
+        """
+        full_path=Path(path)/name
+
+        def _undump(filename):
+            """
+            Loads from a filename & re-wraps as a future
+            """
+            with open(full_path/filename,"rb") as f:
+                return client.submit(lambda x: x, pickle.load(f))
+        
+        ret=cls()
+        
+        ret.by_cre=_undump("by_cre.pkl")
+        ret.by_cre_parameters=_undump("by_cre_parameters.pkl")
+        ret.by_cell_type=_undump("by_cell_type.pkl")
+        ret.by_cell_type_parameters=_undump("by_cell_type_parameters.pkl")
+        
+        return ret
+
     def criss_cross(self,client,dat,retain_design_matricies=False):
         """
         Note: a little computationally intensive...
+        Rewrite to break each direction into separate function calls
         """
         if retain_design_matricies:
             #mostly for debugging
@@ -555,7 +605,7 @@ class parameters:
         assert nb.keys() == zi.keys()
         assert zi.keys() == theta.keys()
 
-        self.keys=nb.keys()
+        self.keys=list(nb.keys())
 
 
 def model_to_parameters(model):
