@@ -728,41 +728,26 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe.
+    Simulate from a description dask dataframe using map_partitions instead of da.random for speed.
     """
-    #there is probably a more efficient way to do nb draws only for non-zinfl cells
-    #but given this solution has numpy speed, the required data carpentry for the alternative would be too slow. 
 
-    #explode first to enable vectorized operations.
-    def explode_cells(df):
-        return df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
+    def simulate_partition(df):
+        # Repeat rows by 'cells' count, exploding to one row per cell
+        repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
 
-    working_exploded=description.map_partitions(explode_cells)
+        # Simulate NB and ZI in numpy
+        r = repeated_df['r'].to_numpy()
+        p = repeated_df['p'].to_numpy()
+        zi = repeated_df['zi'].to_numpy()
 
-    #simulate negative binomial
-    r = working_exploded['r'].to_dask_array(lengths=True)
-    p = working_exploded['p'].to_dask_array(lengths=True)
-    nb_samples = da.random.negative_binomial(n=r, p=p, size=r.shape[0], chunks=r.chunks)
+        nb = np.random.negative_binomial(n=r, p=p)
+        keep_mask = np.random.binomial(n=1, p=1 - zi)
+        zinb = nb * keep_mask
 
-    #simulate zero inflation
-    probabilities = working_exploded['zi'].to_dask_array(lengths=True)
-    bernoulli_trials = da.random.binomial(n=1, p=1-probabilities, size=probabilities.shape[0], chunks=probabilities.chunks)
-    #1- probabilities since this function represents 'success' with 1, when we are simulating from P(dropout)
-    #where "dropped out" = 0
+        repeated_df['zinb_sample'] = zinb
+        return repeated_df
 
-    #combine the two to get the final samples
-    zinb_samples=nb_samples * bernoulli_trials
-
-    #add to the df & ret
-    zinb_sample_df = dd.from_dask_array(zinb_samples, columns='zinb_sample')
-    zinb_sample_df = zinb_sample_df.reset_index()
-    
-    working_exploded = working_exploded.reset_index() 
-    working_exploded['zinb_sample'] = zinb_sample_df['zinb_sample']
-
-    #remove the index column added by reset_index
-    working_exploded = working_exploded.drop('index',axis=1)
-    return working_exploded
+    return description.map_partitions(simulate_partition)
 
 class simulation_batch:
     """
