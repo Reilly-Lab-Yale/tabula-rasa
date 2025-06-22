@@ -489,9 +489,6 @@ def fit(client,
         return model_future
 
 
-
-
-
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 class experiment_model:
@@ -794,31 +791,42 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
 
+
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe
+    Simulate from a description dask dataframe.
     """
+    start = time.time()
+    #there is probably a more efficient way to do nb draws only for non-zinfl cells
+    #but given this solution has numpy speed, the required data carpentry for the alternative would be too slow. 
 
-    def simulate_partition(df):
-        # Repeat rows by 'cells' count, exploding to one row per cell
-        repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
+    #explode first to enable vectorized operations.
+    def explode_cells(df):
+        return df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
 
-        # Simulate NB and ZI in numpy
-        r = repeated_df['r'].to_numpy()
-        p = repeated_df['p'].to_numpy()
-        zi = repeated_df['zi'].to_numpy()
+    explode_start = time.time()
+    working_exploded = description.map_partitions(explode_cells).compute()
+    logger.warning(f"[simulate_from_description] explode took {time.time() - explode_start:.2f} seconds")
 
-        nb = np.random.negative_binomial(n=r, p=p)
-        keep_mask = np.random.binomial(n=1, p=1 - zi)
-        zinb = nb * keep_mask
+    # simulate negative binomial
+    nb_start = time.time()
+    r = working_exploded['r'].to_numpy()
+    p = working_exploded['p'].to_numpy()
+    return r,p
+    nb_samples = np.random.negative_binomial(n=r, p=p)
+    logger.warning(f"[simulate_from_description] nb draw took {time.time() - nb_start:.2f} seconds")
 
-        repeated_df['zinb_sample'] = zinb
-        return repeated_df
+    # simulate zero inflation
+    zi_start = time.time()
+    probabilities = working_exploded['zi'].to_numpy()
+    bernoulli_trials = np.random.binomial(n=1, p=1 - probabilities)
+    logger.warning(f"[simulate_from_description] zero-inflation draw took {time.time() - zi_start:.2f} seconds")
+    zinb_samples = nb_samples * bernoulli_trials
 
-    # Use auto_partition to repartition the description DataFrame
-    #description = auto_partition(description)
-    description=description.repartition(partition_size="100KB")#5KB
-    return description.map_partitions(simulate_partition)
+    working_exploded['zinb_sample'] = zinb_samples
+    duration = time.time() - start
+    logger.warning(f"[simulate_from_description] took {duration:.2f} seconds")
+    return working_exploded
 
 class simulation_batch:
     """
