@@ -142,94 +142,101 @@ class scMPRA_data:
         return ret
     
     @unimplemented
-    def to_json(self,filepath):
+    @classmethod
+    def from_json(cls,filepath):
+        """
+        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        """
         pass
-    
+
     @unimplemented
-    def from_json(self,filepath):
+    def to_json(self,filepath):
+        """
+        Dump object to filepath
+        """
         pass
-
-
-
-
-def graph_chimeric(scmpra_data, *args, **kwargs):
-    """
-    Arguments
-        scmpra_data <pd.DataFrame>
-        *args
-        **kwargs
-    Returns
-        <matplotlib.axes._axes.Axes>
-
-    Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
-    and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
-
-    All other arguments are passed to the histplot call to allow graph 
-    customization. Particular useful are `bins`, `binrange`, and `log_scale`
-    """
-    assert table_type(scmpra_data.columns) == "mpra_readwise"
     
-    sns.histplot(scmpra_data['reads'], *args, **kwargs)
+    def graph_chimeric(self, *args, **kwargs):
+        """
+        TODO: test again now that its moved to scMPRA data obj
+        
+        Arguments
+            self
+            *args
+            **kwargs
 
-    plt.xlabel('Reads')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of Reads')
-    plt.show()
+        Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
+        and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
 
+        All other arguments are passed to the histplot call to allow graph 
+        customization. Particular useful are `bins`, `binrange`, and `log_scale`
+        """
+        assert table_type(self.data.columns) == "mpra_readwise"
+        
+        sns.histplot(self.data['reads'], *args, **kwargs)
 
-def cut_chimeric_reads(scmpra_data, threshold):
-    """
-    Arguments
-        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data 
-        threshold : <int>
+        plt.xlabel('Reads')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of Reads')
+        plt.show()
     
-    Returns
-        <pandas.DataFrame> of read-wise MPRA data
+    def read_wise_to_umi_wise(self,keep_reads=False):
+        """
+        Converts read-wise to UMI-wise (see readme for spec).
+
+        TODO: test again now that its moved to scMPRA data obj
+        """
+
+        assert self.table_type == "mpra_readwise", "Wrong table type."
+        
+        grouping_columns = [col for col in self.data.columns if col not in ['umi', 'reads']]
+
+
+        aggregations = {
+            'umis': ('umi', 'nunique')  # Count unique UMIs
+        }
+
+        # Conditionally include 'reads' sum
+        if keep_reads:
+            aggregations['reads'] = ('reads', 'sum')
+
+        self.data = self.data.groupby(grouping_columns).agg(**aggregations).reset_index()
+        self.table_type="mpra_umiwise"
+        self.operations.append("read_wise_to_umi_wise")
     
-    subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
-    removing chimeric reads. 
-    """
-    assert table_type(scmpra_data.columns) == "mpra_readwise"
-    assert threshold >=0, "threshold must be greater than zero."
-    
-    #Trim
-    ret=scmpra_data[scmpra_data["reads"]>threshold]
+    def cut_chimeric_reads(self,threshold):
+        """
+        Arguments
+            self
+            threshold : <int>
+        
+        subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
+        removing chimeric reads. 
+        """
+        assert table_type(self.data.columns) == "mpra_readwise"
+        assert threshold >=0, "threshold must be greater than zero."
+        
+        #Trim
+        ret=self.data[self.data["reads"]>threshold]
 
-    original_umi_count=len(scmpra_data["umi"].unique())
-    cut_umi_count=len(ret["umi"].unique())
+        original_umi_count=len(self.data["umi"].unique())
+        cut_umi_count=len(ret["umi"].unique())
 
-    logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
+        logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
 
-    return ret
+        self.data=ret
+
+        self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
+
+
+
+
+
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def read_wise_to_umi_wise(scmpra_data,keep_reads=False,bypass_consistency_check=False):
-    """
-    Arguments
-        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
-        keep_reads : <bool>
-    Returns
-        <pandas.DataFrame> of umi-wise scMPRA data
 
-    Converts read-wise to UMI-wise table (see readme for spec).
-    """
-    if not bypass_consistency_check:
-        assert table_type(scmpra_data.columns)=="mpra_readwise","Malformed table."
-
-    grouping_columns = [col for col in scmpra_data.columns if col not in ['umi', 'reads']]
-
-
-    aggregations = {
-        'umis': ('umi', 'nunique')  # Count unique UMIs
-    }
-
-    # Conditionally include 'reads' sum
-    if keep_reads:
-        aggregations['reads'] = ('reads', 'sum')
-
-    return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
     
 
 @unimplemented
