@@ -14,6 +14,7 @@ import logging
 import time
 import pickle
 from pathlib import Path
+import copy
 
 import statsmodels.discrete.count_model as smdc
 import patsy
@@ -124,6 +125,22 @@ class scMPRA_data:
         self.metadata=None
         self.operations=[]
         self.normalizations=[]
+    
+    def copy(self, exclude=()):
+        """Return a deepcopy of the object, optionally excluding fields."""
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo = {}
+
+        for k, v in self.__dict__.items():
+            if k in exclude:
+                setattr(result, k, None)  # or preserve original: self.__dict__[k]
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+
+        return result
+
+
     
     @classmethod
     def from_tsv(cls, filepath):
@@ -450,7 +467,7 @@ def timed_tensorzinb_fit(p, label=None):
         result = e
     end = time.time()
     duration = end - start
-    logger.warning(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
+    logger.info(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
     return result
 
 
@@ -575,6 +592,8 @@ class ortho:
         self.by_cell_type=None
         self.by_cell_type_parameters=None
 
+        self.training_data=None
+
     def save(self,path,name):
         """
         For now, just dumps 
@@ -600,6 +619,7 @@ class ortho:
         _dump(self.by_cre_parameters,"by_cre_parameters.pkl")
         _dump(self.by_cell_type,"by_cell_type.pkl")
         _dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+        _dump(self.training_data,"training_data.pkl")
 
     @classmethod
     def load(cls,client,path,name):
@@ -622,29 +642,50 @@ class ortho:
         ret.by_cre_parameters=_undump("by_cre_parameters.pkl")
         ret.by_cell_type=_undump("by_cell_type.pkl")
         ret.by_cell_type_parameters=_undump("by_cell_type_parameters.pkl")
+        ret.training_data=_undump("training_data.pkl")
         
         return ret
 
-    def criss_cross(self,client,dat,retain_design_matricies=False):
+    def criss_cross(self,client,dat,retain_design_matricies=False,retain_metadata=True):
         """
         Note: a little computationally intensive...
         Rewrite to break each direction into separate function calls
+
+        retain_metadata will keep some information 'dat' in self.training_data
+        The actual MPRA data will be stripped to save space, but metadata will be retained
         """
         if retain_design_matricies:
             #mostly for debugging
-            self.by_cre, self.by_cre_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-            self.by_cell_type, self.by_cell_type_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
+            self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
+            self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
         else:
-            self.by_cre=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
-            self.by_cell_type=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+            self.by_cre=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
+            self.by_cell_type=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+        
+        if retain_metadata:
+            self.training_data=dat.copy(exclude=('data',))
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
+
         if not self.by_cre is None:
             self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre)
         
         if not self.by_cell_type is None:
             self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
+        
+        if self.training_data==None:
+            logger.warning("Extracting parameters with no training metadata : assuming no normalization to undo!")
+        else:
+            #undo normalizations in the opposite order they were applied....
+            for normalization in self.training_data.normalizations[::-1]:
+                if normalization=="over100":
+                    if not self.by_cre is None:
+                        pass
+                    if not self.by_cell_type is None:
+                        pass
+                else:
+                    raise NotImplementedError("Normalization undo not implemented yet")
 
 class parameters:
     def __init__(self, nb, zi, theta):
