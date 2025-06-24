@@ -123,6 +123,7 @@ class scMPRA_data:
         self.source=None
         self.metadata=None
         self.operations=[]
+        self.normalizations=[]
     
     @classmethod
     def from_tsv(cls, filepath):
@@ -227,6 +228,29 @@ class scMPRA_data:
         self.data=ret
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
+
+    def norm_umis_mpra_bc(self,method):
+        """
+        Takes a mpra_umiwise table & performs normalization on `umis_mpra_bc`
+        """
+
+        valid_norm_options=["over100", "standard_scaler"]
+
+        assert method in valid_norm_options, "invalid method"
+
+        assert self.table_type=="mpra_umiwise", "Malformed table."
+
+        ret=self.data.copy()
+
+        if method=="over100":
+            ret["umis_mpra_bc"]=ret["umis_mpra_bc"]/100
+        else:
+            raise NotImplementedError("method not implemented yet")
+        
+        self.operations.append(f"normalized :{method}")
+        self.normalizations.append(method)
+        
+        self.data=ret
 
 
 
