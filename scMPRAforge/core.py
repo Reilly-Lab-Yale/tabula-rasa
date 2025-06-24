@@ -49,14 +49,7 @@ def helloworld():
     pass
 
 
-#actually probably easier to do an 'inflate' function to avoid too much mem usage...?
-@unimplemented
-def mpra_unstack():
-    pass
 
-@unimplemented
-def mpra_stack():
-    pass
 
 def table_type(column_names):
     """
@@ -117,22 +110,45 @@ def load_hypothesis_set(filepath):
     pass
 
 
-
-
-def load_scMPRA_data(filepath):
+class scMPRA_data:
     """
-    Arguments
-        filepath <str>
-    Returns
-        <pd.DataFrame>
-
-    Loads tsv scMPRA data from `filepath`.
+    Wrapper around a pandas dataframe of MPRA data. 
+    The primary purpose of the object is to record what operations have been performed on the data
+    (Pandas does not support metadata)
+    Could possibly replace with an anndata object.
+    """
+    def __init__(self):
+        self.data=None
+        self.table_type=None
+        self.source=None
+        self.metadata=None
+        self.operations=[]
     
-    """
-    tab=pd.read_csv(filepath,sep="\t")
-    tabtype=table_type(tab.columns)
-    assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
-    return tab
+    @classmethod
+    def from_tsv(cls, filepath):
+        """
+        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        """
+        tab=pd.read_csv(filepath,sep="\t")
+        tabtype=table_type(tab.columns)
+        
+        assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
+        
+        ret=cls()
+        ret.data=tab
+        ret.table_type=tabtype
+        ret.source=filepath
+
+        return ret
+    
+    @unimplemented
+    def to_json(self,filepath):
+        pass
+    
+    @unimplemented
+    def from_json(self,filepath):
+        pass
+
 
 
 
@@ -216,8 +232,10 @@ def read_wise_to_umi_wise(scmpra_data,keep_reads=False,bypass_consistency_check=
     return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
     
 
+@unimplemented
 def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     """
+    Need to re-work to work with scMPRA data object
     Arguments
         df <pandas.DataFrame>
         barcode_column <str>
