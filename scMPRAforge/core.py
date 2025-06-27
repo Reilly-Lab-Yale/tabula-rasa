@@ -124,7 +124,6 @@ class scMPRA_data:
         self.source=None
         self.metadata=None
         self.operations=[]
-        self.normalizations=[]
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
@@ -139,8 +138,23 @@ class scMPRA_data:
                 setattr(result, k, copy.deepcopy(v, memo))
 
         return result
+    
+    def total_umi(self):
+        #the same cell barcode in two different replicates is NOT the same cell. 
+        umis_per_cell=self.data.groupby(["cell_bc","rep_id"],as_index=False)["umis_mpra_bc"].sum()
+        mask=umis_per_cell["umis_mpra_bc"]<1
 
+        total_cells=len(umis_per_cell[["cell_bc","rep_id"]].value_counts())
+        num_cells_to_drop=len(umis_per_cell[mask][["cell_bc","rep_id"]].value_counts())
 
+        logger.info(f"Dropping {num_cells_to_drop} cells with no MPRA UMIs, leaving {total_cells-num_cells_to_drop}.")
+
+        umis_per_cell=umis_per_cell[~mask]
+        umis_per_cell["ln_cell_umis_mpra"]=np.log(umis_per_cell["umis_mpra_bc"])
+
+        self.data=self.data.merge(umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],on=["cell_bc","rep_id"],how="right")
+
+        self.operations.append('total_umi')
     
     @classmethod
     def from_tsv(cls, filepath):
@@ -156,6 +170,7 @@ class scMPRA_data:
         ret.data=tab
         ret.table_type=tabtype
         ret.source=filepath
+        ret.total_umi()
 
         return ret
     
@@ -245,29 +260,6 @@ class scMPRA_data:
         self.data=ret
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
-
-    def norm_umis_mpra_bc(self,method):
-        """
-        Takes a mpra_umiwise table & performs normalization on `umis_mpra_bc`
-        """
-
-        valid_norm_options=["over100", "standard_scaler"]
-
-        assert method in valid_norm_options, "invalid method"
-
-        assert self.table_type=="mpra_umiwise", "Malformed table."
-
-        ret=self.data.copy()
-
-        if method=="over100":
-            ret["umis_mpra_bc"]=ret["umis_mpra_bc"]/100
-        else:
-            raise NotImplementedError("method not implemented yet")
-        
-        self.operations.append(f"normalized :{method}")
-        self.normalizations.append(method)
-        
-        self.data=ret
 
 
 
