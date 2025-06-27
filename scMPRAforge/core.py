@@ -675,17 +675,37 @@ class ortho:
             self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
         
         if self.training_data==None:
-            logger.warning("Extracting parameters with no training metadata : assuming no normalization to undo!")
+            logger.warning("Extracting ZINB parameters but we have no metadata from the training data : assuming no normalization to undo!")
         else:
+            
+
+            #proofs:
+            #obsidian://open?vault=science&file=no_pub%2FscMPRA-sim_main `2025-06-26`
+            #make this into a nice notebook if it works
+
             #undo normalizations in the opposite order they were applied....
             for normalization in self.training_data.normalizations[::-1]:
+                undo_norm_method=None
+                
                 if normalization=="over100":
-                    if not self.by_cre is None:
-                        pass
-                    if not self.by_cell_type is None:
-                        pass
+
+                    def unover100(param):
+                        #undo transformation on mean parameter
+                        
+                        #param.nb=param.nb*100
+                        #compute 
+                        return param
+
+                    undo_norm_method=unover100
+
                 else:
                     raise NotImplementedError("Normalization undo not implemented yet")
+                
+                #submit jobs to undo normalization with whatever method we just picked.
+                if not self.by_cre is None:
+                    self.by_cre.nb=client.submit(undo_norm_method,self.by_cre)
+                if not self.by_cell_type is None:
+                    self.by_cell_type.nb=client.submit(undo_norm_method,self.by_cell_type)
 
 class parameters:
     def __init__(self, nb, zi, theta):
