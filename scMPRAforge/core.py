@@ -14,6 +14,7 @@ import logging
 import time
 import pickle
 from pathlib import Path
+import copy
 
 import statsmodels.discrete.count_model as smdc
 import patsy
@@ -49,14 +50,7 @@ def helloworld():
     pass
 
 
-#actually probably easier to do an 'inflate' function to avoid too much mem usage...?
-@unimplemented
-def mpra_unstack():
-    pass
 
-@unimplemented
-def mpra_stack():
-    pass
 
 def table_type(column_names):
     """
@@ -117,107 +111,207 @@ def load_hypothesis_set(filepath):
     pass
 
 
-
-
-def load_scMPRA_data(filepath):
+class scMPRA_data:
     """
-    Arguments
-        filepath <str>
-    Returns
-        <pd.DataFrame>
-
-    Loads tsv scMPRA data from `filepath`.
+    Wrapper around a pandas dataframe of MPRA data. 
+    The primary purpose of the object is to record what operations have been performed on the data
+    (Pandas does not support metadata)
+    Could possibly replace with an anndata object.
+    """
+    def __init__(self):
+        self.data=None
+        self.table_type=None
+        self.source=None
+        self.metadata=None
+        self.operations=[]
     
-    """
-    tab=pd.read_csv(filepath,sep="\t")
-    tabtype=table_type(tab.columns)
-    assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
-    return tab
+    def copy(self, exclude=()):
+        """Return a deepcopy of the object, optionally excluding fields."""
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo = {}
 
+        for k, v in self.__dict__.items():
+            if k in exclude:
+                setattr(result, k, None)  # or preserve original: self.__dict__[k]
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
 
-
-def graph_chimeric(scmpra_data, *args, **kwargs):
-    """
-    Arguments
-        scmpra_data <pd.DataFrame>
-        *args
-        **kwargs
-    Returns
-        <matplotlib.axes._axes.Axes>
-
-    Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
-    and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
-
-    All other arguments are passed to the histplot call to allow graph 
-    customization. Particular useful are `bins`, `binrange`, and `log_scale`
-    """
-    assert table_type(scmpra_data.columns) == "mpra_readwise"
+        return result
     
-    sns.histplot(scmpra_data['reads'], *args, **kwargs)
+    def total_umi(self):
+        #the same cell barcode in two different replicates is NOT the same cell. 
+        umis_per_cell=self.data.groupby(["cell_bc","rep_id"],as_index=False)["umis_mpra_bc"].sum()
+        mask=umis_per_cell["umis_mpra_bc"]<1
 
-    plt.xlabel('Reads')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of Reads')
-    plt.show()
+        total_cells=len(umis_per_cell[["cell_bc","rep_id"]].value_counts())
+        num_cells_to_drop=len(umis_per_cell[mask][["cell_bc","rep_id"]].value_counts())
 
+        logger.info(f"Dropping {num_cells_to_drop} cells with no MPRA UMIs, leaving {total_cells-num_cells_to_drop}.")
 
-def cut_chimeric_reads(scmpra_data, threshold):
-    """
-    Arguments
-        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data 
-        threshold : <int>
+        umis_per_cell=umis_per_cell[~mask]
+        umis_per_cell["ln_cell_umis_mpra"]=np.log(umis_per_cell["umis_mpra_bc"])
+
+        self.data=self.data.merge(umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],on=["cell_bc","rep_id"],how="right")
+
+        self.operations.append('total_umi')
     
-    Returns
-        <pandas.DataFrame> of read-wise MPRA data
+    @classmethod
+    def from_tsv(cls, filepath):
+        """
+        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        """
+        tab=pd.read_csv(filepath,sep="\t")
+        tabtype=table_type(tab.columns)
+        
+        assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
+        
+        ret=cls()
+        ret.data=tab
+        ret.table_type=tabtype
+        ret.source=filepath
+        #apply QC
+        ret.filter_low_umi_count()
+        ret.total_umi()
+
+        return ret
     
-    subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
-    removing chimeric reads. 
-    """
-    assert table_type(scmpra_data.columns) == "mpra_readwise"
-    assert threshold >=0, "threshold must be greater than zero."
+    @unimplemented
+    @classmethod
+    def from_json(cls,filepath):
+        """
+        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        """
+        pass
+
+    @unimplemented
+    def to_json(self,filepath):
+        """
+        Dump object to filepath
+        """
+        pass
     
-    #Trim
-    ret=scmpra_data[scmpra_data["reads"]>threshold]
+    def graph_chimeric(self, *args, **kwargs):
+        """
+        TODO: test again now that its moved to scMPRA data obj
+        
+        Arguments
+            self
+            *args
+            **kwargs
 
-    original_umi_count=len(scmpra_data["umi"].unique())
-    cut_umi_count=len(ret["umi"].unique())
+        Takes `scmpra_data`, a pandas dataframe of read-wise MPRA data (see docs) 
+        and plots a histogram of frequency of reads per UMI using seaborn.histplot. 
 
-    logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
+        All other arguments are passed to the histplot call to allow graph 
+        customization. Particular useful are `bins`, `binrange`, and `log_scale`
+        """
+        assert table_type(self.data.columns) == "mpra_readwise"
+        
+        sns.histplot(self.data['reads'], *args, **kwargs)
 
-    return ret
+        plt.xlabel('Reads')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of Reads')
+        plt.show()
+    
+    def read_wise_to_umi_wise(self,keep_reads=False):
+        """
+        Converts read-wise to UMI-wise (see readme for spec).
+
+        TODO: test again now that its moved to scMPRA data obj
+        """
+
+        assert self.table_type == "mpra_readwise", "Wrong table type."
+        
+        grouping_columns = [col for col in self.data.columns if col not in ['umi', 'reads']]
+
+
+        aggregations = {
+            'umis': ('umi', 'nunique')  # Count unique UMIs
+        }
+
+        # Conditionally include 'reads' sum
+        if keep_reads:
+            aggregations['reads'] = ('reads', 'sum')
+
+        self.data = self.data.groupby(grouping_columns).agg(**aggregations).reset_index()
+        self.table_type="mpra_umiwise"
+        self.operations.append("read_wise_to_umi_wise")
+    
+    def cut_chimeric_reads(self,threshold):
+        """
+        Arguments
+            self
+            threshold : <int>
+        
+        subsets to those UMIs which lie ABOVE the number-of-reads threshold, 
+        removing chimeric reads. 
+        """
+        assert table_type(self.data.columns) == "mpra_readwise"
+        assert threshold >=0, "threshold must be greater than zero."
+        
+        #Trim
+        ret=self.data[self.data["reads"]>threshold]
+
+        original_umi_count=len(self.data["umi"].unique())
+        cut_umi_count=len(ret["umi"].unique())
+
+        logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
+
+        self.data=ret
+
+        self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
+
+    def filter_low_umi_count(self, 
+                         group_by: list[str] = ['cre_id', 'cell_type']):
+        """
+        Takes a umiwise MPRA dataframe and drops rows which would correspond to models
+        with not enough cells (observations) to model.
+        """
+        tabtype = table_type(self.data.columns)
+        assert tabtype == "mpra_umiwise", "Malformed table."
+
+        filtered = self.data.copy()
+        dropped_groups = {}
+
+        #there's definitely a more efficient way of doing this
+        for col in group_by:
+            # Find groups with too few nonzero UMIs
+            low_count_mask = (
+                filtered.groupby(col)["umis_mpra_bc"]
+                .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
+            )
+            dropped = low_count_mask[low_count_mask].index.tolist()
+            dropped_groups[col] = dropped
+
+            # Keep only valid rows
+            filtered = filtered[~filtered[col].isin(dropped)]
+
+        #warn the user about what we dropped
+        logger.info(f"Dropping cell-types & cres with below {MIN_PTS} (MIN_PTS) observations: f{dropped_groups}")
+        
+        #record that we performed this operation
+        self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+        
+        #apply the filtering
+        self.data=filtered
+        
+
+
+
+
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def read_wise_to_umi_wise(scmpra_data,keep_reads=False,bypass_consistency_check=False):
-    """
-    Arguments
-        scmpra_data : <pandas.DataFrame> of read-wise scMPRA data
-        keep_reads : <bool>
-    Returns
-        <pandas.DataFrame> of umi-wise scMPRA data
 
-    Converts read-wise to UMI-wise table (see readme for spec).
-    """
-    if not bypass_consistency_check:
-        assert table_type(scmpra_data.columns)=="mpra_readwise","Malformed table."
-
-    grouping_columns = [col for col in scmpra_data.columns if col not in ['umi', 'reads']]
-
-
-    aggregations = {
-        'umis': ('umi', 'nunique')  # Count unique UMIs
-    }
-
-    # Conditionally include 'reads' sum
-    if keep_reads:
-        aggregations['reads'] = ('reads', 'sum')
-
-    return scmpra_data.groupby(grouping_columns).agg(**aggregations).reset_index()
     
 
+@unimplemented
 def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     """
+    Need to re-work to work with scMPRA data object
     Arguments
         df <pandas.DataFrame>
         barcode_column <str>
@@ -338,35 +432,6 @@ def abort_on_failure(future,client):
         assert 1==2
 
 
-def filter_low_umi_count(mpra_data: pd.DataFrame, 
-                         group_by: list[str] = ['cre_id', 'cell_type']):
-    """
-    Takes a umiwise MPRA dataframe and drops rows which would correspond to models
-    with not enough cells (observations) to model.
-
-    Returns:
-        filtered: the filtered DataFrame
-        dropped_groups: a dict mapping each column in group_by to a list of dropped group values
-    """
-    tabtype = table_type(mpra_data.columns)
-    assert tabtype == "mpra_umiwise", "Malformed table."
-
-    filtered = mpra_data.copy()
-    dropped_groups = {}
-
-    for col in group_by:
-        # Find groups with too few nonzero UMIs
-        low_count_mask = (
-            filtered.groupby(col)["umis_mpra_bc"]
-            .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
-        )
-        dropped = low_count_mask[low_count_mask].index.tolist()
-        dropped_groups[col] = dropped
-
-        # Keep only valid rows
-        filtered = filtered[~filtered[col].isin(dropped)]
-
-    return filtered, dropped_groups
 
 def toosmall(y):
     if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
@@ -401,7 +466,7 @@ def timed_tensorzinb_fit(p, label=None):
         result = e
     end = time.time()
     duration = end - start
-    logger.warning(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
+    logger.info(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
     return result
 
 
@@ -529,6 +594,8 @@ class ortho:
         self.by_cell_type=None
         self.by_cell_type_parameters=None
 
+        self.training_data=None
+
     def save(self,path,name):
         """
         For now, just dumps 
@@ -554,6 +621,7 @@ class ortho:
         _dump(self.by_cre_parameters,"by_cre_parameters.pkl")
         _dump(self.by_cell_type,"by_cell_type.pkl")
         _dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+        _dump(self.training_data,"training_data.pkl")
 
     @classmethod
     def load(cls,client,path,name):
@@ -576,29 +644,70 @@ class ortho:
         ret.by_cre_parameters=_undump("by_cre_parameters.pkl")
         ret.by_cell_type=_undump("by_cell_type.pkl")
         ret.by_cell_type_parameters=_undump("by_cell_type_parameters.pkl")
+        ret.training_data=_undump("training_data.pkl")
         
         return ret
 
-    def criss_cross(self,client,dat,retain_design_matricies=False):
+    def criss_cross(self,client,dat,retain_design_matricies=False,retain_metadata=True):
         """
         Note: a little computationally intensive...
         Rewrite to break each direction into separate function calls
+
+        retain_metadata will keep some information 'dat' in self.training_data
+        The actual MPRA data will be stripped to save space, but metadata will be retained
         """
         if retain_design_matricies:
             #mostly for debugging
-            self.by_cre, self.by_cre_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-            self.by_cell_type, self.by_cell_type_design=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
+            self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
+            self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
         else:
-            self.by_cre=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
-            self.by_cell_type=fit(client,dat,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+            self.by_cre=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
+            self.by_cell_type=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+        
+        if retain_metadata:
+            self.training_data=dat.copy(exclude=('data',))
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
+
         if not self.by_cre is None:
             self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre)
         
         if not self.by_cell_type is None:
             self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
+        
+        if self.training_data==None:
+            logger.warning("Extracting ZINB parameters but we have no metadata from the training data : assuming no normalization to undo!")
+        else:
+            
+
+            #proofs:
+            #obsidian://open?vault=science&file=no_pub%2FscMPRA-sim_main `2025-06-26`
+            #make this into a nice notebook if it works
+
+            #undo normalizations in the opposite order they were applied....
+            for normalization in self.training_data.normalizations[::-1]:
+                undo_norm_method=None
+                
+                if normalization=="over100":
+
+                    def unover100(param):
+                        #undo transformation on mean parameter
+                        
+                        #param.nb=param.nb*100
+                        #compute 
+                        return param
+
+                    undo_norm_method=unover100
+
+                else:
+                    raise NotImplementedError("Normalization undo not implemented yet")
+                
+                #submit jobs to undo normalization with whatever method we just picked.
+                if not self.by_cre is None:
+                    self.by_cre.nb=client.submit(undo_norm_method,self.by_cre)
+                if not self.by_cell_type is None:
+                    self.by_cell_type.nb=client.submit(undo_norm_method,self.by_cell_type)
 
 class parameters:
     def __init__(self, nb, zi, theta):
@@ -814,7 +923,6 @@ def simulate_from_description(description):
 
         repeated_df['zinb_sample'] = zinb
         return repeated_df
-
     # Use auto_partition to repartition the description DataFrame
     #description = auto_partition(description)
     description=description.repartition(partition_size="100KB")#5KB
