@@ -554,6 +554,9 @@ def fit(client,
         return model_future
 
 
+
+
+
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 class experiment_model:
@@ -900,10 +903,9 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
 
-
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe using map_partitions instead of da.random for speed.
+    Simulate from a description dask dataframe
     """
 
     def simulate_partition(df):
@@ -921,7 +923,9 @@ def simulate_from_description(description):
 
         repeated_df['zinb_sample'] = zinb
         return repeated_df
-
+    # Use auto_partition to repartition the description DataFrame
+    #description = auto_partition(description)
+    description=description.repartition(partition_size="100KB")#5KB
     return description.map_partitions(simulate_partition)
 
 class simulation_batch:
