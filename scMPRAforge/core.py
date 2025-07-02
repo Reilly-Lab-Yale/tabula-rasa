@@ -117,6 +117,7 @@ class scMPRA_data:
     The primary purpose of the object is to record what operations have been performed on the data
     (Pandas does not support metadata)
     Could possibly replace with an anndata object.
+    TODO: should define an operation which sets a reference level w/ a standard name : then its ID will be recognized by create_matricies and used as reference level IF PRESENT.
     """
     def __init__(self):
         self.data=None
