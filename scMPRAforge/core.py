@@ -170,6 +170,8 @@ class scMPRA_data:
         ret.data=tab
         ret.table_type=tabtype
         ret.source=filepath
+        #apply QC
+        ret.filter_low_umi_count()
         ret.total_umi()
 
         return ret
@@ -261,6 +263,40 @@ class scMPRA_data:
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
 
+    def filter_low_umi_count(self, 
+                         group_by: list[str] = ['cre_id', 'cell_type']):
+        """
+        Takes a umiwise MPRA dataframe and drops rows which would correspond to models
+        with not enough cells (observations) to model.
+        """
+        tabtype = table_type(self.data.columns)
+        assert tabtype == "mpra_umiwise", "Malformed table."
+
+        filtered = self.data.copy()
+        dropped_groups = {}
+
+        #there's definitely a more efficient way of doing this
+        for col in group_by:
+            # Find groups with too few nonzero UMIs
+            low_count_mask = (
+                filtered.groupby(col)["umis_mpra_bc"]
+                .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
+            )
+            dropped = low_count_mask[low_count_mask].index.tolist()
+            dropped_groups[col] = dropped
+
+            # Keep only valid rows
+            filtered = filtered[~filtered[col].isin(dropped)]
+
+        #warn the user about what we dropped
+        logger.info(f"Dropping cell-types & cres with below {MIN_PTS} (MIN_PTS) observations: f{dropped_groups}")
+        
+        #record that we performed this operation
+        self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+        
+        #apply the filtering
+        self.data=filtered
+        
 
 
 
@@ -396,35 +432,6 @@ def abort_on_failure(future,client):
         assert 1==2
 
 
-def filter_low_umi_count(mpra_data: pd.DataFrame, 
-                         group_by: list[str] = ['cre_id', 'cell_type']):
-    """
-    Takes a umiwise MPRA dataframe and drops rows which would correspond to models
-    with not enough cells (observations) to model.
-
-    Returns:
-        filtered: the filtered DataFrame
-        dropped_groups: a dict mapping each column in group_by to a list of dropped group values
-    """
-    tabtype = table_type(mpra_data.columns)
-    assert tabtype == "mpra_umiwise", "Malformed table."
-
-    filtered = mpra_data.copy()
-    dropped_groups = {}
-
-    for col in group_by:
-        # Find groups with too few nonzero UMIs
-        low_count_mask = (
-            filtered.groupby(col)["umis_mpra_bc"]
-            .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
-        )
-        dropped = low_count_mask[low_count_mask].index.tolist()
-        dropped_groups[col] = dropped
-
-        # Keep only valid rows
-        filtered = filtered[~filtered[col].isin(dropped)]
-
-    return filtered, dropped_groups
 
 def toosmall(y):
     if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
