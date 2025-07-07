@@ -466,7 +466,7 @@ def tensorzinb_fit(p):
 
     from tensorzinb.tensorzinb import TensorZINB
 
-    zinbo = TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1, 1)), X, exog_infl=Z.to_numpy())  # ,same_dispersion=True
+    zinbo = TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1, 1)), X.to_numpy(), exog_infl=Z.to_numpy())  # ,same_dispersion=True
     zinb_result = None
     try:
         zinb_result = zinbo.fit(init_method="nb")
