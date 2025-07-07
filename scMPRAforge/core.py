@@ -117,7 +117,6 @@ class scMPRA_data:
     The primary purpose of the object is to record what operations have been performed on the data
     (Pandas does not support metadata)
     Could possibly replace with an anndata object.
-    TODO: should define an operation which sets a reference level w/ a standard name : then its ID will be recognized by create_matricies and used as reference level IF PRESENT.
     """
     def __init__(self):
         self.data=None
@@ -125,6 +124,25 @@ class scMPRA_data:
         self.source=None
         self.metadata=None
         self.operations=[]
+        self.negative_controls=[]
+    
+    def set_negative_controls(self,negative_controls:list[str]):
+        """
+        Takes a list of CRE names that we consider to be negative controls and give them all the name "negative_control", lumping all their data together.
+        """
+
+        if self.negative_controls==[]:
+            #User has set no negative controls before now. Back up cre_id information before we mutate it.
+            self.data["cre_id_original"]=self.data["cre_id"]
+        
+        #flatten all labels of negative controls
+        for control in negative_controls:
+            self.data["cre_id"]=self.data["cre_id"].replace(control, "negative_control")
+
+        #record which names we have flattened.
+        #(Can be deduced from difference between cre_id and 
+        #cre_id_original, but this is more convienient).
+        self.negative_controls=self.negative_controls+negative_controls
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
