@@ -178,9 +178,6 @@ class scMPRA_data:
 
         self.operations.append('total_umi')
     
-
-        
-    
     @classmethod
     def from_tsv(cls, filepath):
         """
@@ -195,9 +192,6 @@ class scMPRA_data:
         ret.data=tab
         ret.table_type=tabtype
         ret.source=filepath
-        #apply QC
-        ret.filter_low_umi_count()
-        ret.total_umi()
 
         return ret
     
@@ -290,78 +284,29 @@ class scMPRA_data:
 
     
     
-    @unimplemented
-    def filter_low_observation_count(self, 
-                         group_by: list[str] = ['cre_id', 'cell_type']):
+    def ortho_filter(self):
         """
-        Data must be umiwise.
-
-        Drops rows which would correspond to models
-        with not less than MIN_PTS cells (observations) to model.
-        
-        This function is a probably better option than `filter_low_umi_count`
-        when zeroes are enriched for "true zeroes" : e.g. data were pre-filtered
-        on a tranfection reporter.
-
-        Note that this a pretty permissive filtering : it doesn't drop *combinations* of group_by
-        e.g. it will only drop a cre_id if it could NEVER be modeled. It won't drop
-        a cre ID from a particular cell-type if it cant be modeled in that cell-type. 
-
-        For this reason, you mush re-run this function after subsetting data.
-        """
-        #tabtype = table_type(self.data.columns)
-        #assert tabtype == "mpra_umiwise", "Malformed table."
-
-        ###
-    
-    def filter_low_umi_count(self, 
-                         group_by: list[str] = ['cre_id', 'cell_type']):
-        """
-        Data must be umiwise.
-
-        Drops rows which would correspond to models
-        with not less than MIN_PTS nonzero cells (observations) to model.
-
-        Note that this a pretty permissive filtering : it doesn't drop *combinations* of group_by
-        e.g. it will only drop a cre_id if it could NEVER be modeled. It won't drop
-        a cre ID from a particular cell-type if it cant be modeled in that cell-type. 
-
-        For this reason, you mush re-run this function after subsetting data.
+        Removes combinations of cre_id, cell_type which have less than MIN_PTS non-zero observations. 
+        This is much stricter than filter_low_umi_count
         """
         tabtype = table_type(self.data.columns)
         assert tabtype == "mpra_umiwise", "Malformed table."
 
-        filtered = self.data.copy()
-        dropped_groups = {}
+        # Count non-zero values per (cell_type, cre_id) group
+        valid_combos = (
+            self.data[self.data['umis_mpra_bc'] > 0]
+            .groupby(['cell_type', 'cre_id'])
+            .size()
+            .reset_index(name='nonzero_count')
+            .query('nonzero_count >= @MIN_PTS')
+            [['cell_type', 'cre_id']]
+        )
 
-        #there's definitely a more efficient way of doing this
-        for col in group_by:
-            # Find groups with too few nonzero UMIs
-            low_count_mask = (
-                filtered.groupby(col)["umis_mpra_bc"]
-                .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
-            )
-            dropped = low_count_mask[low_count_mask].index.tolist()
-            dropped_groups[col] = dropped
-
-            # Keep only valid rows
-            filtered = filtered[~filtered[col].isin(dropped)]
-
+        # Keep only rows matching valid (cell_type, cre_id) combos
+        self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
         
-        logger.info(f"Dropping cell-types & cres with below {MIN_PTS} (MIN_PTS) observations: f{dropped_groups}")
-        
-        
-
         #record that we performed this operation
         self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
-        
-        #apply the filtering
-        self.data=filtered
-        
-
-
-
-
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
