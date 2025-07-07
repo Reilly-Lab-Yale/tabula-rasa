@@ -116,7 +116,10 @@ class scMPRA_data:
     Wrapper around a pandas dataframe of MPRA data. 
     The primary purpose of the object is to record what operations have been performed on the data
     (Pandas does not support metadata)
+
     Could possibly replace with an anndata object.
+    Alternatively. also allow pass-through of pandas operations & record them... 
+    Alternatively, just implement a couple common operations (subsetting & friends) manually
     """
     def __init__(self):
         self.data=None
@@ -174,6 +177,9 @@ class scMPRA_data:
         self.data=self.data.merge(umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],on=["cell_bc","rep_id"],how="right")
 
         self.operations.append('total_umi')
+    
+
+        
     
     @classmethod
     def from_tsv(cls, filepath):
@@ -282,11 +288,45 @@ class scMPRA_data:
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
 
+    
+    
+    @unimplemented
+    def filter_low_observation_count(self, 
+                         group_by: list[str] = ['cre_id', 'cell_type']):
+        """
+        Data must be umiwise.
+
+        Drops rows which would correspond to models
+        with not less than MIN_PTS cells (observations) to model.
+        
+        This function is a probably better option than `filter_low_umi_count`
+        when zeroes are enriched for "true zeroes" : e.g. data were pre-filtered
+        on a tranfection reporter.
+
+        Note that this a pretty permissive filtering : it doesn't drop *combinations* of group_by
+        e.g. it will only drop a cre_id if it could NEVER be modeled. It won't drop
+        a cre ID from a particular cell-type if it cant be modeled in that cell-type. 
+
+        For this reason, you mush re-run this function after subsetting data.
+        """
+        #tabtype = table_type(self.data.columns)
+        #assert tabtype == "mpra_umiwise", "Malformed table."
+
+        ###
+    
     def filter_low_umi_count(self, 
                          group_by: list[str] = ['cre_id', 'cell_type']):
         """
-        Takes a umiwise MPRA dataframe and drops rows which would correspond to models
-        with not enough cells (observations) to model.
+        Data must be umiwise.
+
+        Drops rows which would correspond to models
+        with not less than MIN_PTS nonzero cells (observations) to model.
+
+        Note that this a pretty permissive filtering : it doesn't drop *combinations* of group_by
+        e.g. it will only drop a cre_id if it could NEVER be modeled. It won't drop
+        a cre ID from a particular cell-type if it cant be modeled in that cell-type. 
+
+        For this reason, you mush re-run this function after subsetting data.
         """
         tabtype = table_type(self.data.columns)
         assert tabtype == "mpra_umiwise", "Malformed table."
@@ -307,9 +347,11 @@ class scMPRA_data:
             # Keep only valid rows
             filtered = filtered[~filtered[col].isin(dropped)]
 
-        #warn the user about what we dropped
+        
         logger.info(f"Dropping cell-types & cres with below {MIN_PTS} (MIN_PTS) observations: f{dropped_groups}")
         
+        
+
         #record that we performed this operation
         self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
         
