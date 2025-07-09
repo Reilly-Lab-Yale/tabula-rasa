@@ -69,6 +69,8 @@ def table_type(column_names):
     Is kind with respect to extra columns & optional columns. 
     
     (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
+
+    TODO: move to the inside of the scMPRA object
     """
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
@@ -146,6 +148,7 @@ class scMPRA_data:
         #(Can be deduced from difference between cre_id and 
         #cre_id_original, but this is more convienient).
         self.negative_controls=self.negative_controls+negative_controls
+    
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
@@ -307,6 +310,37 @@ class scMPRA_data:
         
         #record that we performed this operation
         self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+
+    @unimplemented
+    def round_down_zeroes():
+        """
+        TODO: implement
+        ON HOLD: not clear how much we really care about making comparisons to zeroed CREs..
+        If, later on, we find that we want to make these comparisons, come back and implement this.
+
+        This is a follow-up to "ortho_filter".
+
+        When a CRE+Cell-type combination has too few cells with non-zero observations
+        to be modeled, this could be for one of two reasons.
+        1. The CRE (in that cell-type) is simply expressed at too low a level to be detected here.
+        2. Something technical went wrong. e.g. CRE was transfected into that cell-type at a low efficiency. 
+
+        In either case, we cannot model that CRE-cell-type combination. However, recognizing the difference
+        can be important. e.g. in case 2, we can't make any statements that that CRE + cell-type is 
+        sig different from another CRE+cell-type. In case 1, we can! We just can't use the wald test.
+
+        Things that differentiate case 1 from case 2 : 
+        - If the few measurement(s) which are actually present in the data are a high number of UMIs
+            that suggests 2 over 1. If they are a low number, that suggests 1 over 2. 
+        - If the data are post transfection reporter filtering, then a large number of zeroes indicates
+        case 1
+
+        This function will use that information to call each filtered CRE as either "not detected" (1) or "dropout" (2)
+        The default is "dropout", and the presence of sufficient evidence can move a filtered combination
+        to "not detected".
+        
+        """
+        pass
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
