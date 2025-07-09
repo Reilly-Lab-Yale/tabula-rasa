@@ -533,7 +533,7 @@ def fit(client,
     dry : dry run: don't actually fit anything, just return an experiment_model 
     broken_on : "unified" for one model, or put the name of a column 
     """
-    ret=experiment_model(model={},uniq_predictor={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
+    ret=experiment_model(model={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
     if dry:
         return ret
     
@@ -612,21 +612,18 @@ def fit(client,
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 class experiment_model:
     """
-    uniq_predictor stores...
     """
 
     def __init__(self,
             model,
-            uniq_predictor,
             nb_formula:str,
             zi_formula:str,
-            broken_on:str,
-            round_down_threshold:int=4):
+            broken_on:str):
 
         self.nb_formula=nb_formula
         self.zi_formula=zi_formula
         self.broken_on=broken_on
-        self.round_down_threshold=round_down_threshold
+        #self.round_down_threshold=round_down_threshold
         self.model=model
         #self.uniq_predictor=uniq_predictor
 
@@ -634,9 +631,9 @@ class experiment_model:
 
 class ortho:
     """
-    Stores multiple models of the same data.
+    Stores multiple models of the same data
+    one set of by_cre models, and one set of by cell type models
     Not to be used with multiple datasets. 
-    stores hypothesis sets & coresp. models
     """
     def __init__(self):
         self.by_cre=None
@@ -645,7 +642,13 @@ class ortho:
         self.by_cell_type=None
         self.by_cell_type_parameters=None
 
+        self.by_cre_design=None
+        self.by_cell_type_design=None
+        
         self.training_data=None
+
+        
+        
 
     def save(self,path,name):
         """
@@ -699,7 +702,7 @@ class ortho:
         
         return ret
 
-    def criss_cross(self,client,dat,retain_design_matricies=False,retain_metadata=True):
+    def criss_cross(self,client,dat,retain_metadata=True):
         """
         Note: a little computationally intensive...
         Rewrite to break each direction into separate function calls
@@ -707,13 +710,8 @@ class ortho:
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
-        if retain_design_matricies:
-            #mostly for debugging
-            self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-            self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
-        else:
-            self.by_cre=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
-            self.by_cell_type=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+        self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
+        self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
         
         if retain_metadata:
             self.training_data=dat.copy(exclude=('data',))
@@ -761,10 +759,12 @@ class ortho:
                     self.by_cell_type.nb=client.submit(undo_norm_method,self.by_cell_type)
 
 class parameters:
-    def __init__(self, nb, zi, theta):
+    def __init__(self, nb, zi, theta, broken_on):
         self.nb=nb
         self.zi=zi
         self.theta=theta
+
+        self.broken_on = broken_on
 
         assert nb.keys() == zi.keys()
         assert zi.keys() == theta.keys()
@@ -772,7 +772,7 @@ class parameters:
         self.keys=list(nb.keys())
 
 
-def model_to_parameters(model):
+def model_to_parameters_DEPRICATED(model):
     """
     A function to extract model parameter triples from simple model.
     Currently pretty bespoke: be careful with more complicated models... 
