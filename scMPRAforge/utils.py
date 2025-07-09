@@ -87,39 +87,44 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
 
     return ret
 
-def undo_one_hot_encoding(df):
-    """should work for dask and pandas dataframes."""
-    df=df.copy()
-    # Step 1: Group one-hot columns by prefix
-    one_hot_groups = {}
+def undo_one_hot_encoding(df, reference_label="reference"):
+    """Should work for Dask and pandas DataFrames. Converts one-hot back to categorical.
+    Rows with all zeros (intercept-only rows) are labeled with `reference_label`.
+    """
+    df = df.copy()
     pattern = re.compile(r'^C\((.+?)\)\[(.+?)\]$')
+    one_hot_groups = {}
 
+    # Step 1: Group one-hot columns by prefix
     for col in df.columns:
         match = pattern.match(col)
         if match:
             var, level = match.groups()
             one_hot_groups.setdefault(var, []).append((col, level))
 
-    # Step 2: For each group, find active column and map back to category
+    # Step 2: Undo one-hot encoding per group
     for var, cols_levels in one_hot_groups.items():
         cols, levels = zip(*cols_levels)
         subdf = df[list(cols)]
-        
-        # Check for multi-hot rows (more than one '1' per row)
-        multi_hot = subdf.sum(axis=1) > 1
-        if multi_hot.any():
-            raise ValueError(
-                f"Multi-hot encoding detected in variable '{var}'. Each row must have only one active level."
-            )
-        
-        # Get the index of the 1 in each row
-        inferred = subdf.idxmax(axis=1)
-        # Map column name back to category level
-        level_map = {col: level for col, level in cols_levels}
-        df[var] = inferred.map(level_map)
 
-        # drop the one-hot columns
-        df=df.drop(columns=list(cols))
+        row_sums = subdf.sum(axis=1)
+
+        # Check for multi-hot rows (invalid)
+        if (row_sums > 1).any():
+            raise ValueError(
+                f"Multi-hot encoding detected in variable '{var}'. Each row must have only one active level or be intercept-only."
+            )
+
+        # Determine the level for each row
+        inferred = subdf.idxmax(axis=1)
+        level_map = {col: level for col, level in cols_levels}
+        result = inferred.map(level_map)
+
+        # Assign reference label to rows where all one-hot cols are zero
+        result[row_sums == 0] = reference_label
+
+        df[var] = result
+        df = df.drop(columns=list(cols))
 
     return df
 
