@@ -570,16 +570,16 @@ def fit(client,
 
 
     ### create uniq_predictor ### 
-    uniq_predictor_futures = {
-        t: (
-            client.submit(lambda tup: tup[0].drop_duplicates(), mats_futures[t]),
-            client.submit(lambda tup: tup[2].drop_duplicates(), mats_futures[t])
-        )
-        for t in types
-    }
+    #uniq_predictor_futures = {
+    #    t: (
+    #        client.submit(lambda tup: tup[0].drop_duplicates(), mats_futures[t]),
+    #        client.submit(lambda tup: tup[2].drop_duplicates(), mats_futures[t])
+    #    )
+    #    for t in types
+    #}
     #recall the order is X,y,Z. We only want predictors, which are X,Z, hence 0,2
 
-    ###create statsmodel futures###
+    ###create tensorzinb futures###
     tzinb_futures = {
         t: client.submit(
                 timed_tensorzinb_fit,
@@ -593,7 +593,7 @@ def fit(client,
     model_future=client.submit(
         experiment_model,
         model=tzinb_futures,
-        uniq_predictor=uniq_predictor_futures,
+        #uniq_predictor=uniq_predictor_futures,
         nb_formula=nb_formula,
         zi_formula=zi_formula,
         broken_on=broken_on,
@@ -628,7 +628,7 @@ class experiment_model:
         self.broken_on=broken_on
         self.round_down_threshold=round_down_threshold
         self.model=model
-        self.uniq_predictor=uniq_predictor
+        #self.uniq_predictor=uniq_predictor
 
 
 
