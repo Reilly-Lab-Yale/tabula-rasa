@@ -286,7 +286,6 @@ class scMPRA_data:
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
 
     
-    
     def ortho_filter(self):
         """
         Removes combinations of cre_id, cell_type which have less than MIN_PTS non-zero observations. 
@@ -296,20 +295,32 @@ class scMPRA_data:
         assert tabtype == "mpra_umiwise", "Malformed table."
 
         # Count non-zero values per (cell_type, cre_id) group
-        valid_combos = (
+        nonzero_counts = (
             self.data[self.data['umis_mpra_bc'] > 0]
             .groupby(['cell_type', 'cre_id'])
             .size()
             .reset_index(name='nonzero_count')
-            .query('nonzero_count >= @MIN_PTS')
-            [['cell_type', 'cre_id']]
         )
+
+        valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
+        all_combos = nonzero_counts[['cell_type', 'cre_id']]
+
+        # Compute dropped combos
+        dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
+        self.dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
 
         # Keep only rows matching valid (cell_type, cre_id) combos
         self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
-        
-        #record that we performed this operation
+
+        # Print stats
+        n_total = len(all_combos)
+        n_dropped = len(self.dropped_combos)
+        logger.info(f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries.")
+
+
+        # Record that we performed this operation
         self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+
 
     @unimplemented
     def round_down_zeroes():
