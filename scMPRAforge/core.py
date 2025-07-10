@@ -464,11 +464,6 @@ triples
 
 
 
-def create_matricies(nb_formula,zi_formula,data):
-    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
-    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
-    return(X, y, Z)
-
 def abort_on_failure(future,client):
     """
     Call this function with a completed future that is strictly necessary for the task at hand.
@@ -490,126 +485,6 @@ def abort_on_failure(future,client):
 
 
 
-def toosmall(y):
-    if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
-        return True
-    else:
-        return False
-
-def tensorzinb_fit(p):
-    X, y, Z = p
-    if toosmall(y):
-        raise ValueError("One of the models doesn't have enough data for a good fit. Did you run `filter_low_umi_count`?")
-        # return "too_small"
-
-    from tensorzinb.tensorzinb import TensorZINB
-
-    zinbo = TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1, 1)), X.to_numpy(), exog_infl=Z.to_numpy())  # ,same_dispersion=True
-    zinb_result = None
-    try:
-        zinb_result = zinbo.fit(init_method="nb")
-    except InvalidIndexError:
-        return "index_error"
-
-    return zinb_result
-
-# Timed tensorzinb_fit wrapper
-
-def timed_tensorzinb_fit(p, label=None):
-    start = time.time()
-    try:
-        result = tensorzinb_fit(p)
-    except Exception as e:
-        result = e
-    end = time.time()
-    duration = end - start
-    logger.info(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
-    return result
-
-
-def fit(client,
-    data,
-    nb_formula:str,
-    zi_formula:str,
-    broken_on:str,
-    dry:bool=False,
-    return_design_matricies=False):
-    """
-    dry : dry run: don't actually fit anything, just return an experiment_model 
-    broken_on : "unified" for one model, or put the name of a column 
-    """
-    ret=experiment_model(model={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on)
-    if dry:
-        return ret
-    
-    ###create design matricies###
-    types=None
-    mats_futures=None
-    if broken_on == "unified":
-        #unified model
-        types=["unified"]
-        mats_futures = {'unified':client.submit(create_matricies,
-            data=data,
-            zi_formula=zi_formula,
-            nb_formula=nb_formula
-        )}
-    else:
-        #not a unified model : let's get all the proper types
-        #that is : the name of each value for the column we split on
-        types_future = client.submit(lambda df: df[broken_on].unique(), data)
-        #wait & grab result (small enough for master node)
-        types = types_future.result()
-        abort_on_failure(types_future,client)
-
-        #now that we have the types, submit jobs to create design matrices from each data slice
-        #we do the slicing in a little sumbitted lambda
-        mats_futures = {
-            t: client.submit(
-                create_matricies,
-                data=client.submit(lambda df, t=t: df[df[broken_on] == t], data, t),
-                zi_formula=zi_formula,
-                nb_formula=nb_formula
-            )
-            for t in types
-        }
-
-
-    ### create uniq_predictor ### 
-    #uniq_predictor_futures = {
-    #    t: (
-    #        client.submit(lambda tup: tup[0].drop_duplicates(), mats_futures[t]),
-    #        client.submit(lambda tup: tup[2].drop_duplicates(), mats_futures[t])
-    #    )
-    #    for t in types
-    #}
-    #recall the order is X,y,Z. We only want predictors, which are X,Z, hence 0,2
-
-    ###create tensorzinb futures###
-    tzinb_futures = {
-        t: client.submit(
-                timed_tensorzinb_fit,
-                mats_futures[t],
-                label=t
-            )
-        for t in types
-    }
-
-    ###put data in proper class and return###
-    model_future=client.submit(
-        experiment_model,
-        model=tzinb_futures,
-        #uniq_predictor=uniq_predictor_futures,
-        nb_formula=nb_formula,
-        zi_formula=zi_formula,
-        broken_on=broken_on
-    )
-    if return_design_matricies:
-        return(model_future,mats_futures)
-    else:
-        return model_future
-
-
-
 
 
 #        1         2         3         4         5         6         7         8
@@ -620,13 +495,8 @@ class experiment_model:
 
     def __init__(self,
             model,
-            nb_formula:str,
-            zi_formula:str,
-            broken_on:str):
-
-        self.nb_formula=nb_formula
-        self.zi_formula=zi_formula
-        self.broken_on=broken_on
+            split:str):
+        self.split=split
         self.model=model
 
 
@@ -756,25 +626,40 @@ def model_to_parameters(model,design_matrix):
     #iterate over each sub model...
     for key in model_keys:
         ## Extract design matrix data ##
-        X, y, Z=design_matrix[key]
+        X=design_matrix[key].result()["nb_regressors"]
+        y=design_matrix[key].result()["regressand"]
+        Z=design_matrix[key].result()["zi_regressors"]
+        reference=design_matrix[key].result()["reference"]
+        model_type=design_matrix[key].result()["model_type"]
+
         
         ## theta ##
-        theta[key]=model.model[key]['weights']['theta'].squeeze()
+        theta[key]=model.model[key].result()['weights']['theta'].squeeze()
         
         ## Mu ##
         
-        # multiply design matrix by weights
-        linear_mu= X @ model.model[key]["weights"]["x_mu"]
+        #multiply design matrix by weights
+        linear_mu= X @ model.model[key].result()["weights"]["x_mu"]
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
         
         #Get the level names for each row in the DF
-        level_type=scm.anti_split(model.broken_on)
-        row_labeling=scm.undo_one_hot_encoding(X)
-        row_labeling=row_labeling[f"{level_type}, contr.treatment(base='reference')"]
+        level_type=anti_split(model.split)
 
-        #remove T. prefix
-        row_labeling=row_labeling.str.removeprefix("T.")
+
+        if model_type=="contrastable":
+            row_labeling=undo_one_hot_encoding(X)
+            row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
+            #remove T. prefix
+            row_labeling=row_labeling.str.removeprefix("T.")
+            #cell_labeling=cell_labeling.rename({f"{anti}, contr.treatment(base='{reference}')":anti},axis=1)
+            #cell_labeling=cell_labeling[anti]
+            #cell_labeling=cell_labeling.str.removeprefix("T.")
+        elif model_type=="simulation_only":
+            #only one cell-type
+            row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
+
+        
         
         #Merge those level names onto the predictions for each row
         mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
@@ -785,11 +670,11 @@ def model_to_parameters(model,design_matrix):
 
         ## ZI ##
         # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
+        linear_zi=(Z.to_numpy() @ model.model[key].result()["weights"]["x_pi"])
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
 
         #extract names 
-        replicate_labeling=scm.undo_one_hot_encoding(Z)["rep_id"]
+        replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
         replicate_labeling=replicate_labeling.str.removeprefix("T.")
         #apply names to ZI
         zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
@@ -799,7 +684,7 @@ def model_to_parameters(model,design_matrix):
 
         #break
     
-    return scm.parameters(nb=nb, zi=zi, theta=theta,broken_on=model.broken_on)
+    return parameters(nb=nb, zi=zi, theta=theta,broken_on=model.split)
 
 
 def describe_parameters(client,parameters,dat,split):
