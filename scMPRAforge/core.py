@@ -649,8 +649,6 @@ class ortho:
         
         self.training_data=None
 
-        
-        
 
     def save(self,path,name):
         """
@@ -712,8 +710,8 @@ class ortho:
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
-        self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-        self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
+        self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type, contr.treatment(base='reference'))",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
+        self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id, contr.treatment(base='reference'))",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
         
         if retain_metadata:
             self.training_data=dat.copy(exclude=('data',))
