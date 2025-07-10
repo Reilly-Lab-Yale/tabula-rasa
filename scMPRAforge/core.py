@@ -720,43 +720,11 @@ class ortho:
         """Extracts parameters for all models in the object"""
 
         if not self.by_cre is None:
-            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre)
+            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre,self.by_cre_design)
         
         if not self.by_cell_type is None:
-            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
+            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type,self.by_cell_type_design)
         
-        if self.training_data==None:
-            logger.warning("Extracting ZINB parameters but we have no metadata from the training data : assuming no normalization to undo!")
-        else:
-            
-
-            #proofs:
-            #obsidian://open?vault=science&file=no_pub%2FscMPRA-sim_main `2025-06-26`
-            #make this into a nice notebook if it works
-
-            #undo normalizations in the opposite order they were applied....
-            for normalization in self.training_data.normalizations[::-1]:
-                undo_norm_method=None
-                
-                if normalization=="over100":
-
-                    def unover100(param):
-                        #undo transformation on mean parameter
-                        
-                        #param.nb=param.nb*100
-                        #compute 
-                        return param
-
-                    undo_norm_method=unover100
-
-                else:
-                    raise NotImplementedError("Normalization undo not implemented yet")
-                
-                #submit jobs to undo normalization with whatever method we just picked.
-                if not self.by_cre is None:
-                    self.by_cre.nb=client.submit(undo_norm_method,self.by_cre)
-                if not self.by_cell_type is None:
-                    self.by_cell_type.nb=client.submit(undo_norm_method,self.by_cell_type)
 
 class parameters:
     def __init__(self, nb, zi, theta, broken_on):
@@ -772,66 +740,66 @@ class parameters:
         self.keys=list(nb.keys())
 
 
-def model_to_parameters_DEPRICATED(model):
-    """
-    A function to extract model parameter triples from simple model.
-    Currently pretty bespoke: be careful with more complicated models... 
-    """
-    #should rework to use multi-indexes instead of sorting & assuming they are the same
-    
-    #currently assuming a single theta per model (equal variances within a model).
-    #also does not intelligently sum for interaction effects : so just use for non-interaction for now...
-    #Need also to test with incomplete matricies (non-cartesian product) : applying labels will probably break
+def model_to_parameters(model,design_matrix):
 
-    #recall the order within each tuple: (X,y,Z), but here we skip y
-    #so it is just X, Z
-    
+    # Sanity check
+    model_keys=list(model.model.keys())
+    design_matrix_keys=list(design_matrix.keys())
+    model_keys.sort()
+    design_matrix_keys.sort()
+    assert model_keys == design_matrix_keys, "Unlike split."
+
     zi={}
     nb={}
     theta={}
-
-    for key in model.model:
+    
+    #iterate over each sub model...
+    for key in model_keys:
+        ## Extract design matrix data ##
+        X, y, Z=design_matrix[key]
+        
         ## theta ##
         theta[key]=model.model[key]['weights']['theta'].squeeze()
         
+        ## Mu ##
+        
+        # multiply design matrix by weights
+        linear_mu= X @ model.model[key]["weights"]["x_mu"]
+        #undo the link function to get predictions for each cell
+        mu_predictions=np.exp(linear_mu)
+        
+        #Get the level names for each row in the DF
+        level_type=scm.anti_split(model.broken_on)
+        row_labeling=scm.undo_one_hot_encoding(X)
+        row_labeling=row_labeling[f"{level_type}, contr.treatment(base='reference')"]
+
+        #remove T. prefix
+        row_labeling=row_labeling.str.removeprefix("T.")
+        
+        #Merge those level names onto the predictions for each row
+        mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
+
+        #aggregate predictions to one per level name
+        mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
+        nb[key]=mu_summary
+
         ## ZI ##
-        #extract min design matrix & sort
-        #We need to sort to match the order in the tensorzinb model...
-        zi_df=model.uniq_predictor[key][1]
-        zi_df=zi_df.sort_values(zi_df.columns.tolist(),ascending=False)
+        # multiply design matrix by weights
+        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
+        zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
 
-        #multiply out & undo link
-        result=(zi_df.values @ model.model[key]["weights"]["x_pi"]).squeeze()
-        result=1/(1+np.exp(-result))
-        #save multi-hot column names
-        col=zi_df.columns.to_list()
-        #add nb parameter reconstructions to multi-hot
-        zi_df["zi"]=result
-        #set all columns other than zi to be a multi-index indexing the zi estimates
-        zi_df.set_index(col,inplace=True)
-        #add to dictionary...
-        zi[key]=zi_df
+        #extract names 
+        replicate_labeling=scm.undo_one_hot_encoding(Z)["rep_id"]
+        replicate_labeling=replicate_labeling.str.removeprefix("T.")
+        #apply names to ZI
+        zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
+        #aggregate
+        zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
+        zi[key]=zi_summary
 
-        ## NB ##
-        #extract min design matrix & sort
-        nb_df=model.uniq_predictor[key][0]
-        nb_df=nb_df.sort_values(nb_df.columns.tolist(),ascending=False)
-
-        #multiply out & undo link
-        result=(nb_df.values @ model.model[key]['weights']['x_mu']).squeeze()
-        result=np.exp(result)
-        #save multi-hot column names
-        col=nb_df.columns.to_list()
-        #add zi parameter reconstruction to multi-hot
-        nb_df["nb"]=result
-        #set all columns other than nb to be a multi-index indexing the nb estimates
-        nb_df.set_index(col,inplace=True)
-        #add to dictionary
-        nb[key]=nb_df
-
-
+        #break
     
-    return parameters(nb=nb, zi=zi, theta=theta)
+    return scm.parameters(nb=nb, zi=zi, theta=theta,broken_on=model.broken_on)
 
 
 def describe_parameters(client,parameters,dat,split):
