@@ -50,8 +50,6 @@ def helloworld():
     pass
 
 
-
-
 def table_type(column_names):
     """
     Arguments:
@@ -130,6 +128,7 @@ class scMPRA_data:
         self.metadata=None
         self.operations=[]
         self.negative_controls=[]
+        self.reference_cell_type=None
     
     def set_negative_controls(self,negative_controls:list[str]):
         """
@@ -142,13 +141,20 @@ class scMPRA_data:
         
         #flatten all labels of negative controls
         for control in negative_controls:
-            self.data["cre_id"]=self.data["cre_id"].replace(control, "negative_control")
+            self.data["cre_id"]=self.data["cre_id"].replace(control, "reference")
 
         #record which names we have flattened.
         #(Can be deduced from difference between cre_id and 
         #cre_id_original, but this is more convienient).
         self.negative_controls=self.negative_controls+negative_controls
     
+    
+    def set_reference_cell(self,reference_cell_type):
+        assert self.reference_cell_type is None, "Already set reference cell type."
+        
+        self.reference_cell_type=reference_cell_type
+
+        self.data["cell_type"]=self.data["cell_type"].replace(reference_cell_type, "reference")
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
