@@ -532,14 +532,13 @@ def fit(client,
     nb_formula:str,
     zi_formula:str,
     broken_on:str,
-    round_down_threshold:int=4,
     dry:bool=False,
     return_design_matricies=False):
     """
     dry : dry run: don't actually fit anything, just return an experiment_model 
     broken_on : "unified" for one model, or put the name of a column 
     """
-    ret=experiment_model(model={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
+    ret=experiment_model(model={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on)
     if dry:
         return ret
     
@@ -602,8 +601,7 @@ def fit(client,
         #uniq_predictor=uniq_predictor_futures,
         nb_formula=nb_formula,
         zi_formula=zi_formula,
-        broken_on=broken_on,
-        round_down_threshold=round_down_threshold
+        broken_on=broken_on
     )
     if return_design_matricies:
         return(model_future,mats_futures)
@@ -629,9 +627,7 @@ class experiment_model:
         self.nb_formula=nb_formula
         self.zi_formula=zi_formula
         self.broken_on=broken_on
-        #self.round_down_threshold=round_down_threshold
         self.model=model
-        #self.uniq_predictor=uniq_predictor
 
 
 
