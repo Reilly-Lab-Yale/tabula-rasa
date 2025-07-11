@@ -640,6 +640,9 @@ class experiment_model:
         self.split=split
         self.model=model
 
+    def flatten_out_futures(self):
+        for key in self.model:
+            self.model[key]=self.model[key].result()
 
 
 class ortho:
