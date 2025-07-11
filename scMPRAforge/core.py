@@ -488,13 +488,14 @@ def abort_on_failure(future,client):
 def nb_versus_means(params,design_matricies,scMPRAdat):
     """
     Takes a model & design matricies corresponding to one direction of an ortho
-    (A set of 'by_cre' or a 'by_cell-type') and  and produces a QC dictionary
-    regressing data means against nb estimates
+    (A set of 'by_cre' or a 'by_cell-type') and the original training data and produces a QC dictionary
+    regressing data means against nb estimates.
+    Used for quality control.
     """
     
     assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
     split=params.broken_on
-    anti=scm.anti_split(split)
+    anti=anti_split(split)
 
     data=scMPRAdat.data
 
@@ -625,9 +626,9 @@ def standard_fit(client,data,split):
         for t in levels
     }
     
-    return(mats_futures,
-           experiment_model(model=tzinb_futures,
-                                split=split))
+    return(experiment_model(model=tzinb_futures,
+                                split=split),
+            mats_futures)
 
 class experiment_model:
     """
@@ -712,19 +713,29 @@ class ortho:
         
         return ret
 
-    def criss_cross(self,client,dat,retain_metadata=True):
+    @unimplemented
+    def cleanup():
         """
-        Note: a little computationally intensive...
-        Rewrite to break each direction into separate function calls
+        TODO: implement function which scrubs un-needed data to save space. 
+        """
+    
+    def criss_cross(self,client,dat):
+        """
+        Makes by_cre and by_cell_type models.
 
+        Note: a little computationally intensive...
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
-        self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type, contr.treatment(base='reference'))",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-        self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id, contr.treatment(base='reference'))",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
+        self.by_cre, self.by_cre_design=standard_fit(client,
+                                                     dat,
+                                                     split="cre_id")
         
-        if retain_metadata:
-            self.training_data=dat.copy(exclude=('data',))
+        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
+                                                        dat,
+                                                        split="cell_type")
+        
+        self.training_data=dat.copy()
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
@@ -751,6 +762,17 @@ class parameters:
 
 
 def model_to_parameters(model,design_matrix):
+    """
+    Not lazy : just matrix multiplication and looping
+    Will hang if model fitting isn't done yet. 
+    """
+    
+
+    for key in model.model:
+        model.model[key]=model.model[key].result()
+    
+    #for key in design_matrix:
+    #    design_matrix[key]=design_matrix[key].result()
 
     # Sanity check
     model_keys=list(model.model.keys())
@@ -766,20 +788,20 @@ def model_to_parameters(model,design_matrix):
     #iterate over each sub model...
     for key in model_keys:
         ## Extract design matrix data ##
-        X=design_matrix[key].result()["nb_regressors"]
-        y=design_matrix[key].result()["regressand"]
-        Z=design_matrix[key].result()["zi_regressors"]
-        reference=design_matrix[key].result()["reference"]
-        model_type=design_matrix[key].result()["model_type"]
+        X=design_matrix[key]["nb_regressors"]
+        y=design_matrix[key]["regressand"]
+        Z=design_matrix[key]["zi_regressors"]
+        reference=design_matrix[key]["reference"]
+        model_type=design_matrix[key]["model_type"]
 
         
         ## theta ##
-        theta[key]=model.model[key].result()['weights']['theta'].squeeze()
+        theta[key]=model.model[key]['weights']['theta'].squeeze()
         
         ## Mu ##
         
         #multiply design matrix by weights
-        linear_mu= X @ model.model[key].result()["weights"]["x_mu"]
+        linear_mu= X @ model.model[key]["weights"]["x_mu"]
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
         
@@ -810,7 +832,7 @@ def model_to_parameters(model,design_matrix):
 
         ## ZI ##
         # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model.model[key].result()["weights"]["x_pi"])
+        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
 
         #extract names 
