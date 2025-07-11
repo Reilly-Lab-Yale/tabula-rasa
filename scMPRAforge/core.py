@@ -50,8 +50,6 @@ def helloworld():
     pass
 
 
-
-
 def table_type(column_names):
     """
     Arguments:
@@ -69,6 +67,8 @@ def table_type(column_names):
     Is kind with respect to extra columns & optional columns. 
     
     (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
+
+    TODO: move to the inside of the scMPRA object
     """
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
@@ -116,7 +116,10 @@ class scMPRA_data:
     Wrapper around a pandas dataframe of MPRA data. 
     The primary purpose of the object is to record what operations have been performed on the data
     (Pandas does not support metadata)
+
     Could possibly replace with an anndata object.
+    Alternatively. also allow pass-through of pandas operations & record them... 
+    Alternatively, just implement a couple common operations (subsetting & friends) manually
     """
     def __init__(self):
         self.data=None
@@ -124,6 +127,34 @@ class scMPRA_data:
         self.source=None
         self.metadata=None
         self.operations=[]
+        self.negative_controls=[]
+        self.reference_cell_type=None
+    
+    def set_negative_controls(self,negative_controls:list[str]):
+        """
+        Takes a list of CRE names that we consider to be negative controls and give them all the name "negative_control", lumping all their data together.
+        """
+
+        if self.negative_controls==[]:
+            #User has set no negative controls before now. Back up cre_id information before we mutate it.
+            self.data["cre_id_original"]=self.data["cre_id"]
+        
+        #flatten all labels of negative controls
+        for control in negative_controls:
+            self.data["cre_id"]=self.data["cre_id"].replace(control, "reference")
+
+        #record which names we have flattened.
+        #(Can be deduced from difference between cre_id and 
+        #cre_id_original, but this is more convienient).
+        self.negative_controls=self.negative_controls+negative_controls
+    
+    
+    def set_reference_cell(self,reference_cell_type):
+        assert self.reference_cell_type is None, "Already set reference cell type."
+        
+        self.reference_cell_type=reference_cell_type
+
+        self.data["cell_type"]=self.data["cell_type"].replace(reference_cell_type, "reference")
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
@@ -170,9 +201,6 @@ class scMPRA_data:
         ret.data=tab
         ret.table_type=tabtype
         ret.source=filepath
-        #apply QC
-        ret.filter_low_umi_count()
-        ret.total_umi()
 
         return ret
     
@@ -263,44 +291,73 @@ class scMPRA_data:
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
 
-    def filter_low_umi_count(self, 
-                         group_by: list[str] = ['cre_id', 'cell_type']):
+    
+    def ortho_filter(self):
         """
-        Takes a umiwise MPRA dataframe and drops rows which would correspond to models
-        with not enough cells (observations) to model.
+        Removes combinations of cre_id, cell_type which have less than MIN_PTS non-zero observations. 
+        This is much stricter than filter_low_umi_count
         """
         tabtype = table_type(self.data.columns)
         assert tabtype == "mpra_umiwise", "Malformed table."
 
-        filtered = self.data.copy()
-        dropped_groups = {}
+        # Count non-zero values per (cell_type, cre_id) group
+        nonzero_counts = (
+            self.data[self.data['umis_mpra_bc'] > 0]
+            .groupby(['cell_type', 'cre_id'])
+            .size()
+            .reset_index(name='nonzero_count')
+        )
 
-        #there's definitely a more efficient way of doing this
-        for col in group_by:
-            # Find groups with too few nonzero UMIs
-            low_count_mask = (
-                filtered.groupby(col)["umis_mpra_bc"]
-                .apply(lambda col: (col.to_numpy() > 0).sum() < MIN_PTS)
-            )
-            dropped = low_count_mask[low_count_mask].index.tolist()
-            dropped_groups[col] = dropped
+        valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
+        all_combos = nonzero_counts[['cell_type', 'cre_id']]
 
-            # Keep only valid rows
-            filtered = filtered[~filtered[col].isin(dropped)]
+        # Compute dropped combos
+        dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
+        self.dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
 
-        #warn the user about what we dropped
-        logger.info(f"Dropping cell-types & cres with below {MIN_PTS} (MIN_PTS) observations: f{dropped_groups}")
-        
-        #record that we performed this operation
+        # Keep only rows matching valid (cell_type, cre_id) combos
+        self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
+
+        # Print stats
+        n_total = len(all_combos)
+        n_dropped = len(self.dropped_combos)
+        logger.info(f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries.")
+
+
+        # Record that we performed this operation
         self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+
+
+    @unimplemented
+    def round_down_zeroes():
+        """
+        TODO: implement
+        ON HOLD: not clear how much we really care about making comparisons to zeroed CREs..
+        If, later on, we find that we want to make these comparisons, come back and implement this.
+
+        This is a follow-up to "ortho_filter".
+
+        When a CRE+Cell-type combination has too few cells with non-zero observations
+        to be modeled, this could be for one of two reasons.
+        1. The CRE (in that cell-type) is simply expressed at too low a level to be detected here.
+        2. Something technical went wrong. e.g. CRE was transfected into that cell-type at a low efficiency. 
+
+        In either case, we cannot model that CRE-cell-type combination. However, recognizing the difference
+        can be important. e.g. in case 2, we can't make any statements that that CRE + cell-type is 
+        sig different from another CRE+cell-type. In case 1, we can! We just can't use the wald test.
+
+        Things that differentiate case 1 from case 2 : 
+        - If the few measurement(s) which are actually present in the data are a high number of UMIs
+            that suggests 2 over 1. If they are a low number, that suggests 1 over 2. 
+        - If the data are post transfection reporter filtering, then a large number of zeroes indicates
+        case 1
+
+        This function will use that information to call each filtered CRE as either "not detected" (1) or "dropout" (2)
+        The default is "dropout", and the presence of sufficient evidence can move a filtered combination
+        to "not detected".
         
-        #apply the filtering
-        self.data=filtered
-        
-
-
-
-
+        """
+        pass
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
@@ -407,11 +464,6 @@ triples
 
 
 
-def create_matricies(nb_formula,zi_formula,data):
-    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
-    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
-    return(X, y, Z)
-
 def abort_on_failure(future,client):
     """
     Call this function with a completed future that is strictly necessary for the task at hand.
@@ -433,159 +485,168 @@ def abort_on_failure(future,client):
 
 
 
-def toosmall(y):
-    if sum(y["umis_mpra_bc"].to_numpy()>0)<MIN_PTS:
-        return True
-    else:
-        return False
-
-def tensorzinb_fit(p):
-    X, y, Z = p
-    if toosmall(y):
-        raise ValueError("One of the models doesn't have enough data for a good fit. Did you run `filter_low_umi_count`?")
-        # return "too_small"
-
-    from tensorzinb.tensorzinb import TensorZINB
-
-    zinbo = TensorZINB(y["umis_mpra_bc"].to_numpy().reshape((-1, 1)), X, exog_infl=Z.to_numpy())  # ,same_dispersion=True
-    zinb_result = None
-    try:
-        zinb_result = zinbo.fit(init_method="nb")
-    except InvalidIndexError:
-        return "index_error"
-
-    return zinb_result
-
-# Timed tensorzinb_fit wrapper
-
-def timed_tensorzinb_fit(p, label=None):
-    start = time.time()
-    try:
-        result = tensorzinb_fit(p)
-    except Exception as e:
-        result = e
-    end = time.time()
-    duration = end - start
-    logger.info(f"[timed_fit] {label or 'unknown'} took {duration:.2f} seconds")
-    return result
-
-
-def fit(client,
-    data,
-    nb_formula:str,
-    zi_formula:str,
-    broken_on:str,
-    round_down_threshold:int=4,
-    dry:bool=False,
-    return_design_matricies=False):
+def nb_versus_means(params,design_matricies,scMPRAdat):
     """
-    dry : dry run: don't actually fit anything, just return an experiment_model 
-    broken_on : "unified" for one model, or put the name of a column 
+    Takes a model & design matricies corresponding to one direction of an ortho
+    (A set of 'by_cre' or a 'by_cell-type') and the original training data and produces a QC dictionary
+    regressing data means against nb estimates.
+    Used for quality control.
     """
-    ret=experiment_model(model={},uniq_predictor={},nb_formula=nb_formula,zi_formula=zi_formula,broken_on=broken_on,round_down_threshold=round_down_threshold)
-    if dry:
-        return ret
     
-    ###create design matricies###
-    types=None
-    mats_futures=None
-    if broken_on == "unified":
-        #unified model
-        types=["unified"]
-        mats_futures = {'unified':client.submit(create_matricies,
-            data=data,
-            zi_formula=zi_formula,
-            nb_formula=nb_formula
-        )}
-    else:
-        #not a unified model : let's get all the proper types
-        #that is : the name of each value for the column we split on
-        types_future = client.submit(lambda df: df[broken_on].unique(), data)
-        #wait & grab result (small enough for master node)
-        types = types_future.result()
-        abort_on_failure(types_future,client)
+    assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
+    split=params.broken_on
+    anti=anti_split(split)
 
-        #now that we have the types, submit jobs to create design matrices from each data slice
-        #we do the slicing in a little sumbitted lambda
-        mats_futures = {
-            t: client.submit(
-                create_matricies,
-                data=client.submit(lambda df, t=t: df[df[broken_on] == t], data, t),
-                zi_formula=zi_formula,
-                nb_formula=nb_formula
-            )
-            for t in types
-        }
+    data=scMPRAdat.data
 
+    QC={}
+    for model_level in params.keys:
+        #model level are the levels of the split
+        #e.g. a by-cell-type model will have cell-type values for model_level
+        subset=data[data[split]==model_level]
+        
+        data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+        data_means.name="mean(umis_mpra_bc)"
 
-    ### create uniq_predictor ### 
-    uniq_predictor_futures = {
-        t: (
-            client.submit(lambda tup: tup[0].drop_duplicates(), mats_futures[t]),
-            client.submit(lambda tup: tup[2].drop_duplicates(), mats_futures[t])
-        )
-        for t in types
-    }
-    #recall the order is X,y,Z. We only want predictors, which are X,Z, hence 0,2
+        mu_estimates=params.nb[model_level]
 
-    ###create statsmodel futures###
-    tzinb_futures = {
-        t: client.submit(
-                timed_tensorzinb_fit,
-                mats_futures[t],
-                label=t
-            )
-        for t in types
-    }
+        mu_summary=mu_estimates.join(data_means,how="left")
+        # Fit regression
+        try:
+            slope, intercept, r_value, p_value, std_err = linregress(mu_summary["mean(umis_mpra_bc)"], mu_summary["mu"])
 
-    ###put data in proper class and return###
-    model_future=client.submit(
-        experiment_model,
-        model=tzinb_futures,
-        uniq_predictor=uniq_predictor_futures,
-        nb_formula=nb_formula,
-        zi_formula=zi_formula,
-        broken_on=broken_on,
-        round_down_threshold=round_down_threshold
-    )
-    if return_design_matricies:
-        return(model_future,mats_futures)
-    else:
-        return model_future
-
-
-
+            #store regression info
+            ret={'success':True,
+                'dat':mu_summary,
+                'slope':slope,
+                'intercept':intercept,
+                'r_value':r_value,
+                'p_value':p_value,
+                'std_err':std_err
+            }
+        except ValueError:
+            print(f"regression error on {model_level}")
+            ret={'success':False,
+                'dat':mu_summary,
+                'slope':None,
+                'intercept':None,
+                'r_value':None,
+                'p_value':None,
+                'std_err':None
+            }
+        
+        QC[model_level]=ret
+    return QC
 
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
+
+def _smart_matrix(data,split):
+    """
+    Takes data and split column & produces design matricies
+    according to standard ortho schema.
+    """
+    anti=anti_split(split)
+
+    ## Decide model-type ##
+    #0 levels will have already been filtered
+    num_levels=len(data[anti].unique())
+    if num_levels ==0:
+        assert False, "Data were probably not filtered correctly."
+    if num_levels>1:
+        #more than one level between which we can perform hypothesis testing...
+        model_type="contrastable"
+    else:
+        #only one level. Useless for hypothesis testing, but we will keep it around
+        #in case we want to use it for simulation
+        model_type="simulation_only"
+    
+    #now, pick the reference level
+    if "reference" in data[anti].values:
+        #if there is already a user-specificed reference level, let's just use that. 
+        reference="reference"
+    else:
+        #Otherwise, use the most frequent level as the reference
+        level_frequency=data[anti].value_counts()
+        level_frequency=level_frequency.sort_values(ascending=False)
+        reference=level_frequency.index[0]
+
+    zi_formula="C(rep_id)-1"
+    nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
+    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
+    return {
+        'nb_regressors':X,
+        'regressand':y,
+        'zi_regressors':Z,
+        'model_type':model_type,
+        'nb_formula':nb_formula,
+        'zi_formula':zi_formula,
+        'reference':reference,
+        'split':split
+    }
+
+
+def _tensorzinb_fit(matricies,name):
+    """
+    Takes matricies & produces a single tensorzinb model
+    """
+    zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                    exog=matricies["nb_regressors"].to_numpy(),
+                    exog_infl=matricies["zi_regressors"].to_numpy())
+    
+
+    return zinbo.fit(init_method="nb")
+
+def standard_fit(client,data,split):
+    """
+    Takes an scMPRA object and produces a set of models along one axis,
+    specified by split.
+    """
+
+    data=data.data
+    levels=data[split].unique()
+
+    mats_futures = {
+        t: client.submit(
+            _smart_matrix,
+            data=data[data[split]==t],
+            split=split
+        )
+        for t in levels
+    }
+
+    tzinb_futures = {
+        t: client.submit(
+                _tensorzinb_fit,
+                mats_futures[t],
+                t
+            )
+        for t in levels
+    }
+    
+    return(experiment_model(model=tzinb_futures,
+                                split=split),
+            mats_futures)
+
 class experiment_model:
     """
-    uniq_predictor stores...
     """
 
     def __init__(self,
             model,
-            uniq_predictor,
-            nb_formula:str,
-            zi_formula:str,
-            broken_on:str,
-            round_down_threshold:int=4):
-
-        self.nb_formula=nb_formula
-        self.zi_formula=zi_formula
-        self.broken_on=broken_on
-        self.round_down_threshold=round_down_threshold
+            split:str):
+        self.split=split
         self.model=model
-        self.uniq_predictor=uniq_predictor
 
 
 
 class ortho:
     """
-    Stores multiple models of the same data.
+    Stores multiple models of the same data
+    one set of by_cre models, and one set of by cell type models
     Not to be used with multiple datasets. 
-    stores hypothesis sets & coresp. models
     """
     def __init__(self):
         self.by_cre=None
@@ -594,7 +655,11 @@ class ortho:
         self.by_cell_type=None
         self.by_cell_type_parameters=None
 
+        self.by_cre_design=None
+        self.by_cell_type_design=None
+        
         self.training_data=None
+
 
     def save(self,path,name):
         """
@@ -648,72 +713,47 @@ class ortho:
         
         return ret
 
-    def criss_cross(self,client,dat,retain_design_matricies=False,retain_metadata=True):
+    @unimplemented
+    def cleanup():
         """
-        Note: a little computationally intensive...
-        Rewrite to break each direction into separate function calls
+        TODO: implement function which scrubs un-needed data to save space. 
+        """
+    
+    def criss_cross(self,client,dat):
+        """
+        Makes by_cre and by_cell_type models.
 
+        Note: a little computationally intensive...
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
-        if retain_design_matricies:
-            #mostly for debugging
-            self.by_cre, self.by_cre_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id",return_design_matricies=True)
-            self.by_cell_type, self.by_cell_type_design=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type",return_design_matricies=True)
-        else:
-            self.by_cre=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cell_type)-1",zi_formula="C(rep_id)-1",broken_on="cre_id")
-            self.by_cell_type=fit(client,dat.data,nb_formula="umis_mpra_bc ~ C(cre_id)-1",zi_formula="C(rep_id)-1",broken_on="cell_type")
+        self.by_cre, self.by_cre_design=standard_fit(client,
+                                                     dat,
+                                                     split="cre_id")
         
-        if retain_metadata:
-            self.training_data=dat.copy(exclude=('data',))
+        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
+                                                        dat,
+                                                        split="cell_type")
+        
+        self.training_data=dat.copy()
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
 
         if not self.by_cre is None:
-            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre)
+            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre,self.by_cre_design)
         
         if not self.by_cell_type is None:
-            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type)
+            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type,self.by_cell_type_design)
         
-        if self.training_data==None:
-            logger.warning("Extracting ZINB parameters but we have no metadata from the training data : assuming no normalization to undo!")
-        else:
-            
-
-            #proofs:
-            #obsidian://open?vault=science&file=no_pub%2FscMPRA-sim_main `2025-06-26`
-            #make this into a nice notebook if it works
-
-            #undo normalizations in the opposite order they were applied....
-            for normalization in self.training_data.normalizations[::-1]:
-                undo_norm_method=None
-                
-                if normalization=="over100":
-
-                    def unover100(param):
-                        #undo transformation on mean parameter
-                        
-                        #param.nb=param.nb*100
-                        #compute 
-                        return param
-
-                    undo_norm_method=unover100
-
-                else:
-                    raise NotImplementedError("Normalization undo not implemented yet")
-                
-                #submit jobs to undo normalization with whatever method we just picked.
-                if not self.by_cre is None:
-                    self.by_cre.nb=client.submit(undo_norm_method,self.by_cre)
-                if not self.by_cell_type is None:
-                    self.by_cell_type.nb=client.submit(undo_norm_method,self.by_cell_type)
 
 class parameters:
-    def __init__(self, nb, zi, theta):
+    def __init__(self, nb, zi, theta, broken_on):
         self.nb=nb
         self.zi=zi
         self.theta=theta
+
+        self.broken_on = broken_on
 
         assert nb.keys() == zi.keys()
         assert zi.keys() == theta.keys()
@@ -721,66 +761,92 @@ class parameters:
         self.keys=list(nb.keys())
 
 
-def model_to_parameters(model):
+def model_to_parameters(model,design_matrix):
     """
-    A function to extract model parameter triples from simple model.
-    Currently pretty bespoke: be careful with more complicated models... 
+    Not lazy : just matrix multiplication and looping
+    Will hang if model fitting isn't done yet. 
     """
-    #should rework to use multi-indexes instead of sorting & assuming they are the same
     
-    #currently assuming a single theta per model (equal variances within a model).
-    #also does not intelligently sum for interaction effects : so just use for non-interaction for now...
-    #Need also to test with incomplete matricies (non-cartesian product) : applying labels will probably break
 
-    #recall the order within each tuple: (X,y,Z), but here we skip y
-    #so it is just X, Z
+    for key in model.model:
+        model.model[key]=model.model[key].result()
     
+    #for key in design_matrix:
+    #    design_matrix[key]=design_matrix[key].result()
+
+    # Sanity check
+    model_keys=list(model.model.keys())
+    design_matrix_keys=list(design_matrix.keys())
+    model_keys.sort()
+    design_matrix_keys.sort()
+    assert model_keys == design_matrix_keys, "Unlike split."
+
     zi={}
     nb={}
     theta={}
+    
+    #iterate over each sub model...
+    for key in model_keys:
+        ## Extract design matrix data ##
+        X=design_matrix[key]["nb_regressors"]
+        y=design_matrix[key]["regressand"]
+        Z=design_matrix[key]["zi_regressors"]
+        reference=design_matrix[key]["reference"]
+        model_type=design_matrix[key]["model_type"]
 
-    for key in model.model:
+        
         ## theta ##
         theta[key]=model.model[key]['weights']['theta'].squeeze()
         
+        ## Mu ##
+        
+        #multiply design matrix by weights
+        linear_mu= X @ model.model[key]["weights"]["x_mu"]
+        #undo the link function to get predictions for each cell
+        mu_predictions=np.exp(linear_mu)
+        
+        #Get the level names for each row in the DF
+        level_type=anti_split(model.split)
+
+
+        if model_type=="contrastable":
+            row_labeling=undo_one_hot_encoding(X)
+            row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
+            #remove T. prefix
+            row_labeling=row_labeling.str.removeprefix("T.")
+            #cell_labeling=cell_labeling.rename({f"{anti}, contr.treatment(base='{reference}')":anti},axis=1)
+            #cell_labeling=cell_labeling[anti]
+            #cell_labeling=cell_labeling.str.removeprefix("T.")
+        elif model_type=="simulation_only":
+            #only one cell-type
+            row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
+
+        
+        
+        #Merge those level names onto the predictions for each row
+        mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
+
+        #aggregate predictions to one per level name
+        mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
+        nb[key]=mu_summary
+
         ## ZI ##
-        #extract min design matrix & sort
-        #We need to sort to match the order in the tensorzinb model...
-        zi_df=model.uniq_predictor[key][1]
-        zi_df=zi_df.sort_values(zi_df.columns.tolist(),ascending=False)
+        # multiply design matrix by weights
+        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
+        zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
 
-        #multiply out & undo link
-        result=(zi_df.values @ model.model[key]["weights"]["x_pi"]).squeeze()
-        result=1/(1+np.exp(-result))
-        #save multi-hot column names
-        col=zi_df.columns.to_list()
-        #add nb parameter reconstructions to multi-hot
-        zi_df["zi"]=result
-        #set all columns other than zi to be a multi-index indexing the zi estimates
-        zi_df.set_index(col,inplace=True)
-        #add to dictionary...
-        zi[key]=zi_df
+        #extract names 
+        replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
+        replicate_labeling=replicate_labeling.str.removeprefix("T.")
+        #apply names to ZI
+        zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
+        #aggregate
+        zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
+        zi[key]=zi_summary
 
-        ## NB ##
-        #extract min design matrix & sort
-        nb_df=model.uniq_predictor[key][0]
-        nb_df=nb_df.sort_values(nb_df.columns.tolist(),ascending=False)
-
-        #multiply out & undo link
-        result=(nb_df.values @ model.model[key]['weights']['x_mu']).squeeze()
-        result=np.exp(result)
-        #save multi-hot column names
-        col=nb_df.columns.to_list()
-        #add zi parameter reconstruction to multi-hot
-        nb_df["nb"]=result
-        #set all columns other than nb to be a multi-index indexing the nb estimates
-        nb_df.set_index(col,inplace=True)
-        #add to dictionary
-        nb[key]=nb_df
-
-
+        #break
     
-    return parameters(nb=nb, zi=zi, theta=theta)
+    return parameters(nb=nb, zi=zi, theta=theta,broken_on=model.split)
 
 
 def describe_parameters(client,parameters,dat,split):
