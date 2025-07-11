@@ -485,10 +485,150 @@ def abort_on_failure(future,client):
 
 
 
+def nb_versus_means(params,design_matricies,scMPRAdat):
+    """
+    Takes a model & design matricies corresponding to one direction of an ortho
+    (A set of 'by_cre' or a 'by_cell-type') and  and produces a QC dictionary
+    regressing data means against nb estimates
+    """
+    
+    assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
+    split=params.broken_on
+    anti=scm.anti_split(split)
+
+    data=scMPRAdat.data
+
+    QC={}
+    for model_level in params.keys:
+        #model level are the levels of the split
+        #e.g. a by-cell-type model will have cell-type values for model_level
+        subset=data[data[split]==model_level]
+        
+        data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+        data_means.name="mean(umis_mpra_bc)"
+
+        mu_estimates=params.nb[model_level]
+
+        mu_summary=mu_estimates.join(data_means,how="left")
+        # Fit regression
+        try:
+            slope, intercept, r_value, p_value, std_err = linregress(mu_summary["mean(umis_mpra_bc)"], mu_summary["mu"])
+
+            #store regression info
+            ret={'success':True,
+                'dat':mu_summary,
+                'slope':slope,
+                'intercept':intercept,
+                'r_value':r_value,
+                'p_value':p_value,
+                'std_err':std_err
+            }
+        except ValueError:
+            print(f"regression error on {model_level}")
+            ret={'success':False,
+                'dat':mu_summary,
+                'slope':None,
+                'intercept':None,
+                'r_value':None,
+                'p_value':None,
+                'std_err':None
+            }
+        
+        QC[model_level]=ret
+    return QC
 
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
+
+def _smart_matrix(data,split):
+    """
+    Takes data and split column & produces design matricies
+    according to standard ortho schema.
+    """
+    anti=anti_split(split)
+
+    ## Decide model-type ##
+    #0 levels will have already been filtered
+    num_levels=len(data[anti].unique())
+    if num_levels ==0:
+        assert False, "Data were probably not filtered correctly."
+    if num_levels>1:
+        #more than one level between which we can perform hypothesis testing...
+        model_type="contrastable"
+    else:
+        #only one level. Useless for hypothesis testing, but we will keep it around
+        #in case we want to use it for simulation
+        model_type="simulation_only"
+    
+    #now, pick the reference level
+    if "reference" in data[anti].values:
+        #if there is already a user-specificed reference level, let's just use that. 
+        reference="reference"
+    else:
+        #Otherwise, use the most frequent level as the reference
+        level_frequency=data[anti].value_counts()
+        level_frequency=level_frequency.sort_values(ascending=False)
+        reference=level_frequency.index[0]
+
+    zi_formula="C(rep_id)-1"
+    nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
+    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
+    return {
+        'nb_regressors':X,
+        'regressand':y,
+        'zi_regressors':Z,
+        'model_type':model_type,
+        'nb_formula':nb_formula,
+        'zi_formula':zi_formula,
+        'reference':reference,
+        'split':split
+    }
+
+
+def _tensorzinb_fit(matricies,name):
+    """
+    Takes matricies & produces a single tensorzinb model
+    """
+    zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                    exog=matricies["nb_regressors"].to_numpy(),
+                    exog_infl=matricies["zi_regressors"].to_numpy())
+    
+
+    return zinbo.fit(init_method="nb")
+
+def standard_fit(client,data,split):
+    """
+    Takes an scMPRA object and produces a set of models along one axis,
+    specified by split.
+    """
+
+    data=data.data
+    levels=data[split].unique()
+
+    mats_futures = {
+        t: client.submit(
+            _smart_matrix,
+            data=data[data[split]==t],
+            split=split
+        )
+        for t in levels
+    }
+
+    tzinb_futures = {
+        t: client.submit(
+                _tensorzinb_fit,
+                mats_futures[t],
+                t
+            )
+        for t in levels
+    }
+    
+    return(mats_futures,
+           experiment_model(model=tzinb_futures,
+                                split=split))
+
 class experiment_model:
     """
     """
