@@ -597,7 +597,11 @@ def _tensorzinb_fit(matricies,name):
                     exog_infl=matricies["zi_regressors"].to_numpy())
     
 
-    return zinbo.fit(init_method="nb")
+    result = zinbo.fit(init_method="nb")
+
+    del zinbo
+    
+    return result
 
 def standard_fit(client,data,split):
     """
