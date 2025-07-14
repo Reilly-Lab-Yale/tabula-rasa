@@ -748,10 +748,16 @@ class ortho:
         """Extracts parameters for all models in the object"""
 
         if not self.by_cre is None:
-            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre,self.by_cre_design)
+            self.by_cre_parameters=client.submit(extract_parameters,
+                                                 self.by_cre,
+                                                 self.by_cre_design,
+                                                 "cre_id")
         
         if not self.by_cell_type is None:
-            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type,self.by_cell_type_design)
+            self.by_cell_type_parameters=client.submit(extract_parameters,
+                                                       self.by_cell_type,
+                                                       self.by_cell_type_design,
+                                                       "cell_type")
         
 
 class parameters:
@@ -768,92 +774,95 @@ class parameters:
         self.keys=list(nb.keys())
 
 
-def model_to_parameters(model,design_matrix):
-    """
-    Not lazy : just matrix multiplication and looping
-    Will hang if model fitting isn't done yet. 
-    """
-    
 
-    for key in model.model:
-        model.model[key]=model.model[key].result()
-    
-    #for key in design_matrix:
-    #    design_matrix[key]=design_matrix[key].result()
 
-    # Sanity check
-    model_keys=list(model.model.keys())
-    design_matrix_keys=list(design_matrix.keys())
-    model_keys.sort()
-    design_matrix_keys.sort()
-    assert model_keys == design_matrix_keys, "Unlike split."
 
-    zi={}
-    nb={}
-    theta={}
-    
-    #iterate over each sub model...
-    for key in model_keys:
-        ## Extract design matrix data ##
-        X=design_matrix[key]["nb_regressors"]
-        y=design_matrix[key]["regressand"]
-        Z=design_matrix[key]["zi_regressors"]
-        reference=design_matrix[key]["reference"]
-        model_type=design_matrix[key]["model_type"]
+def extract_parameters(model,design,split):
 
+    def _extract_parameters(level,split,model,design_matrix):
+        #remove for submission
+        #model=model.result()
+        #design_matrix=design_matrix.result()
         
+        #print(f"type model: {type(model)}")
+        #print(f"type design_matrix: {type(design_matrix)}")
+        
+        print("unwrapping model")
+        model=model.result()
+        #print("unwrapping design matrix")
+        #design_matrix=design_matrix.result()
+
+        ## Extract design matrix data ##
+        X=design_matrix["nb_regressors"]
+        y=design_matrix["regressand"]
+        Z=design_matrix["zi_regressors"]
+        reference=design_matrix["reference"]
+        model_type=design_matrix["model_type"]
+
         ## theta ##
-        theta[key]=model.model[key]['weights']['theta'].squeeze()
+        theta=model['weights']['theta'].squeeze()
         
         ## Mu ##
-        
         #multiply design matrix by weights
-        linear_mu= X @ model.model[key]["weights"]["x_mu"]
+        linear_mu= X @ model["weights"]["x_mu"]
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
         
         #Get the level names for each row in the DF
-        level_type=anti_split(model.split)
-
+        level_type=anti_split(split)
 
         if model_type=="contrastable":
             row_labeling=undo_one_hot_encoding(X)
             row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
-            #remove T. prefix
             row_labeling=row_labeling.str.removeprefix("T.")
-            #cell_labeling=cell_labeling.rename({f"{anti}, contr.treatment(base='{reference}')":anti},axis=1)
-            #cell_labeling=cell_labeling[anti]
-            #cell_labeling=cell_labeling.str.removeprefix("T.")
         elif model_type=="simulation_only":
             #only one cell-type
             row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
-
-        
-        
         #Merge those level names onto the predictions for each row
         mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
 
         #aggregate predictions to one per level name
         mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
-        nb[key]=mu_summary
-
+        #nb[key]=mu_summary
+        #print(mu_summary)
+        
         ## ZI ##
         # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
+        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
-
+        
         #extract names 
         replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
         replicate_labeling=replicate_labeling.str.removeprefix("T.")
+
+        
+
         #apply names to ZI
         zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
         #aggregate
         zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
-        zi[key]=zi_summary
-
-        #break
+        
+        return mu_summary, zi_summary, theta
     
-    return parameters(nb=nb, zi=zi, theta=theta,broken_on=model.split)
+    model=model.model
+    
+    mus={}
+    zis={}
+    thetas={}
+
+    #not worth parallelizing this loop: submission time would be greater than saved time.
+    for level in model:
+
+        mu_summary, zi_summary, theta=_extract_parameters(level=level,
+                            split=split,
+                            model=model[level],
+                            design_matrix=design[level])
+        
+        mus[level]=mu_summary
+        zis[level]=zi_summary
+        thetas[level]=theta
+    
+    return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
 
 
 def describe_parameters(client,parameters,dat,split):
