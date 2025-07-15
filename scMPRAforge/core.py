@@ -33,6 +33,7 @@ from enum import Enum
 from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
+from .utils import make_present_dict
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -597,7 +598,11 @@ def _tensorzinb_fit(matricies,name):
                     exog_infl=matricies["zi_regressors"].to_numpy())
     
 
-    return zinbo.fit(init_method="nb")
+    result = zinbo.fit(init_method="nb")
+
+    del zinbo
+    
+    return result
 
 def standard_fit(client,data,split):
     """
@@ -632,6 +637,10 @@ def standard_fit(client,data,split):
 
 class experiment_model:
     """
+    Contrains one full model of a dataset.
+    .model is a dict
+    - keys are whatever the levels of "split" are.
+    - values are futures of tensorzinb return dictionaries.
     """
 
     def __init__(self,
@@ -639,10 +648,45 @@ class experiment_model:
             split:str):
         self.split=split
         self.model=model
+    
+    @staticmethod
+    def _label_tensorzinb_regressors(model,dm):
+        """
+        Takes one tensorzinb model (dict) and correspinding set of design matricies
+        & labels the dict with the regressor and regressand names.
+        Meant to be submitted to a dask cluster.
+        """
 
-    def flatten_out_futures(self):
+        nb_regressor_names=list(dm["nb_regressors"].columns)
+        zi_regressor_names=list(dm["zi_regressors"].columns)
+        model["weights"]["x_mu"] = pd.Series(model["weights"]["x_mu"].flatten(),
+                                            index=nb_regressor_names)
+        model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
+                                            index=zi_regressor_names)
+        return model
+    
+    def label_regressors(self,client,design_matricies):
+        """
+        Takes design matricies used to generate the model &
+        modifies self in-place to have 
+        """
+        for key in self.model:
+            self.model[key]=client.submit(experiment_model._label_tensorzinb_regressors,
+                model=self.model[key],
+                dm=design_matricies[key])
+    
+    def _flatten_out_futures(self):
+        """
+        For internal use only. 
+        Will bork downstream operations on the object.
+        """
         for key in self.model:
             self.model[key]=self.model[key].result()
+
+    def flattened_copy(self):
+        ret=copy.copy(self)
+        ret._flatten_out_futures()
+        return ret
 
 
 class ortho:
@@ -673,6 +717,7 @@ class ortho:
         Will block & wait for results if not done computing
 
         creates directory 'name' in 'path'
+        todo: add if none wrapping to simple write
         """
         full_path=Path(path)/name
         full_path.mkdir(parents=True)
@@ -685,17 +730,37 @@ class ortho:
                 else:
                     pickle.dump(obj,f)
 
-        _dump(self.by_cre,"by_cre.pkl")
-        _dump(self.by_cre_parameters,"by_cre_parameters.pkl")
+        def simple_write(obj,filename):
+            with open(full_path/filename,"wb") as f:
+                pickle.dump(obj,f)
+        
+        simple_write(self.by_cre.flattened_copy(),"by_cre.pkl")
+        simple_write(self.by_cell_type.flattened_copy(),"by_cell_type.pkl")
+
+        #_dump(self.by_cre_parameters,"by_cre_parameters.pkl")
         _dump(self.by_cell_type,"by_cell_type.pkl")
-        _dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+        #_dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
         _dump(self.training_data,"training_data.pkl")
+
+        
+        if self.by_cre_design is None:
+            _dump(self.by_cre_design,"by_cre_design.pkl")
+        else:
+            simple_write(make_present_dict(self.by_cre_design),"by_cre_design.pkl")
+        
+        if self.by_cell_type_design is None:
+            _dump(self.by_cell_type_design,"by_cell_type_design.pkl")
+        else:
+            simple_write(make_present_dict(self.by_cell_type_design),"by_cell_type_design.pkl")
+
 
     @classmethod
     def load(cls,client,path,name):
         """
         loads from a filepath, wrapping in futures on the provided cluster where appropriate
         looks for directory path/name
+
+        TODO: add option to load design matricies
         """
         full_path=Path(path)/name
 
@@ -739,15 +804,31 @@ class ortho:
                                                         split="cell_type")
         
         self.training_data=dat.copy()
+        self.annotate_models(client)
+
+    def annotate_models(self,client):
+        """
+        Adds regressor names to each model
+        """
+        self.by_cre.label_regressors(client,self.by_cre_design)
+        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+        
+        
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
 
         if not self.by_cre is None:
-            self.by_cre_parameters=client.submit(model_to_parameters,self.by_cre,self.by_cre_design)
+            self.by_cre_parameters=client.submit(extract_parameters,
+                                                 self.by_cre,
+                                                 self.by_cre_design,
+                                                 "cre_id")
         
         if not self.by_cell_type is None:
-            self.by_cell_type_parameters=client.submit(model_to_parameters,self.by_cell_type,self.by_cell_type_design)
+            self.by_cell_type_parameters=client.submit(extract_parameters,
+                                                       self.by_cell_type,
+                                                       self.by_cell_type_design,
+                                                       "cell_type")
         
 
 class parameters:
@@ -764,92 +845,95 @@ class parameters:
         self.keys=list(nb.keys())
 
 
-def model_to_parameters(model,design_matrix):
-    """
-    Not lazy : just matrix multiplication and looping
-    Will hang if model fitting isn't done yet. 
-    """
-    
 
-    for key in model.model:
-        model.model[key]=model.model[key].result()
-    
-    #for key in design_matrix:
-    #    design_matrix[key]=design_matrix[key].result()
 
-    # Sanity check
-    model_keys=list(model.model.keys())
-    design_matrix_keys=list(design_matrix.keys())
-    model_keys.sort()
-    design_matrix_keys.sort()
-    assert model_keys == design_matrix_keys, "Unlike split."
 
-    zi={}
-    nb={}
-    theta={}
-    
-    #iterate over each sub model...
-    for key in model_keys:
-        ## Extract design matrix data ##
-        X=design_matrix[key]["nb_regressors"]
-        y=design_matrix[key]["regressand"]
-        Z=design_matrix[key]["zi_regressors"]
-        reference=design_matrix[key]["reference"]
-        model_type=design_matrix[key]["model_type"]
+def extract_parameters(model,design,split):
 
+    def _extract_parameters(level,split,model,design_matrix):
+        #remove for submission
+        #model=model.result()
+        #design_matrix=design_matrix.result()
         
+        #print(f"type model: {type(model)}")
+        #print(f"type design_matrix: {type(design_matrix)}")
+        
+        print("unwrapping model")
+        model=model.result()
+        #print("unwrapping design matrix")
+        #design_matrix=design_matrix.result()
+
+        ## Extract design matrix data ##
+        X=design_matrix["nb_regressors"]
+        y=design_matrix["regressand"]
+        Z=design_matrix["zi_regressors"]
+        reference=design_matrix["reference"]
+        model_type=design_matrix["model_type"]
+
         ## theta ##
-        theta[key]=model.model[key]['weights']['theta'].squeeze()
+        theta=model['weights']['theta'].squeeze()
         
         ## Mu ##
-        
         #multiply design matrix by weights
-        linear_mu= X @ model.model[key]["weights"]["x_mu"]
+        linear_mu= X @ model["weights"]["x_mu"]
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
         
         #Get the level names for each row in the DF
-        level_type=anti_split(model.split)
-
+        level_type=anti_split(split)
 
         if model_type=="contrastable":
             row_labeling=undo_one_hot_encoding(X)
             row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
-            #remove T. prefix
             row_labeling=row_labeling.str.removeprefix("T.")
-            #cell_labeling=cell_labeling.rename({f"{anti}, contr.treatment(base='{reference}')":anti},axis=1)
-            #cell_labeling=cell_labeling[anti]
-            #cell_labeling=cell_labeling.str.removeprefix("T.")
         elif model_type=="simulation_only":
             #only one cell-type
             row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
-
-        
-        
         #Merge those level names onto the predictions for each row
         mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
 
         #aggregate predictions to one per level name
         mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
-        nb[key]=mu_summary
-
+        #nb[key]=mu_summary
+        #print(mu_summary)
+        
         ## ZI ##
         # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model.model[key]["weights"]["x_pi"])
+        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
-
+        
         #extract names 
         replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
         replicate_labeling=replicate_labeling.str.removeprefix("T.")
+
+        
+
         #apply names to ZI
         zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
         #aggregate
         zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
-        zi[key]=zi_summary
-
-        #break
+        
+        return mu_summary, zi_summary, theta
     
-    return parameters(nb=nb, zi=zi, theta=theta,broken_on=model.split)
+    model=model.model
+    
+    mus={}
+    zis={}
+    thetas={}
+
+    #not worth parallelizing this loop: submission time would be greater than saved time.
+    for level in model:
+
+        mu_summary, zi_summary, theta=_extract_parameters(level=level,
+                            split=split,
+                            model=model[level],
+                            design_matrix=design[level])
+        
+        mus[level]=mu_summary
+        zis[level]=zi_summary
+        thetas[level]=theta
+    
+    return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
 
 
 def describe_parameters(client,parameters,dat,split):
