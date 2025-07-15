@@ -172,6 +172,19 @@ def find_dask_future_paths(obj, seen=None, path=""):
 
     return results
 
+def make_present_dict(futures):
+    """
+    Takes a dict of dask futures & gets their results. 
+    
+    Note: Will hang if computations not done
+    Note: Not recursive! 
+    Note: Since it pulls all the data to the control process, can take a lot of memory!
+    """
+    ret={}
+    for key in futures:
+        ret[key]=futures[key].result()
+    return ret
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():

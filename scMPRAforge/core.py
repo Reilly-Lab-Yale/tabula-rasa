@@ -33,6 +33,7 @@ from enum import Enum
 from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
+from .utils import make_present_dict
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -647,6 +648,11 @@ class experiment_model:
     def flatten_out_futures(self):
         for key in self.model:
             self.model[key]=self.model[key].result()
+    
+    def flattened_copy(self):
+        ret=copy.copy(self)
+        ret.flatten_out_futures()
+        return ret
 
 
 class ortho:
@@ -677,6 +683,7 @@ class ortho:
         Will block & wait for results if not done computing
 
         creates directory 'name' in 'path'
+        todo: add if none wrapping to simple write
         """
         full_path=Path(path)/name
         full_path.mkdir(parents=True)
@@ -689,17 +696,37 @@ class ortho:
                 else:
                     pickle.dump(obj,f)
 
-        _dump(self.by_cre,"by_cre.pkl")
-        _dump(self.by_cre_parameters,"by_cre_parameters.pkl")
+        def simple_write(obj,filename):
+            with open(full_path/filename,"wb") as f:
+                pickle.dump(obj,f)
+        
+        simple_write(self.by_cre.flattened_copy(),"by_cre.pkl")
+        simple_write(self.by_cell_type.flattened_copy(),"by_cell_type.pkl")
+
+        #_dump(self.by_cre_parameters,"by_cre_parameters.pkl")
         _dump(self.by_cell_type,"by_cell_type.pkl")
-        _dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+        #_dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
         _dump(self.training_data,"training_data.pkl")
+
+        
+        if self.by_cre_design is None:
+            _dump(self.by_cre_design,"by_cre_design.pkl")
+        else:
+            simple_write(make_present_dict(self.by_cre_design),"by_cre_design.pkl")
+        
+        if self.by_cell_type_design is None:
+            _dump(self.by_cell_type_design,"by_cell_type_design.pkl")
+        else:
+            simple_write(make_present_dict(self.by_cell_type_design),"by_cell_type_design.pkl")
+
 
     @classmethod
     def load(cls,client,path,name):
         """
         loads from a filepath, wrapping in futures on the provided cluster where appropriate
         looks for directory path/name
+
+        TODO: add option to load design matricies
         """
         full_path=Path(path)/name
 
