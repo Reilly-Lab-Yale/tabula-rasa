@@ -655,7 +655,6 @@ class experiment_model:
         Takes one tensorzinb model (dict) and correspinding set of design matricies
         & labels the dict with the regressor and regressand names.
         Meant to be submitted to a dask cluster.
-        Modifies the model future in-place, returns nothing.
         """
 
         nb_regressor_names=list(dm["nb_regressors"].columns)
@@ -664,6 +663,7 @@ class experiment_model:
                                             index=nb_regressor_names)
         model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
                                             index=zi_regressor_names)
+        return model
     
     def label_regressors(self,client,design_matricies):
         """
@@ -671,7 +671,7 @@ class experiment_model:
         modifies self in-place to have 
         """
         for key in self.model:
-            client.submit(experiment_model._label_tensorzinb_regressors,
+            self.model[key]=client.submit(experiment_model._label_tensorzinb_regressors,
                 model=self.model[key],
                 dm=design_matricies[key])
     
