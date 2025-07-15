@@ -637,6 +637,10 @@ def standard_fit(client,data,split):
 
 class experiment_model:
     """
+    Contrains one full model of a dataset.
+    .model is a dict
+    - keys are whatever the levels of "split" are.
+    - values are futures of tensorzinb return dictionaries.
     """
 
     def __init__(self,
@@ -644,14 +648,44 @@ class experiment_model:
             split:str):
         self.split=split
         self.model=model
+    
+    @staticmethod
+    def _label_tensorzinb_regressors(model,dm):
+        """
+        Takes one tensorzinb model (dict) and correspinding set of design matricies
+        & labels the dict with the regressor and regressand names.
+        Meant to be submitted to a dask cluster.
+        Modifies the model future in-place, returns nothing.
+        """
 
-    def flatten_out_futures(self):
+        nb_regressor_names=list(dm["nb_regressors"].columns)
+        zi_regressor_names=list(dm["zi_regressors"].columns)
+        model["weights"]["x_mu"] = pd.Series(model["weights"]["x_mu"].flatten(),
+                                            index=nb_regressor_names)
+        model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
+                                            index=zi_regressor_names)
+    
+    def label_regressors(self,client,design_matricies):
+        """
+        Takes design matricies used to generate the model &
+        modifies self in-place to have 
+        """
+        for key in self.model:
+            client.submit(experiment_model._label_tensorzinb_regressors,
+                model=self.model[key],
+                dm=design_matricies[key])
+    
+    def _flatten_out_futures(self):
+        """
+        For internal use only. 
+        Will bork downstream operations on the object.
+        """
         for key in self.model:
             self.model[key]=self.model[key].result()
-    
+
     def flattened_copy(self):
         ret=copy.copy(self)
-        ret.flatten_out_futures()
+        ret._flatten_out_futures()
         return ret
 
 
@@ -770,6 +804,16 @@ class ortho:
                                                         split="cell_type")
         
         self.training_data=dat.copy()
+        self.annotate_models(client)
+
+    def annotate_models(self,client):
+        """
+        Adds regressor names to each model
+        """
+        self.by_cre.label_regressors(client,self.by_cre_design)
+        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+        
+        
 
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
