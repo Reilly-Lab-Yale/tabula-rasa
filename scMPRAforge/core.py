@@ -683,9 +683,42 @@ class experiment_model:
         for key in self.model:
             self.model[key]=self.model[key].result()
 
+    def _unflatten_futures(self,client):
+        """
+        For internal use only
+        wraps all the models in futures
+        """
+        for key in self.model:
+            self.model[key]=client.submit(lambda x: x, self.model[key])
+        
+    
     def flattened_copy(self):
-        ret=copy.copy(self)
+        """
+        Makes a copy where the members are not futures but just objects
+        """
+        ret=copy.deepcopy(self)
         ret._flatten_out_futures()
+        return ret
+    
+    def save(self,path):
+        """
+        Saves experimentmodel to a filepath.
+        Will hang if computation is not done yet
+        """
+        with open(path,"wb") as f:
+            pickle.dump(self.flattened_copy(),f)
+
+    @staticmethod
+    def load(client,path):
+        """
+        Loads an experimentmodel from a path
+        & returns it. Requires a client to wrap the individual models
+        in futures for use on a dask cluster. 
+        """
+        with open(path,"rb") as f:
+            ret=pickle.load(f)
+            if not ret is None:
+                ret._unflatten_futures(client)
         return ret
 
 
@@ -710,82 +743,110 @@ class ortho:
 
     def save(self,path,name):
         """
-        For now, just dumps 
-        ['by_cre', 'by_cre_parameters', 'by_cell_type', 'by_cell_type_parameters']
-        to pickles
+        Simple pickle save.
 
         Will block & wait for results if not done computing
 
         creates directory 'name' in 'path'
-        todo: add if none wrapping to simple write
         """
+        #There are much nicer ways to structure this, but that level of effort
+        #should be saved for non-pickle save/load
         full_path=Path(path)/name
         full_path.mkdir(parents=True)
 
-        def _dump(obj,filename):
-            with open(full_path/filename,"wb") as f:
-                
-                if isinstance(obj,Future):
-                    pickle.dump(obj.result(),f)
-                else:
-                    pickle.dump(obj,f)
-
+        ## Function
+        
         def simple_write(obj,filename):
             with open(full_path/filename,"wb") as f:
                 pickle.dump(obj,f)
         
-        simple_write(self.by_cre.flattened_copy(),"by_cre.pkl")
-        simple_write(self.by_cell_type.flattened_copy(),"by_cell_type.pkl")
 
-        #_dump(self.by_cre_parameters,"by_cre_parameters.pkl")
-        _dump(self.by_cell_type,"by_cell_type.pkl")
-        #_dump(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
-        _dump(self.training_data,"training_data.pkl")
+        ## Experiment models
+        
+        if self.by_cre is None:
+            simple_write(self.by_cre,"by_cre.pkl")
+        else:
+            self.by_cre.save(full_path/"by_cre.pkl")
+        
+        if self.by_cell_type is None:
+            simple_write(self.by_cell_type,"by_cell_type.pkl")
+        else:
+            self.by_cell_type.save(full_path/"by_cell_type.pkl")
 
         
+        ## Parameters
+        if self.by_cre_parameters is None:
+            simple_write(self.by_cre_parameters,"by_cre_parameters.pkl")
+        else:
+            simple_write(self.by_cre_parameters.result(),"by_cre_parameters.pkl")
+
+        if self.by_cell_type_parameters is None:
+            simple_write(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
+        else:
+            simple_write(self.by_cell_type_parameters.result(),"by_cell_type_parameters.pkl")
+        
+        ## Design matricies
         if self.by_cre_design is None:
-            _dump(self.by_cre_design,"by_cre_design.pkl")
+            simple_write(self.by_cre_design,"by_cre_design.pkl")
         else:
             simple_write(make_present_dict(self.by_cre_design),"by_cre_design.pkl")
         
         if self.by_cell_type_design is None:
-            _dump(self.by_cell_type_design,"by_cell_type_design.pkl")
+            simple_write(self.by_cell_type_design,"by_cell_type_design.pkl")
         else:
             simple_write(make_present_dict(self.by_cell_type_design),"by_cell_type_design.pkl")
+
+        ## training data
+        simple_write(self.training_data,"training_data.pkl")
 
 
     @classmethod
     def load(cls,client,path,name):
         """
         loads from a filepath, wrapping in futures on the provided cluster where appropriate
-        looks for directory path/name
-
-        TODO: add option to load design matricies
         """
+        #There are much nicer ways to structure this, but that level of effort
+        #should be saved for non-pickle save/load
+        
         full_path=Path(path)/name
 
-        def _undump(filename):
-            """
-            Loads from a filename & re-wraps as a future
-            """
+        ret_ortho=cls()
+
+        # function
+        def simple_load(filename):
             with open(full_path/filename,"rb") as f:
-                return client.submit(lambda x: x, pickle.load(f))
+                ret=pickle.load(f)
+            return ret
         
-        ret=cls()
+        ## Experiment models
+        ret_ortho.by_cre=experiment_model.load(client,full_path/"by_cre.pkl")
+        ret_ortho.by_cell_type=experiment_model.load(client,full_path/"by_cell_type.pkl")
+
+        ## Parameters
+        ret_ortho.by_cre_parameters=client.submit(lambda x : x, simple_load("by_cre_parameters.pkl"))
+        ret_ortho.by_cell_type_parameters=client.submit(lambda x : x, simple_load("by_cell_type_parameters.pkl"))
+
+        ## Design matricies
+        ret_ortho.by_cell_type_design=simple_load("by_cell_type_design.pkl")
+        ret_ortho.by_cre_design=simple_load("by_cre_design.pkl")
+
+        ## Training data
+        ret_ortho.training_data=simple_load("training_data.pkl")
+   
         
-        ret.by_cre=_undump("by_cre.pkl")
-        ret.by_cre_parameters=_undump("by_cre_parameters.pkl")
-        ret.by_cell_type=_undump("by_cell_type.pkl")
-        ret.by_cell_type_parameters=_undump("by_cell_type_parameters.pkl")
-        ret.training_data=_undump("training_data.pkl")
-        
-        return ret
+        return ret_ortho
 
     @unimplemented
-    def cleanup():
+    def clean(self,kill_list="auto"):
         """
-        TODO: implement function which scrubs un-needed data to save space. 
+        Deletes intermediate values to save space. 
+
+        `kill_list` is any or all of "training_data", "design_matricies", "models", "parameters"
+        
+        alternatively, "auto" is equivalent to ["training_data", "design_matricies"]
         """
+        for target in kill_list:
+            pass
     
     def criss_cross(self,client,dat):
         """
@@ -851,14 +912,11 @@ class parameters:
 def extract_parameters(model,design,split):
 
     def _extract_parameters(level,split,model,design_matrix):
-        #remove for submission
-        #model=model.result()
-        #design_matrix=design_matrix.result()
         
         #print(f"type model: {type(model)}")
         #print(f"type design_matrix: {type(design_matrix)}")
         
-        print("unwrapping model")
+        #print("unwrapping model")
         model=model.result()
         #print("unwrapping design matrix")
         #design_matrix=design_matrix.result()
