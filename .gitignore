@@ -3,6 +3,7 @@
 slave*.out
 mcn_workbench.ipynb
 __pycache__/
+*.pkl
 *.py[cod]
 *.h5ad
 preprocessing/.ipynb_checkpoints/
