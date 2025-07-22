@@ -177,7 +177,8 @@ class scMPRA_data:
         mask=umis_per_cell["umis_mpra_bc"]<1
 
         total_cells=len(umis_per_cell[["cell_bc","rep_id"]].value_counts())
-        num_cells_to_drop=len(umis_per_cell[mask][["cell_bc","rep_id"]].value_counts())
+        uniq_dropped=umis_per_cell[mask][["cell_bc","rep_id"]].value_counts()
+        num_cells_to_drop=len(uniq_dropped)
 
         logger.info(f"Dropping {num_cells_to_drop} cells with no MPRA UMIs, leaving {total_cells-num_cells_to_drop}.")
 
@@ -186,7 +187,7 @@ class scMPRA_data:
 
         self.data=self.data.merge(umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],on=["cell_bc","rep_id"],how="right")
 
-        self.operations.append('total_umi')
+        self.operations.append(('total_umi',uniq_dropped))
     
     @classmethod
     def from_tsv(cls, filepath):
@@ -314,19 +315,19 @@ class scMPRA_data:
 
         # Compute dropped combos
         dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
-        self.dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
+        dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
 
         # Keep only rows matching valid (cell_type, cre_id) combos
         self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
 
         # Print stats
         n_total = len(all_combos)
-        n_dropped = len(self.dropped_combos)
+        n_dropped = len(dropped_combos)
         logger.info(f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries.")
 
 
         # Record that we performed this operation
-        self.operations.append(f"filter_low_umi_count, threshold={MIN_PTS}")
+        self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}",dropped_combos))
 
 
     @unimplemented
