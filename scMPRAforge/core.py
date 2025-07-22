@@ -127,10 +127,16 @@ class scMPRA_data:
         self.data=None
         self.table_type=None
         self.source=None
-        self.metadata=None
+        self.metadata={}
         self.operations=[]
         self.negative_controls=[]
         self.reference_cell_type=None
+    
+    def flag_synthetic(self):
+        self.metadata["synthetic"]=True
+    
+    def flag_emperical(self):
+        self.metadata["synthetic"]=False
     
     def set_negative_controls(self,negative_controls:list[str]):
         """
@@ -1023,16 +1029,23 @@ def describe_parameters(client,parameters,dat,split):
     #change to return a dask instead of pandas dataframe
 
 
-    #cell_counts=get_cell_counts(client,dat,split=split)
+    #count cells per group
     cell_counts=dat.groupby([split,"rep_id"])["umis_mpra_bc"].agg("sum")
     cell_counts=pd.DataFrame({"cells":cell_counts})
-    flattened_param=flatten_param_representation(client,parameters,split=split)
-    flattened_param.reset_index().set_index([split,"rep_id"])
     
-    working=cell_counts.join(flattened_param)
+    #cast rep id to string just in case.
+    cell_counts.index = cell_counts.index.set_levels(
+        cell_counts.index.levels[1].astype(str), level=1
+    )
+
+    flattened_param=flatten_param_representation(client,parameters,split=split)
+    flattened_param=flattened_param.reset_index().set_index([split,"rep_id"])
+    
+    working=cell_counts.join(flattened_param,how="left")
     working["r"]=np.exp(working["theta"])
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
+    working=working.reset_index()
 
 
     return working
@@ -1219,7 +1232,11 @@ class simulation_batch:
         s=simulate_from_description(description_primordial).compute()
         s=undo_one_hot_encoding(s)
         s=s.rename({'zinb_sample':'umis_mpra_bc'},axis=1)[['rep_id','cre_id','cell_type','umis_mpra_bc']]
-        return s
+        
+        ret=scMPRA_data()
+        ret.flag_synthetic()
+        ret.data=s
+        return ret
     
     def simulate_many(self,client,n):
         """
