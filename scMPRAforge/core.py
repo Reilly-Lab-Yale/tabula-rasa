@@ -16,7 +16,8 @@ import pickle
 from pathlib import Path
 import copy
 
-import statsmodels.discrete.count_model as smdc
+from scipy.stats import linregress
+#import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
@@ -33,7 +34,7 @@ from enum import Enum
 from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
-from .utils import make_present_dict
+from .utils import dict_wrap, dict_unwrap
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -487,58 +488,7 @@ def abort_on_failure(future,client):
 
 
 
-def nb_versus_means(params,design_matricies,scMPRAdat):
-    """
-    Takes a model & design matricies corresponding to one direction of an ortho
-    (A set of 'by_cre' or a 'by_cell-type') and the original training data and produces a QC dictionary
-    regressing data means against nb estimates.
-    Used for quality control.
-    """
-    
-    assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
-    split=params.broken_on
-    anti=anti_split(split)
 
-    data=scMPRAdat.data
-
-    QC={}
-    for model_level in params.keys:
-        #model level are the levels of the split
-        #e.g. a by-cell-type model will have cell-type values for model_level
-        subset=data[data[split]==model_level]
-        
-        data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
-        data_means.name="mean(umis_mpra_bc)"
-
-        mu_estimates=params.nb[model_level]
-
-        mu_summary=mu_estimates.join(data_means,how="left")
-        # Fit regression
-        try:
-            slope, intercept, r_value, p_value, std_err = linregress(mu_summary["mean(umis_mpra_bc)"], mu_summary["mu"])
-
-            #store regression info
-            ret={'success':True,
-                'dat':mu_summary,
-                'slope':slope,
-                'intercept':intercept,
-                'r_value':r_value,
-                'p_value':p_value,
-                'std_err':std_err
-            }
-        except ValueError:
-            print(f"regression error on {model_level}")
-            ret={'success':False,
-                'dat':mu_summary,
-                'slope':None,
-                'intercept':None,
-                'r_value':None,
-                'p_value':None,
-                'std_err':None
-            }
-        
-        QC[model_level]=ret
-    return QC
 
 
 #        1         2         3         4         5         6         7         8
@@ -741,7 +691,6 @@ class ortho:
         
         self.training_data=None
 
-
     def save(self,path,name):
         """
         Simple pickle save.
@@ -790,16 +739,15 @@ class ortho:
         if self.by_cre_design is None:
             simple_write(self.by_cre_design,"by_cre_design.pkl")
         else:
-            simple_write(make_present_dict(self.by_cre_design),"by_cre_design.pkl")
+            simple_write(dict_unwrap(self.by_cre_design),"by_cre_design.pkl")
         
         if self.by_cell_type_design is None:
             simple_write(self.by_cell_type_design,"by_cell_type_design.pkl")
         else:
-            simple_write(make_present_dict(self.by_cell_type_design),"by_cell_type_design.pkl")
+            simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
         ## training data
         simple_write(self.training_data,"training_data.pkl")
-
 
     @classmethod
     def load(cls,client,path,name):
@@ -819,11 +767,6 @@ class ortho:
                 ret=pickle.load(f)
             return ret
         
-        def dict_wrap(dic):
-            ret={}
-            for key in dic:
-                ret[key]=client.submit(lambda x: x,dic[key])
-            return ret
         
         ## Experiment models
         ret_ortho.by_cre=experiment_model.load(client,full_path/"by_cre.pkl")
@@ -834,8 +777,8 @@ class ortho:
         ret_ortho.by_cell_type_parameters=client.submit(lambda x : x, simple_load("by_cell_type_parameters.pkl"))
 
         ## Design matricies
-        ret_ortho.by_cell_type_design=dict_wrap(simple_load("by_cell_type_design.pkl"))
-        ret_ortho.by_cre_design=dict_wrap(simple_load("by_cre_design.pkl"))
+        ret_ortho.by_cell_type_design=dict_wrap(client,simple_load("by_cell_type_design.pkl"))
+        ret_ortho.by_cre_design=dict_wrap(client,simple_load("by_cre_design.pkl"))
 
         ## Training data
         ret_ortho.training_data=simple_load("training_data.pkl")
@@ -880,9 +823,7 @@ class ortho:
         """
         self.by_cre.label_regressors(client,self.by_cre_design)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
-        
-        
-
+    
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
 
@@ -898,6 +839,76 @@ class ortho:
                                                        self.by_cell_type_design,
                                                        "cell_type")
         
+    def compute_model_qc(self):
+        """
+        Will hang if model is not finished. 
+        returns None, sets self.by_cell_qc, self.by_cre_qc to dictionaries of 
+        QC information comparing nb params of each direction of the ortho 
+        to the data means.
+
+        Meant for debugging / manual inspection.
+        """
+        self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters.result(),
+            design_matricies=dict_unwrap(self.by_cell_type_design),
+            scMPRAdat=self.training_data)
+        self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters.result(),
+            design_matricies=dict_unwrap(self.by_cre_design),
+            scMPRAdat=self.training_data)
+    
+    
+    @staticmethod
+    def _nb_versus_means(params,design_matricies,scMPRAdat):
+        """
+        Takes a model & design matricies corresponding to one direction of an ortho
+        (A set of 'by_cre' or a 'by_cell-type') and the original training data and produces a QC dictionary
+        regressing data means against nb estimates.
+        Used for quality control.
+        """
+        
+        assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
+        split=params.broken_on
+        anti=anti_split(split)
+
+        data=scMPRAdat.data
+
+        QC={}
+        for model_level in params.keys:
+            #model level are the levels of the split
+            #e.g. a by-cell-type model will have cell-type values for model_level
+            subset=data[data[split]==model_level]
+            
+            data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+            data_means.name="mean(umis_mpra_bc)"
+
+            mu_estimates=params.nb[model_level]
+
+            mu_summary=mu_estimates.join(data_means,how="left")
+            # Fit regression
+            try:
+                slope, intercept, r_value, p_value, std_err = linregress(mu_summary["mean(umis_mpra_bc)"], mu_summary["mu"])
+
+                #store regression info
+                ret={'success':True,
+                    'dat':mu_summary,
+                    'slope':slope,
+                    'intercept':intercept,
+                    'r_value':r_value,
+                    'p_value':p_value,
+                    'std_err':std_err
+                }
+            except ValueError:
+                print(f"regression error on {model_level}")
+                ret={'success':False,
+                    'dat':mu_summary,
+                    'slope':None,
+                    'intercept':None,
+                    'r_value':None,
+                    'p_value':None,
+                    'std_err':None
+                }
+            
+            QC[model_level]=ret
+        return QC
 
 class parameters:
     def __init__(self, nb, zi, theta, broken_on):

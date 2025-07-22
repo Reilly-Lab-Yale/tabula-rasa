@@ -172,7 +172,18 @@ def find_dask_future_paths(obj, seen=None, path=""):
 
     return results
 
-def make_present_dict(futures):
+
+
+def dict_wrap(client,dic):
+    """
+    Takes a dictionary and wraps all of its values in dask futures using the provided client.
+    """
+    ret={}
+    for key in dic:
+        ret[key]=client.submit(lambda x: x,dic[key])
+    return ret
+
+def dict_unwrap(dic):
     """
     Takes a dict of dask futures & gets their results. 
     
@@ -181,8 +192,8 @@ def make_present_dict(futures):
     Note: Since it pulls all the data to the control process, can take a lot of memory!
     """
     ret={}
-    for key in futures:
-        ret[key]=futures[key].result()
+    for key in dic:
+        ret[key]=dic[key].result()
     return ret
 
 ## tools for easy generation of hypotheses
