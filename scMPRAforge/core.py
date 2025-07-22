@@ -818,6 +818,12 @@ class ortho:
                 ret=pickle.load(f)
             return ret
         
+        def dict_wrap(dic):
+            ret={}
+            for key in dic:
+                ret[key]=client.submit(lambda x: x,dic[key])
+            return ret
+        
         ## Experiment models
         ret_ortho.by_cre=experiment_model.load(client,full_path/"by_cre.pkl")
         ret_ortho.by_cell_type=experiment_model.load(client,full_path/"by_cell_type.pkl")
@@ -827,8 +833,8 @@ class ortho:
         ret_ortho.by_cell_type_parameters=client.submit(lambda x : x, simple_load("by_cell_type_parameters.pkl"))
 
         ## Design matricies
-        ret_ortho.by_cell_type_design=simple_load("by_cell_type_design.pkl")
-        ret_ortho.by_cre_design=simple_load("by_cre_design.pkl")
+        ret_ortho.by_cell_type_design=dict_wrap(simple_load("by_cell_type_design.pkl"))
+        ret_ortho.by_cre_design=dict_wrap(simple_load("by_cre_design.pkl"))
 
         ## Training data
         ret_ortho.training_data=simple_load("training_data.pkl")
