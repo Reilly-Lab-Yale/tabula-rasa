@@ -1022,12 +1022,17 @@ def describe_parameters(client,parameters,dat,split):
 
     #change to return a dask instead of pandas dataframe
 
-    cell_counts=get_cell_counts(client,dat,split=split)
+
+    #cell_counts=get_cell_counts(client,dat,split=split)
+    cell_counts=dat.groupby([split,"rep_id"])["umis_mpra_bc"].agg("sum")
+    cell_counts=pd.DataFrame({"cells":cell_counts})
     flattened_param=flatten_param_representation(client,parameters,split=split)
+    flattened_param.reset_index().set_index([split,"rep_id"])
+    
     working=cell_counts.join(flattened_param)
     working["r"]=np.exp(working["theta"])
-    working["sigmasquare"]=working["nb"]**2/working["r"]+working["nb"]
-    working["p"]=working["nb"]/working["sigmasquare"]
+    working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
+    working["p"]=working["mu"]/working["sigmasquare"]
 
 
     return working
@@ -1181,11 +1186,11 @@ class simulation_batch:
 
         self.partition_mb=partition_mb
     
-    def describe_primordial(self,client,dat):
+    def describe_primordial(self,client):
         """Generates and saves descriptions of the primordial which are necessary for subsequent simulation"""
         self.description_primordial_by_cre=describe_parameters(client,
                                                                    parameters=self.primordial.by_cre_parameters.result(),
-                                                                   dat=dat,
+                                                                   dat=self.primordial.training_data.data,
                                                                    split="cre_id")
 
         self.description_primordial_by_cre=auto_partition(self.description_primordial_by_cre,
@@ -1193,12 +1198,13 @@ class simulation_batch:
 
         self.description_primordial_by_cell_type=describe_parameters(client,
                                                                          parameters=self.primordial.by_cell_type_parameters.result(),
-                                                                         dat=dat,
+                                                                         dat=self.primordial.training_data.data,
                                                                          split="cell_type")
         
         self.description_primordial_by_cell_type=auto_partition(self.description_primordial_by_cell_type,
                                                                     self.partition_mb)
 
+    @unimplemented
     def clear_simulations(self):
         """Removes simulated data. Does not remove models fit to simulated data. Useful for reducing object size"""
         pass
