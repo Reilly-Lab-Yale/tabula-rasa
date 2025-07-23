@@ -985,68 +985,6 @@ class parameters:
 
 
 def extract_parameters(client,model,design,split):
-
-    def _extract_parameters(level,split,model,design_matrix):
-        
-        #print(f"type model: {type(model)}")
-        #print(f"type design_matrix: {type(design_matrix)}")
-        
-        #print("unwrapping model")
-        model=model.result()
-        #print("unwrapping design matrix")
-        #design_matrix=design_matrix.result()
-
-        ## Extract design matrix data ##
-        X=design_matrix["nb_regressors"]
-        y=design_matrix["regressand"]
-        Z=design_matrix["zi_regressors"]
-        reference=design_matrix["reference"]
-        model_type=design_matrix["model_type"]
-
-        ## theta ##
-        theta=model['weights']['theta'].squeeze()
-        
-        ## Mu ##
-        #multiply design matrix by weights
-        linear_mu= X @ model["weights"]["x_mu"]
-        #undo the link function to get predictions for each cell
-        mu_predictions=np.exp(linear_mu)
-        
-        #Get the level names for each row in the DF
-        level_type=anti_split(split)
-
-        if model_type=="contrastable":
-            row_labeling=undo_one_hot_encoding(X)
-            row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
-            row_labeling=row_labeling.str.removeprefix("T.")
-        elif model_type=="simulation_only":
-            #only one cell-type
-            row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
-        #Merge those level names onto the predictions for each row
-        mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
-
-        #aggregate predictions to one per level name
-        mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
-        #nb[key]=mu_summary
-        #print(mu_summary)
-        
-        ## ZI ##
-        # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
-        zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
-        
-        #extract names 
-        replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
-        replicate_labeling=replicate_labeling.str.removeprefix("T.")
-
-        
-
-        #apply names to ZI
-        zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
-        #aggregate
-        zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
-        
-        return mu_summary, zi_summary, theta
     
     def _extract_mu(split,model,design_matrix):
         #unpack information from the design matrix.
