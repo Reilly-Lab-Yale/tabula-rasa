@@ -1046,6 +1046,10 @@ def extract_parameters(client,model,design,split):
 
         return zi_summary
     
+    def _extract_theta(model):
+        theta=model['weights']['theta'].squeeze()
+        return theta
+
     mus={}
     zis={}
     thetas={}
@@ -1053,22 +1057,17 @@ def extract_parameters(client,model,design,split):
     #not worth parallelizing this loop: submission time would be greater than saved time.
     for level in model.model:
 
-        mu=client.submit(_extract_mu,
+        mus[level]=client.submit(_extract_mu,
                          split=split,
                          model=model.model[level],
                          design_matrix=design[level])
         
-        
-        zi=client.submit(_extract_zi,
+        zis[level]=client.submit(_extract_zi,
                          model=model.model[level],
                          design_matrix=design[level])
-        #placeholder
-        #theta=
-        theta=None
         
-        mus[level]=mu
-        zis[level]=zi
-        thetas[level]=theta
+        thetas[level]=client.submit(_extract_theta,
+                            model=model.model[level])
     
     return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
 
