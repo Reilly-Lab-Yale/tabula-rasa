@@ -730,7 +730,7 @@ class ortho:
         if self.by_cell_type_parameters is None:
             simple_write(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
         else:
-            self.by_cre_parameters.save(full_path/"by_cell_type_parameters.pkl")
+            self.by_cell_type_parameters.save(full_path/"by_cell_type_parameters.pkl")
         
         ## Design matricies
         if self.by_cre_design is None:
@@ -847,10 +847,10 @@ class ortho:
 
         Meant for debugging / manual inspection.
         """
-        self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters.result(),
+        self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
             design_matricies=dict_unwrap(self.by_cell_type_design),
             scMPRAdat=self.training_data)
-        self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters.result(),
+        self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters,
             design_matricies=dict_unwrap(self.by_cre_design),
             scMPRAdat=self.training_data)
     
@@ -878,7 +878,7 @@ class ortho:
             data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
             data_means.name="mean(umis_mpra_bc)"
 
-            mu_estimates=params.nb[model_level]
+            mu_estimates=params.nb[model_level].result()
 
             mu_summary=mu_estimates.join(data_means,how="left")
             # Fit regression
