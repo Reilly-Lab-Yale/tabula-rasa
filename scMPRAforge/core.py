@@ -394,8 +394,6 @@ def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     return ret
 
 
-
-
 @unimplemented
 def apply_deseq():
     """
@@ -489,8 +487,6 @@ def abort_on_failure(future,client):
         sprint("[!] Check slave node logs for details.")
         client.shutdown()
         assert 1==2
-
-
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
@@ -627,13 +623,6 @@ class experiment_model:
                 model=self.model[key],
                 dm=design_matricies[key])
     
-    def _flatten_out_futures(self):
-        """
-        For internal use only. 
-        Will bork downstream operations on the object.
-        """
-        for key in self.model:
-            self.model[key]=self.model[key].result()
 
     def _unflatten_futures(self,client):
         """
@@ -648,8 +637,15 @@ class experiment_model:
         """
         Makes a copy where the members are not futures but just objects
         """
-        ret=copy.deepcopy(self)
-        ret._flatten_out_futures()
+        #initalize a copy
+        ret=experiment_model(
+            model={key:None for key in self.model},
+            split=self.split
+        )
+        #gather model results
+        for key in ret.model:
+            ret.model[key]=self.model[key].result()
+        
         return ret
     
     def save(self,path):
@@ -729,12 +725,12 @@ class ortho:
         if self.by_cre_parameters is None:
             simple_write(self.by_cre_parameters,"by_cre_parameters.pkl")
         else:
-            simple_write(self.by_cre_parameters.result(),"by_cre_parameters.pkl")
+            self.by_cre_parameters.save(full_path/"by_cre_parameters.pkl")
 
         if self.by_cell_type_parameters is None:
             simple_write(self.by_cell_type_parameters,"by_cell_type_parameters.pkl")
         else:
-            simple_write(self.by_cell_type_parameters.result(),"by_cell_type_parameters.pkl")
+            self.by_cre_parameters.save(full_path/"by_cell_type_parameters.pkl")
         
         ## Design matricies
         if self.by_cre_design is None:
@@ -774,8 +770,8 @@ class ortho:
         ret_ortho.by_cell_type=experiment_model.load(client,full_path/"by_cell_type.pkl")
 
         ## Parameters
-        ret_ortho.by_cre_parameters=client.submit(lambda x : x, simple_load("by_cre_parameters.pkl"))
-        ret_ortho.by_cell_type_parameters=client.submit(lambda x : x, simple_load("by_cell_type_parameters.pkl"))
+        ret_ortho.by_cre_parameters=parameters.load(client,full_path/"by_cre_parameters.pkl")
+        ret_ortho.by_cell_type_parameters=parameters.load(client,full_path/"by_cell_type_parameters.pkl")
 
         ## Design matricies
         ret_ortho.by_cell_type_design=dict_wrap(client,simple_load("by_cell_type_design.pkl"))
@@ -925,8 +921,67 @@ class parameters:
 
         self.keys=list(nb.keys())
 
+    #def _flatten_out_futures(self):
+    #    """
+    #    For internal use only. 
+    #    Will bork downstream operations on the object.
+    #    """
+    #    for key in self.nb:
+    #        self.nb[key]=self.nb[key].result()
+    #        self.zi[key]=self.zi[key].result()
+    #        self.theta[key]=self.theta[key].result()
+        
 
+    def _unflatten_futures(self,client):
+        """
+        For internal use only
+        wraps all the models in futures
+        """
+        for key in self.keys:
+            self.nb[key]=client.submit(lambda x: x, self.nb[key])
+            self.zi[key]=client.submit(lambda x: x, self.zi[key])
+            self.theta[key]=client.submit(lambda x: x, self.theta[key])
+        
+    
+    def flattened_copy(self):
+        """
+        Makes a copy where the members are not futures but just objects.
+        """
+        #make a shallow copy
+        ret=parameters(
+            nb={key:None for key in self.nb},
+            zi={key:None for key in self.zi},
+            theta={key:None for key in self.theta},
+            broken_on=self.broken_on
+        )
+        #fill shallow copy with result data...
+        for key in self.keys:
+            ret.nb[key]=self.nb[key].result()
+            ret.zi[key]=self.zi[key].result()
+            ret.theta[key]=self.theta[key].result()
+        
+        return ret
+    
+    def save(self,path):
+        """
+        Saves parameters to a filepath.
+        Will hang if computation is not done yet
+        """
+        with open(path,"wb") as f:
+            pickle.dump(self.flattened_copy(),f)
 
+    @staticmethod
+    def load(client,path):
+        """
+        Loads parameters from a path
+        & returns it. Requires a client to wrap the individual models
+        in futures for use on a dask cluster. 
+        """
+        with open(path,"rb") as f:
+            ret=pickle.load(f)
+            if not ret is None:
+                ret._unflatten_futures(client)
+        return ret
 
 
 def extract_parameters(client,model,design,split):
