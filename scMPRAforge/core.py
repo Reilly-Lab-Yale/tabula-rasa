@@ -370,8 +370,6 @@ class scMPRA_data:
 
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
-
-
     
 
 @unimplemented
@@ -491,9 +489,6 @@ def abort_on_failure(future,client):
         sprint("[!] Check slave node logs for details.")
         client.shutdown()
         assert 1==2
-
-
-
 
 
 
@@ -834,16 +829,18 @@ class ortho:
         """Extracts parameters for all models in the object"""
 
         if not self.by_cre is None:
-            self.by_cre_parameters=client.submit(extract_parameters,
-                                                 self.by_cre,
-                                                 self.by_cre_design,
-                                                 "cre_id")
+            self.by_cre_parameters=extract_parameters(
+                client,
+                self.by_cre,
+                self.by_cre_design,
+                "cre_id")
         
         if not self.by_cell_type is None:
-            self.by_cell_type_parameters=client.submit(extract_parameters,
-                                                       self.by_cell_type,
-                                                       self.by_cell_type_design,
-                                                       "cell_type")
+            self.by_cell_type_parameters=extract_parameters(
+                client,
+                self.by_cell_type,
+                self.by_cell_type_design,
+                "cell_type")
         
     def compute_model_qc(self):
         """
@@ -860,7 +857,6 @@ class ortho:
         self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters.result(),
             design_matricies=dict_unwrap(self.by_cre_design),
             scMPRAdat=self.training_data)
-    
     
     @staticmethod
     def _nb_versus_means(params,design_matricies,scMPRAdat):
@@ -933,7 +929,7 @@ class parameters:
 
 
 
-def extract_parameters(model,design,split):
+def extract_parameters(client,model,design,split):
 
     def _extract_parameters(level,split,model,design_matrix):
         
@@ -997,22 +993,81 @@ def extract_parameters(model,design,split):
         
         return mu_summary, zi_summary, theta
     
-    model=model.model
+    def _extract_mu(split,model,design_matrix):
+        #unpack information from the design matrix.
+        X=design_matrix["nb_regressors"]
+        model_type=design_matrix["model_type"]
+        reference=design_matrix["reference"]
+
+        #multiply design matrix by weights
+        linear_mu= X @ model["weights"]["x_mu"]
+        #undo the link function to get predictions for each cell
+        mu_predictions=np.exp(linear_mu)
+
+        #now we have one mu value for each measurement, and we want to average 
+        #to get one value for each level...
+        
+        #Get the level names for each row in the design matrix
+        #e.g. the cell type for each measurement for a by-cre model,
+        #the cre name for each measurement for a by-cell-type model...
+        level_type=anti_split(split)
+
+        if model_type=="contrastable":
+            #multiple levels. 
+            row_labeling=undo_one_hot_encoding(X)
+            row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
+            row_labeling=row_labeling.str.removeprefix("T.")
+        elif model_type=="simulation_only":
+            #only one level
+            row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
+        #Merge those level names onto the predictions for each row
+        mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
+
+        #aggregate predictions to one per level name
+        mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
+
+        return mu_summary
+
+    def _extract_zi(model,design_matrix):
+        Z=design_matrix["zi_regressors"]
+        ## ZI ##
+        # multiply design matrix by weights
+        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
+        zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
+        
+        #extract names 
+        replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
+        replicate_labeling=replicate_labeling.str.removeprefix("T.")
+
+        #apply names to ZI
+        zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
+        #aggregate
+        zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
+
+        return zi_summary
     
     mus={}
     zis={}
     thetas={}
 
     #not worth parallelizing this loop: submission time would be greater than saved time.
-    for level in model:
+    for level in model.model:
 
-        mu_summary, zi_summary, theta=_extract_parameters(level=level,
-                            split=split,
-                            model=model[level],
-                            design_matrix=design[level])
+        mu=client.submit(_extract_mu,
+                         split=split,
+                         model=model.model[level],
+                         design_matrix=design[level])
         
-        mus[level]=mu_summary
-        zis[level]=zi_summary
+        
+        zi=client.submit(_extract_zi,
+                         model=model.model[level],
+                         design_matrix=design[level])
+        #placeholder
+        #theta=
+        theta=None
+        
+        mus[level]=mu
+        zis[level]=zi
         thetas[level]=theta
     
     return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
