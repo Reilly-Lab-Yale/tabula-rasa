@@ -1040,7 +1040,7 @@ def extract_parameters(client,model,design,split):
         return zi_summary
     
     def _extract_theta(model):
-        theta=model['weights']['theta'].squeeze()
+        theta=np.exp(model['weights']['theta'].squeeze())
         return theta
 
     mus={}
@@ -1089,7 +1089,7 @@ def describe_parameters(client,parameters,dat,split):
     flattened_param=flattened_param.reset_index().set_index([split,"rep_id"])
     
     working=cell_counts.join(flattened_param,how="left")
-    working["r"]=np.exp(working["theta"])
+    working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
     working=working.reset_index()
