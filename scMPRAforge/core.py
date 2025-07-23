@@ -1097,9 +1097,28 @@ def describe_parameters(client,parameters,dat,split):
 
     return working
 
-def flatten_param_representation(client: Client, params, split: str):
+def flatten_param_representation(params, split: str):
+    dfs=[]
+    for key in params.keys:
+        nb=params.nb[key].reset_index()
+        zi=params.zi[key].reset_index()
+        cartesian = nb.merge(zi, how='cross')
+        cartesian[split] = np.repeat(key, len(cartesian))
+        cartesian['theta'] = np.repeat(params.theta[key], len(cartesian))
+
+        index_cols = (
+            params.nb[key].index.names +
+            params.zi[key].index.names +
+            [split]
+        )
+        cartesian.set_index(index_cols, inplace=True)
+
+        dfs.append(cartesian)
+    return pd.concat(dfs)
+
+def _flatten_param_representation(client: Client, params, split: str):
     
-    params_future = client.scatter(params, broadcast=True)
+    #params_future = client.scatter(params, broadcast=True)
     # probably want to change this later once dat is always a future
     keys = params.keys  # assume this is list-like
 
