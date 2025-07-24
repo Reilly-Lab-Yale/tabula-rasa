@@ -1581,12 +1581,50 @@ class simulation_batch:
         plt.tight_layout()
         plt.show()
 
-    def plot_nb_spread(self):
-        nbs=self._nbs
+    def plot_nb_spread(self, groups_per_plot=None):
+        nbs = self._nbs
+        nbs=nbs.reset_index(drop=True)
         nbs['group'] = nbs['cell_type'] + " | " + nbs['cre_id']
+
+        # If groups_per_plot is set, break into batches
+        if groups_per_plot is not None:
+            all_groups = nbs['group'].unique()
+            num_groups = len(all_groups)
+
+            for i in range(0, num_groups, groups_per_plot):
+                group_chunk = all_groups[i:i+groups_per_plot]
+                subset = nbs[nbs['group'].isin(group_chunk)]
+
+                plt.figure(figsize=(12, 6))
+                sns.violinplot(
+                    data=subset, x='group', y='mu',
+                    inner=None, palette='Set1'
+                )
+                sns.scatterplot(
+                    data=subset[~subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                    x='group', y='mu',
+                    hue='cell_type', style='id',
+                    palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
+                )
+                sns.scatterplot(
+                    data=subset[subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                    x='group', y='mu',
+                    color='black', marker='X',
+                    s=120, label='primordial', zorder=10
+                )
+                plt.xlabel('cell_type | cre_id')
+                plt.ylabel('mu')
+                plt.title(f'nb parameters (mu) by cell_type and cre_id — groups {i+1} to {min(i+groups_per_plot, num_groups)}')
+                plt.xticks(rotation=45, ha='right')
+                plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                plt.tight_layout()
+                plt.show()
+            return
 
         plt.figure(figsize=(12, 6))
 
+        #useless numeric index
+        nbs = nbs.reset_index(drop=True)
         # Violin plot
         sns.violinplot(
             data=nbs, x='group', y='mu',
