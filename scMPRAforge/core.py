@@ -1103,7 +1103,14 @@ def describe_parameters(parameters,dat,split):
     cast_multiindex_to_str_inplace(flattened_param)
     cast_multiindex_to_str_inplace(cell_counts)
     
-    working=cell_counts.join(flattened_param,how="left")
+    lost_params=flattened_param[flattened_param.isna().any(axis=1)]
+    if not lost_params.empty:
+        logger.warning(f"Losing params {lost_params}")
+        flattened_param=flattened_param.dropna()
+
+    cell_counts=cell_counts.dropna()
+
+    working=flattened_param.join(cell_counts,how="inner")
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
@@ -1234,12 +1241,13 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
 
-def OUT_simulate_from_description(description):
+def _simulate_from_description(description):
     """
     Simulate from a description dask dataframe
     """
     # Repeat rows by 'cells' count, exploding to one row per cell
-    repeated_df = description.loc[np.repeat(description.index.values, description['cells'].values.astype(int))].reset_index(drop=True)
+    df=description
+    repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
     #repeated_df = description.loc[description.index.repeat(description['cells'])].reset_index(drop=True)
 
     # Simulate NB and ZI in numpy
