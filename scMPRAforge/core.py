@@ -1064,8 +1064,18 @@ def extract_parameters(client,model,design,split):
     
     return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
 
+def cast_multiindex_to_str_inplace(df):
+    """Convert all levels of a MultiIndex to strings, modifying df in-place."""
+    if not isinstance(df.index, pd.MultiIndex):
+        raise ValueError("Index is not a MultiIndex.")
 
-def describe_parameters(client,parameters,dat,split):
+    new_index = pd.MultiIndex.from_tuples(
+        [tuple(str(x) for x in tup) for tup in df.index],
+        names=df.index.names
+    )
+    df.index = new_index  # triggers inplace update of index
+
+def describe_parameters(parameters,dat,split):
     """
     Produces a convienient single-dataframe description of one split model. 
     'parameters' is a parameters object
@@ -1075,9 +1085,10 @@ def describe_parameters(client,parameters,dat,split):
 
     #change to return a dask instead of pandas dataframe
 
+    anti=anti_split(split)
 
     #count cells per group
-    cell_counts=dat.groupby([split,"rep_id"])["umis_mpra_bc"].agg("sum")
+    cell_counts=dat.groupby([split,anti,"rep_id"]).size()
     cell_counts=pd.DataFrame({"cells":cell_counts})
     
     #cast rep id to string just in case.
@@ -1085,8 +1096,12 @@ def describe_parameters(client,parameters,dat,split):
         cell_counts.index.levels[1].astype(str), level=1
     )
 
-    flattened_param=flatten_param_representation(client,parameters,split=split)
-    flattened_param=flattened_param.reset_index().set_index([split,"rep_id"])
+    flattened_param=flatten_param_representation(parameters.flattened_copy(),split=split)
+    #flattened_param["rep_id"]=flattened_param["rep_id"].astype(str)
+    flattened_param=flattened_param.reset_index().set_index([split,anti,"rep_id"])
+
+    cast_multiindex_to_str_inplace(flattened_param)
+    cast_multiindex_to_str_inplace(cell_counts)
     
     working=cell_counts.join(flattened_param,how="left")
     working["r"]=working["theta"]
@@ -1106,11 +1121,13 @@ def flatten_param_representation(params, split: str):
         cartesian[split] = np.repeat(key, len(cartesian))
         cartesian['theta'] = np.repeat(params.theta[key], len(cartesian))
 
-        index_cols = (
-            params.nb[key].index.names +
-            params.zi[key].index.names +
-            [split]
-        )
+        anti=anti_split(split)
+        index_cols=[split,anti,"rep_id"]
+        #index_cols = (
+        #    params.nb[key].index.names +
+        #    params.zi[key].index.names +
+        #    [split]
+        #)
         cartesian.set_index(index_cols, inplace=True)
 
         dfs.append(cartesian)
@@ -1210,11 +1227,32 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
     Minimum of 2!
     """
+    
     pdf=pdf.reset_index()#dask doesn't like multi-indexes, so reset to single index.
     est_bytes = pdf.memory_usage(index=True, deep=True).sum()
     target_bytes = target_mb_per_partition * 1_000_000
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
+
+def OUT_simulate_from_description(description):
+    """
+    Simulate from a description dask dataframe
+    """
+    # Repeat rows by 'cells' count, exploding to one row per cell
+    repeated_df = description.loc[np.repeat(description.index.values, description['cells'].values.astype(int))].reset_index(drop=True)
+    #repeated_df = description.loc[description.index.repeat(description['cells'])].reset_index(drop=True)
+
+    # Simulate NB and ZI in numpy
+    r = repeated_df['r'].to_numpy()
+    p = repeated_df['p'].to_numpy()
+    zi = repeated_df['zi'].to_numpy()
+
+    nb = np.random.negative_binomial(n=r, p=p)
+    keep_mask = np.random.binomial(n=1, p=1 - zi)
+    zinb = nb * keep_mask
+
+    repeated_df['zinb_sample'] = zinb
+    return repeated_df
 
 def simulate_from_description(description):
     """
@@ -1238,7 +1276,8 @@ def simulate_from_description(description):
         return repeated_df
     # Use auto_partition to repartition the description DataFrame
     #description = auto_partition(description)
-    description=description.repartition(partition_size="100KB")#5KB
+    #npartitions=
+    description=description.repartition(npartitions=2)
     return description.map_partitions(simulate_partition)
 
 class simulation_batch:
@@ -1265,20 +1304,18 @@ class simulation_batch:
 
         self.partition_mb=partition_mb
     
-    def describe_primordial(self,client):
+    def describe_primordial(self):
         """Generates and saves descriptions of the primordial which are necessary for subsequent simulation"""
-        self.description_primordial_by_cre=describe_parameters(client,
-                                                                   parameters=self.primordial.by_cre_parameters.result(),
+        self.description_primordial_by_cre=describe_parameters(parameters=self.primordial.by_cre_parameters,
                                                                    dat=self.primordial.training_data.data,
                                                                    split="cre_id")
 
         self.description_primordial_by_cre=auto_partition(self.description_primordial_by_cre,
                                                               self.partition_mb)
 
-        self.description_primordial_by_cell_type=describe_parameters(client,
-                                                                         parameters=self.primordial.by_cell_type_parameters.result(),
-                                                                         dat=self.primordial.training_data.data,
-                                                                         split="cell_type")
+        self.description_primordial_by_cell_type=describe_parameters(parameters=self.primordial.by_cell_type_parameters,
+                                                                     dat=self.primordial.training_data.data,
+                                                                     split="cell_type")
         
         self.description_primordial_by_cell_type=auto_partition(self.description_primordial_by_cell_type,
                                                                     self.partition_mb)
@@ -1357,9 +1394,9 @@ class simulation_batch:
             
             if var=="theta":
                 if split=="cre_id":
-                    working=working.by_cre_parameters.result()
+                    working=working.by_cre_parameters.flattened_copy()
                 elif split=="cell_type":
-                    working=working.by_cell_type_parameters.result()
+                    working=working.by_cell_type_parameters.flattened_copy()
                 
                 working=pd.DataFrame([working.theta]).T
                 working=working.reset_index()
@@ -1368,9 +1405,9 @@ class simulation_batch:
                 return working
 
             if split=="cre_id":
-                working=working.by_cre_parameters.result()
+                working=working.by_cre_parameters.flattened_copy()
             elif split=="cell_type":
-                working=working.by_cell_type_parameters.result()
+                working=working.by_cell_type_parameters.flattened_copy()
             if var =="nb":
                 working=pd.concat(working.nb)
             elif var =="zi":
@@ -1544,14 +1581,14 @@ class simulation_batch:
 
         # Violin plot
         sns.violinplot(
-            data=nbs, x='group', y='nb',
+            data=nbs, x='group', y='mu',
             inner=None, palette='Set1'
         )
 
         # Regular points
         sns.scatterplot(
             data=nbs[~nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='nb',
+            x='group', y='mu',
             hue='cell_type', style='id',
             palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
         )
@@ -1559,14 +1596,14 @@ class simulation_batch:
         # Primordial points overlay (bold black Xs)
         sns.scatterplot(
             data=nbs[nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='nb',
+            x='group', y='mu',
             color='black', marker='X',
             s=120, label='primordial', zorder=10
         )
 
         plt.xlabel('cell_type | cre_id')
-        plt.ylabel('nb')
-        plt.title('nb parameters by cell_type and cre_id')
+        plt.ylabel('mu')
+        plt.title('nb parameters (mu) by cell_type and cre_id')
         plt.xticks(rotation=45, ha='right')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.tight_layout()
