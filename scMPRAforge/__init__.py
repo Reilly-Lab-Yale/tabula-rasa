@@ -35,6 +35,9 @@ logger.addHandler(console_handler)
 from .core import *  # Imports everything public from core.py
 from .utils import *  # Imports everything public from utils.py
 
+from .bounds import Bounds
+from . import presets
+
 __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non-private functions
 
 
