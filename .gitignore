@@ -1,7 +1,7 @@
 .vscode
 *DS_Store
 slave*.out
-mcn_workbench.ipynb
+mcn_workbench/*
 __pycache__/
 *.pkl
 *.py[cod]
