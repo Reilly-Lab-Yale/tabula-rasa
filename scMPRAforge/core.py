@@ -1646,7 +1646,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
         ret_mse.append(None)
         ret_mbe.append(None)
         ret_mape.append(None)
-        #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+        logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cell_type=describe_parameters(parameters=inp_ortho.by_cell_type_parameters,
                             dat=inp_ortho.training_data.data,
@@ -1654,7 +1654,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
         
         by_cell_type=by_cell_type.set_index(['cell_type','cre_id'])
 
-        comp_by_cell_type=by_cell_type.join(ground_truth_mu)
+        comp_by_cell_type=by_cell_type.join(ground_truth_mu,how="inner")
         comp_by_cell_type=comp_by_cell_type[["mu","true_mu"]].drop_duplicates()
         
         ret_mse.append(mse(comp_by_cell_type))
@@ -1665,7 +1665,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
     if inp_ortho.by_cre_parameters is None:
         ret_mse.append(None)
         ret_mbe.append(None)
-        #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+        logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cre=describe_parameters(parameters=inp_ortho.by_cre_parameters,
                             dat=inp_ortho.training_data.data,
@@ -1673,7 +1673,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
         
         by_cre=by_cre.set_index(['cell_type','cre_id'])
 
-        comp_by_cre=by_cre.join(ground_truth_mu)
+        comp_by_cre=by_cre.join(ground_truth_mu,how="inner")
         comp_by_cre=comp_by_cre[["mu","true_mu"]].drop_duplicates()
         ret_mse.append(mse(comp_by_cre))
         ret_mbe.append(mbe(comp_by_cre))
