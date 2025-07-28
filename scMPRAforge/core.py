@@ -1621,19 +1621,31 @@ class simulation_batch:
             plt.tight_layout()
             plt.show()
 
-def versus_ground_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
+def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
     """
     Function takes a dataframe of ground truth values for each CRE, cell-type combination and compares to estimated parameters.
+
+    Note that mean absolute percentage error is only reported for cases where the truth values is nonzero.
+
     TODO: clean up duplicate code
     """
-    ret={}
+    ret_mse=[]#mean squared error
+    ret_mbe=[]#mean biased error
+    ret_mape=[]#mean absolute percentage error
     
     def mse(df):
         return np.mean((df["mu"]-df["true_mu"])**2)
+    def mbe(df):
+        return np.mean(df["mu"]-df["true_mu"])
+    def mape(df):
+        df_copy=df[df["true_mu"]!=0].copy()
+        return 100*np.mean(np.abs(df_copy["mu"]-df_copy["true_mu"])/df_copy["true_mu"])
     
-    # By cell_type
+    ## By cell_type ##
     if inp_ortho.by_cell_type_parameters is None:
-        ret["by_cell_type_mse"]=None
+        ret_mse.append(None)
+        ret_mbe.append(None)
+        ret_mape.append(None)
         #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cell_type=describe_parameters(parameters=inp_ortho.by_cell_type_parameters,
@@ -1644,11 +1656,15 @@ def versus_ground_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
 
         comp_by_cell_type=by_cell_type.join(ground_truth_mu)
         comp_by_cell_type=comp_by_cell_type[["mu","true_mu"]].drop_duplicates()
-        ret["by_cell_type_mse"]=mse(comp_by_cell_type)
+        
+        ret_mse.append(mse(comp_by_cell_type))
+        ret_mbe.append(mbe(comp_by_cell_type))
+        ret_mape.append(mape(comp_by_cell_type))
 
-    # by_cre
+    ## by_cre ##
     if inp_ortho.by_cre_parameters is None:
-        ret["by_cre_mse"]=None
+        ret_mse.append(None)
+        ret_mbe.append(None)
         #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cre=describe_parameters(parameters=inp_ortho.by_cre_parameters,
@@ -1659,9 +1675,14 @@ def versus_ground_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
 
         comp_by_cre=by_cre.join(ground_truth_mu)
         comp_by_cre=comp_by_cre[["mu","true_mu"]].drop_duplicates()
-        ret["by_cre_mse"]=mse(comp_by_cre)
+        ret_mse.append(mse(comp_by_cre))
+        ret_mbe.append(mbe(comp_by_cre))
+        ret_mape.append(mape(comp_by_cre))
     
-    return ret
+    return pd.DataFrame({"by":["cell_type","cre_id"],
+                         "mean_squared_error":ret_mse,
+                         "mean_biased_error":ret_mbe,
+                         "mean_absolute_percent_error":ret_mape})
 
 @unimplemented
 def volcano(results:experiment_model):
