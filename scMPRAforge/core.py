@@ -1621,6 +1621,48 @@ class simulation_batch:
             plt.tight_layout()
             plt.show()
 
+def versus_ground_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
+    """
+    Function takes a dataframe of ground truth values for each CRE, cell-type combination and compares to estimated parameters.
+    TODO: clean up duplicate code
+    """
+    ret={}
+    
+    def mse(df):
+        return np.mean((df["mu"]-df["true_mu"])**2)
+    
+    # By cell_type
+    if inp_ortho.by_cell_type_parameters is None:
+        ret["by_cell_type_mse"]=None
+        #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+    else:
+        by_cell_type=describe_parameters(parameters=inp_ortho.by_cell_type_parameters,
+                            dat=inp_ortho.training_data.data,
+                            split="cell_type")
+        
+        by_cell_type=by_cell_type.set_index(['cell_type','cre_id'])
+
+        comp_by_cell_type=by_cell_type.join(ground_truth_mu)
+        comp_by_cell_type=comp_by_cell_type[["mu","true_mu"]].drop_duplicates()
+        ret["by_cell_type_mse"]=mse(comp_by_cell_type)
+
+    # by_cre
+    if inp_ortho.by_cre_parameters is None:
+        ret["by_cre_mse"]=None
+        #logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+    else:
+        by_cre=describe_parameters(parameters=inp_ortho.by_cre_parameters,
+                            dat=inp_ortho.training_data.data,
+                            split="cre_id")
+        
+        by_cre=by_cre.set_index(['cell_type','cre_id'])
+
+        comp_by_cre=by_cre.join(ground_truth_mu)
+        comp_by_cre=comp_by_cre[["mu","true_mu"]].drop_duplicates()
+        ret["by_cre_mse"]=mse(comp_by_cre)
+    
+    return ret
+
 @unimplemented
 def volcano(results:experiment_model):
     """
