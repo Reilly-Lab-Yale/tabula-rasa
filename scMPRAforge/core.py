@@ -1524,8 +1524,8 @@ class simulation_batch:
         sns.scatterplot(
             data=theta[theta['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x=split, y='theta',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
+            edgecolor='black', marker='X',
+            s=120, zorder=10,hue='id'
         )
 
         plt.xlabel(f'{split}')
@@ -1561,15 +1561,15 @@ class simulation_batch:
             data=zi[~zi['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x='group', y='zi',
             hue=split, style='id',
-            palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
+            palette='Set1', edgecolor='black', s=50, alpha=0.7#, legend='brief'
         )
 
         # Primordial points overlay (bold black Xs)
         sns.scatterplot(
             data=zi[zi['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x='group', y='zi',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
+            edgecolor='black', marker='X',
+            s=120, zorder=10, hue='id'
         )
         
 
@@ -1581,79 +1581,45 @@ class simulation_batch:
         plt.tight_layout()
         plt.show()
 
-    def plot_nb_spread(self, groups_per_plot=None):
+    def plot_nb_spread(self, groups_per_plot=-1):
         nbs = self._nbs
-        nbs=nbs.reset_index(drop=True)
+        nbs = nbs.reset_index(drop=True)
         nbs['group'] = nbs['cell_type'] + " | " + nbs['cre_id']
 
-        # If groups_per_plot is set, break into batches
-        if groups_per_plot is not None:
-            all_groups = nbs['group'].unique()
-            num_groups = len(all_groups)
+        all_groups = nbs['group'].unique()
+        num_groups = len(all_groups)
 
-            for i in range(0, num_groups, groups_per_plot):
-                group_chunk = all_groups[i:i+groups_per_plot]
-                subset = nbs[nbs['group'].isin(group_chunk)]
+        if groups_per_plot == -1:
+            groups_per_plot = num_groups
 
-                plt.figure(figsize=(12, 6))
-                sns.violinplot(
-                    data=subset, x='group', y='mu',
-                    inner=None, palette='Set1'
-                )
-                sns.scatterplot(
-                    data=subset[~subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-                    x='group', y='mu',
-                    hue='cell_type', style='id',
-                    palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
-                )
-                sns.scatterplot(
-                    data=subset[subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-                    x='group', y='mu',
-                    color='black', marker='X',
-                    s=120, label='primordial', zorder=10
-                )
-                plt.xlabel('cell_type | cre_id')
-                plt.ylabel('mu')
-                plt.title(f'nb parameters (mu) by cell_type and cre_id — groups {i+1} to {min(i+groups_per_plot, num_groups)}')
-                plt.xticks(rotation=45, ha='right')
-                plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-                plt.tight_layout()
-                plt.show()
-            return
+        for i in range(0, num_groups, groups_per_plot):
+            group_chunk = all_groups[i:i+groups_per_plot]
+            subset = nbs[nbs['group'].isin(group_chunk)]
 
-        plt.figure(figsize=(12, 6))
-
-        #useless numeric index
-        nbs = nbs.reset_index(drop=True)
-        # Violin plot
-        sns.violinplot(
-            data=nbs, x='group', y='mu',
-            inner=None, palette='Set1'
-        )
-
-        # Regular points
-        sns.scatterplot(
-            data=nbs[~nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='mu',
-            hue='cell_type', style='id',
-            palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
-        )
-
-        # Primordial points overlay (bold black Xs)
-        sns.scatterplot(
-            data=nbs[nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='mu',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
-        )
-
-        plt.xlabel('cell_type | cre_id')
-        plt.ylabel('mu')
-        plt.title('nb parameters (mu) by cell_type and cre_id')
-        plt.xticks(rotation=45, ha='right')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.tight_layout()
-        plt.show()
+            plt.figure(figsize=(12, 6))
+            sns.violinplot(
+                data=subset, x='group', y='mu',
+                inner=None, palette='Set1'
+            )
+            sns.scatterplot(
+                data=subset[~subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                x='group', y='mu',
+                hue='cell_type', style='id',
+                palette='Set1', s=50, alpha=0.7
+            )
+            sns.scatterplot(
+                data=subset[subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                x='group', y='mu',
+                edgecolor='black', marker='X',
+                s=120, zorder=10, hue='id'
+            )
+            plt.xlabel('cell_type | cre_id')
+            plt.ylabel('mu')
+            plt.title(f'nb parameters (mu) by cell_type and cre_id — groups {i+1} to {min(i+groups_per_plot, num_groups)}')
+            plt.xticks(rotation=45, ha='right')
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            plt.show()
 
 @unimplemented
 def volcano(results:experiment_model):
