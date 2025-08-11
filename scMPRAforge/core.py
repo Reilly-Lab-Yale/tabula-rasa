@@ -1328,7 +1328,6 @@ class simulation_batch:
     Optionally, fits additional ortho objects to simulations & plots their paremeter spread
     Useful for estimating variance of an experimental setup...
     """
-    #several functions modify state in a way necessary for subsq functions: add checks to make sure prev. has been called.
     
     #consolidate split and parameter validity checking
 
@@ -1337,6 +1336,8 @@ class simulation_batch:
     def __init__(self,primordial,partition_mb=50):
         #the initial 
         self.primordial=primordial
+        description_primordial_by_cre=None
+        description_primordial_by_cell_type=None
         
         self.simulated_from_cre=[]
         self.simulated_from_cell_type=[]
@@ -1387,7 +1388,7 @@ class simulation_batch:
         """
         simulates n replicates
 
-        todo: additional paeallelism
+        todo: additional parallelism
         todo: pick which set of models to create : by cre, by cell-type, or both
         currently all both
         """
@@ -1417,9 +1418,11 @@ class simulation_batch:
             recap.criss_cross(client=client,dat=s)
             recap.extract_params(client)
             self.ortho_simulated_cell_type.append(recap)
+        
+        self._flatten_all_parameters()
     
     def _flatten_all_parameters(self):
-        """Flatten all parameters in preparation for plotting"""
+        """Flatten all simulated ortho parameters into single dataframes for convienient access"""
         #old from_cre and from_cell_type are the orthos...
 
         splits=["cre_id","cell_type"]
@@ -1528,8 +1531,6 @@ class simulation_batch:
         self._zi_cell=pd.concat(zi_cell)
         self._theta_cre=pd.concat(theta_cre)
         self._theta_cell=pd.concat(theta_cell)
-
-    
     
     def plot_theta_spread(self, split):
         """Plots the spread of the thetas of simulated data with primordial for reference."""
@@ -1658,6 +1659,151 @@ class simulation_batch:
             plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             plt.show()
+
+    def save(self,path,name):
+        """
+        Simple save of a full simulation batch.
+        creates directory 'name' in 'path' (and many subdirectories).
+
+        Caveats:
+        1. Does not keep a copy of training data in simulated orthos, since 
+        2. It does not save the parameters objects, since they would be redundant with the summary dataframes.
+        Instead, you can use 
+        - description_primordial_by_cre
+        - description_primordial_by_cell_type
+        to get the values of the primordial parameters, and
+        - _nbs
+        - _zi_cre
+        - _zi_cell
+        - _theta_cre
+        - _theta_cell
+        for the parameter values of the simulated replicates.
+
+        (or you can have them recomputed).
+
+        Will block & wait for results if not done computing
+        """
+        # Create output directory #
+        root_path=Path(path)/name
+        try:
+            root_path.mkdir(parents=True)
+        except FileExistsError:
+            logger.error(f"Cowardly refusing to overwrite {root_path}.")
+            raise(FileExistsError)
+        # save primordial ortho if present #
+        if self.primordial is not None:
+            self.primordial.save(path=root_path,name="primordial_ortho")
+
+        # save the actual simulated replicate dfs if present. #
+
+        #loop over each set of simulated datasets
+        for from_by in ["simulated_from_cre","simulated_from_cell_type"]:
+        
+            simulations=getattr(self,from_by)
+            
+            #make an output directory
+
+            simulations_path=root_path/from_by
+            simulations_path.mkdir()
+            
+            #if we actually have simulated datsets of this class:
+            if not simulations is None:
+
+                #dump each as a parquet
+                for idx, simulated_dataset in enumerate(simulations):
+                    simulated_dataset.to_parquet(simulations_path/f"{idx}.scmpra")
+
+        # save the simulated replicate orthos if present. #
+
+        #generally, the relationship will be : models mean there are simulated data
+        #simulated data doesn't mean there are models.
+
+        for from_by in ["ortho_simulated_cre","ortho_simulated_cell_type"]:
+            ortho_simulations=getattr(self,from_by)
+            
+            if not ortho_simulations is None:
+                orthos_path=root_path/from_by
+                for idx, simulated_ortho in enumerate(ortho_simulations):
+                    #We strip the data since we just saved it above. 
+                    simulated_ortho.save(path=orthos_path,name=f"{idx}",strip_training_data=True)
+
+
+        #save the primordial descriptions, if they exist.
+        for from_by in ["description_primordial_by_cre","description_primordial_by_cell_type"]:
+            if not getattr(self,from_by) is None:
+                description_path=root_path/from_by
+                getattr(self,from_by).to_parquet(description_path,compression="gzip")
+        
+        # save the parameters of the simulated reps if present
+        sim_parameters_root=root_path/"simulated_rep_parameters"
+        sim_parameters_root.mkdir()
+
+        for from_by in ["_nbs","_zi_cre","_zi_cell","_theta_cre","_theta_cell"]:
+            if not getattr(self,from_by) is None:
+                param_path=sim_parameters_root/from_by
+                pa_data_table=pa.Table.from_pandas(getattr(self,from_by),preserve_index=True)
+                pq.write_table(pa_data_table,param_path,compression="gzip")
+
+    @classmethod
+    def load(cls,client,path,name):
+        """
+        Loads a batch saved with save_batch.
+        See the caveats noted in the docstring for save_batch.
+        Requires you pass a client to re-wrap futures. 
+        """
+        # check directory #
+        root_path=Path(path)/name
+        
+        if not root_path.is_dir():
+            logger.error(f"No directory {root_path}.")
+            raise(FileNotFoundError)
+        
+        # create the batch object #
+        ret=simulation_batch(None)
+        
+        # load primordial orthos if present #
+        primordial_path=root_path/"primordial_ortho"
+        if not root_path.is_dir():
+            logger.info("No primordial found, skipping...")
+        else:
+            ret.primordial=ortho.load(client,path=root_path,name="primordial_ortho")
+
+        
+        # load the actual simulated replicate dfs if present. #
+
+        for from_by in ["simulated_from_cre","simulated_from_cell_type"]:
+            setattr(ret,from_by,[])
+            replicates_root=root_path/from_by
+            for simulated_replicate_path in replicates_root.iterdir():
+                replicate=scMPRA_data.from_parquet(simulated_replicate_path)
+                getattr(ret,from_by).append(replicate)
+
+        # Load the actual simulated replicate orthos #
+
+        for from_by in ["ortho_simulated_cre","ortho_simulated_cell_type"]:
+            setattr(ret,from_by,[])
+            ortho_replicates_root=root_path/from_by
+            for simulated_ortho_path in ortho_replicates_root.iterdir():
+                replicate_ortho=ortho.load(client,ortho_replicates_root,simulated_ortho_path)
+                getattr(ret,from_by).append(replicate_ortho)
+
+        # load the primordial descriptions, if they exist.
+
+        for from_by in ["description_primordial_by_cre","description_primordial_by_cell_type"]:
+            primordial_path=root_path/from_by
+            if primordial_path.exists():
+                setattr(ret,from_by,dd.read_parquet(primordial_path))
+        
+        # load the parameters of the simulated reps if present
+        sim_parameters_root=root_path/"simulated_rep_parameters"
+        if sim_parameters_root.exists():
+            for from_by in ["_nbs","_zi_cre","_zi_cell","_theta_cre","_theta_cell"]:
+                pa_data_table=pq.read_table(sim_parameters_root/from_by)
+                pd_data_table=pa_data_table.to_pandas(types_mapper=pd.ArrowDtype)
+                setattr(ret,from_by,pd_data_table)
+        
+        return ret
+
 
 def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
     """
