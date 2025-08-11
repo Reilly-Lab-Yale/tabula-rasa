@@ -1388,7 +1388,8 @@ class simulation_batch:
         simulates n replicates
 
         todo: additional paeallelism
-        todo: pick which set of models to create
+        todo: pick which set of models to create : by cre, by cell-type, or both
+        currently all both
         """
         #add parallel scatter-gather here!
         for _ in range(0,n):
