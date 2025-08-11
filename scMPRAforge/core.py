@@ -723,7 +723,7 @@ class ortho:
         
         self.training_data=None
 
-    def save(self,path,name):
+    def save(self,path,name,strip_training_data=False):
         """
         Simple pickle save.
 
@@ -779,7 +779,10 @@ class ortho:
             simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
         ## training data
-        simple_write(self.training_data,"training_data.pkl")
+        if not strip_training_data:
+            simple_write(self.training_data,"training_data.pkl")
+        else:
+            simple_write(None,"training_data.pkl")
 
     @classmethod
     def load(cls,client,path,name):
@@ -966,7 +969,7 @@ class parameters:
 
     def _unflatten_futures(self,client):
         """
-        wraps all the models in futures
+        Wraps all the models in futures
         """
         for key in self.keys:
             self.nb[key]=client.submit(lambda x: x, self.nb[key])
