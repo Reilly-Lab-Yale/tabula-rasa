@@ -944,6 +944,13 @@ class ortho:
         return QC
 
 class parameters:
+    """
+    Stores triples of parameters
+    - nb (negative binomial mean), zi (zero inflation), theta (dispersion parameter)
+
+    for 'broken_on' (by cell type, by cre, or whatever models)
+
+    """
     def __init__(self, nb, zi, theta, broken_on):
         self.nb=nb
         self.zi=zi
@@ -955,21 +962,10 @@ class parameters:
         assert zi.keys() == theta.keys()
 
         self.keys=list(nb.keys())
-
-    #def _flatten_out_futures(self):
-    #    """
-    #    For internal use only. 
-    #    Will bork downstream operations on the object.
-    #    """
-    #    for key in self.nb:
-    #        self.nb[key]=self.nb[key].result()
-    #        self.zi[key]=self.zi[key].result()
-    #        self.theta[key]=self.theta[key].result()
         
 
     def _unflatten_futures(self,client):
         """
-        For internal use only
         wraps all the models in futures
         """
         for key in self.keys:
