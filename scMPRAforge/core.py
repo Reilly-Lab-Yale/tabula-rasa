@@ -16,6 +16,10 @@ import pickle
 from pathlib import Path
 import copy
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import json
+
 from scipy.stats import linregress
 #import statsmodels.discrete.count_model as smdc
 import patsy
@@ -213,20 +217,51 @@ class scMPRA_data:
 
         return ret
     
-    @unimplemented
+    
     @classmethod
-    def from_json(cls,filepath):
+    def from_parquet(cls,path):
         """
-        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        Returns a <scMPRA_data> object with data loaded from `path`.
+        Takes full path, /path/to/data.scmpra.
         """
-        pass
+        #create return object
+        ret=cls()
+        
+        pa_data_table=pq.read_table(path)
+        data=pa_data_table.to_pandas(types_mapper=pd.ArrowDtype)
 
-    @unimplemented
-    def to_json(self,filepath):
+        ret.data=data
+        
+        #extract parquet metadata (bytes->bytes)
+        pa_metadata = pa_data_table.schema.metadata or {}
+        #extract & decode the item with members
+        meta_dict = json.loads(pa_metadata.get(b"scMPRA_data.members", b"{}").decode("utf-8"))
+
+        # Restore all saved metadata members
+        for k, v in meta_dict.items():
+            setattr(ret, k, v)
+
+        return ret
+
+    def to_parquet(self, path:str):
         """
-        Dump object to filepath
+        Saves to a parquet file using gzip compression.
+        Takes full path, /path/to/data.scmpra
+        WILL clobber existing files with the same path.
         """
-        pass
+        #create a parquet table from the scMPRA data
+        pa_data_table=pa.Table.from_pandas(self.data,preserve_index=True)
+        #extract parquet metadata created in above, defaulting to empty dict
+        pa_metadata=dict(pa_data_table.schema.metadata or {})
+        #get all members of the object other than the actual data
+        nondata={key:val for key, val in self.__dict__.items() if key != "data"}
+        #add the class members to parquet metadata
+        pa_metadata[b"scMPRA_data.members"]=json.dumps(nondata, default=str).encode("utf-8")
+
+        #dump
+        pa_data_table=pa_data_table.replace_schema_metadata(pa_metadata)
+        pq.write_table(pa_data_table,path,compression="gzip")
+
     
     def graph_chimeric(self, *args, **kwargs):
         """
@@ -1352,6 +1387,9 @@ class simulation_batch:
     def simulate_many(self,client,n):
         """
         simulates n replicates
+
+        todo: additional paeallelism
+        todo: pick which set of models to create
         """
         #add parallel scatter-gather here!
         for _ in range(0,n):
