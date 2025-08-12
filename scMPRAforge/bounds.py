@@ -14,7 +14,13 @@ class Bounds:
     by_cre_theta:float=None
     by_cell_type_theta:float=None
     num_cres:int=None
-    num_cell_types:int=None
+    cells_per_cell_type:dict=None
+    moi:float=None
+
+    #moi will be multiplicity of infection: number of mprabc per cell
+    
+
+
     #mean_mpra_barcodes_per_cre:float
     #stdev_mpra_barcodes_per_cre:float
     #barcode_deviation:float
