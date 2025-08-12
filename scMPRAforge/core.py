@@ -16,6 +16,10 @@ import pickle
 from pathlib import Path
 import copy
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import json
+
 from scipy.stats import linregress
 #import statsmodels.discrete.count_model as smdc
 import patsy
@@ -213,20 +217,51 @@ class scMPRA_data:
 
         return ret
     
-    @unimplemented
+    
     @classmethod
-    def from_json(cls,filepath):
+    def from_parquet(cls,path):
         """
-        Returns a <scMPRA_data> object with data loaded from `filepath`.
+        Returns a <scMPRA_data> object with data loaded from `path`.
+        Takes full path, /path/to/data.scmpra.
         """
-        pass
+        #create return object
+        ret=cls()
+        
+        pa_data_table=pq.read_table(path)
+        data=pa_data_table.to_pandas(types_mapper=pd.ArrowDtype)
 
-    @unimplemented
-    def to_json(self,filepath):
+        ret.data=data
+        
+        #extract parquet metadata (bytes->bytes)
+        pa_metadata = pa_data_table.schema.metadata or {}
+        #extract & decode the item with members
+        meta_dict = json.loads(pa_metadata.get(b"scMPRA_data.members", b"{}").decode("utf-8"))
+
+        # Restore all saved metadata members
+        for k, v in meta_dict.items():
+            setattr(ret, k, v)
+
+        return ret
+
+    def to_parquet(self, path:str):
         """
-        Dump object to filepath
+        Saves to a parquet file using gzip compression.
+        Takes full path, /path/to/data.scmpra
+        WILL clobber existing files with the same path.
         """
-        pass
+        #create a parquet table from the scMPRA data
+        pa_data_table=pa.Table.from_pandas(self.data,preserve_index=True)
+        #extract parquet metadata created in above, defaulting to empty dict
+        pa_metadata=dict(pa_data_table.schema.metadata or {})
+        #get all members of the object other than the actual data
+        nondata={key:val for key, val in self.__dict__.items() if key != "data"}
+        #add the class members to parquet metadata
+        pa_metadata[b"scMPRA_data.members"]=json.dumps(nondata, default=str).encode("utf-8")
+
+        #dump
+        pa_data_table=pa_data_table.replace_schema_metadata(pa_metadata)
+        pq.write_table(pa_data_table,path,compression="gzip")
+
     
     def graph_chimeric(self, *args, **kwargs):
         """
@@ -688,7 +723,7 @@ class ortho:
         
         self.training_data=None
 
-    def save(self,path,name):
+    def save(self,path,name,strip_training_data=False):
         """
         Simple pickle save.
 
@@ -744,7 +779,10 @@ class ortho:
             simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
         ## training data
-        simple_write(self.training_data,"training_data.pkl")
+        if not strip_training_data:
+            simple_write(self.training_data,"training_data.pkl")
+        else:
+            simple_write(None,"training_data.pkl")
 
     @classmethod
     def load(cls,client,path,name):
@@ -909,6 +947,13 @@ class ortho:
         return QC
 
 class parameters:
+    """
+    Stores triples of parameters
+    - nb (negative binomial mean), zi (zero inflation), theta (dispersion parameter)
+
+    for 'broken_on' (by cell type, by cre, or whatever models)
+
+    """
     def __init__(self, nb, zi, theta, broken_on):
         self.nb=nb
         self.zi=zi
@@ -920,22 +965,11 @@ class parameters:
         assert zi.keys() == theta.keys()
 
         self.keys=list(nb.keys())
-
-    #def _flatten_out_futures(self):
-    #    """
-    #    For internal use only. 
-    #    Will bork downstream operations on the object.
-    #    """
-    #    for key in self.nb:
-    #        self.nb[key]=self.nb[key].result()
-    #        self.zi[key]=self.zi[key].result()
-    #        self.theta[key]=self.theta[key].result()
         
 
     def _unflatten_futures(self,client):
         """
-        For internal use only
-        wraps all the models in futures
+        Wraps all the models in futures
         """
         for key in self.keys:
             self.nb[key]=client.submit(lambda x: x, self.nb[key])
@@ -1294,7 +1328,6 @@ class simulation_batch:
     Optionally, fits additional ortho objects to simulations & plots their paremeter spread
     Useful for estimating variance of an experimental setup...
     """
-    #several functions modify state in a way necessary for subsq functions: add checks to make sure prev. has been called.
     
     #consolidate split and parameter validity checking
 
@@ -1303,6 +1336,8 @@ class simulation_batch:
     def __init__(self,primordial,partition_mb=50):
         #the initial 
         self.primordial=primordial
+        description_primordial_by_cre=None
+        description_primordial_by_cell_type=None
         
         self.simulated_from_cre=[]
         self.simulated_from_cell_type=[]
@@ -1352,6 +1387,10 @@ class simulation_batch:
     def simulate_many(self,client,n):
         """
         simulates n replicates
+
+        todo: additional parallelism
+        todo: pick which set of models to create : by cre, by cell-type, or both
+        currently all both
         """
         #add parallel scatter-gather here!
         for _ in range(0,n):
@@ -1379,9 +1418,11 @@ class simulation_batch:
             recap.criss_cross(client=client,dat=s)
             recap.extract_params(client)
             self.ortho_simulated_cell_type.append(recap)
+        
+        self._flatten_all_parameters()
     
     def _flatten_all_parameters(self):
-        """Flatten all parameters in preparation for plotting"""
+        """Flatten all simulated ortho parameters into single dataframes for convienient access"""
         #old from_cre and from_cell_type are the orthos...
 
         splits=["cre_id","cell_type"]
@@ -1490,8 +1531,6 @@ class simulation_batch:
         self._zi_cell=pd.concat(zi_cell)
         self._theta_cre=pd.concat(theta_cre)
         self._theta_cell=pd.concat(theta_cell)
-
-    
     
     def plot_theta_spread(self, split):
         """Plots the spread of the thetas of simulated data with primordial for reference."""
@@ -1524,8 +1563,8 @@ class simulation_batch:
         sns.scatterplot(
             data=theta[theta['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x=split, y='theta',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
+            edgecolor='black', marker='X',
+            s=120, zorder=10,hue='id'
         )
 
         plt.xlabel(f'{split}')
@@ -1561,15 +1600,15 @@ class simulation_batch:
             data=zi[~zi['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x='group', y='zi',
             hue=split, style='id',
-            palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
+            palette='Set1', edgecolor='black', s=50, alpha=0.7#, legend='brief'
         )
 
         # Primordial points overlay (bold black Xs)
         sns.scatterplot(
             data=zi[zi['id'].isin(['primordial cre_id', 'primordial cell_type'])],
             x='group', y='zi',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
+            edgecolor='black', marker='X',
+            s=120, zorder=10, hue='id'
         )
         
 
@@ -1581,79 +1620,253 @@ class simulation_batch:
         plt.tight_layout()
         plt.show()
 
-    def plot_nb_spread(self, groups_per_plot=None):
+    def plot_nb_spread(self, groups_per_plot=-1):
         nbs = self._nbs
-        nbs=nbs.reset_index(drop=True)
+        nbs = nbs.reset_index(drop=True)
         nbs['group'] = nbs['cell_type'] + " | " + nbs['cre_id']
 
-        # If groups_per_plot is set, break into batches
-        if groups_per_plot is not None:
-            all_groups = nbs['group'].unique()
-            num_groups = len(all_groups)
+        all_groups = nbs['group'].unique()
+        num_groups = len(all_groups)
 
-            for i in range(0, num_groups, groups_per_plot):
-                group_chunk = all_groups[i:i+groups_per_plot]
-                subset = nbs[nbs['group'].isin(group_chunk)]
+        if groups_per_plot == -1:
+            groups_per_plot = num_groups
 
-                plt.figure(figsize=(12, 6))
-                sns.violinplot(
-                    data=subset, x='group', y='mu',
-                    inner=None, palette='Set1'
-                )
-                sns.scatterplot(
-                    data=subset[~subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-                    x='group', y='mu',
-                    hue='cell_type', style='id',
-                    palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
-                )
-                sns.scatterplot(
-                    data=subset[subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-                    x='group', y='mu',
-                    color='black', marker='X',
-                    s=120, label='primordial', zorder=10
-                )
-                plt.xlabel('cell_type | cre_id')
-                plt.ylabel('mu')
-                plt.title(f'nb parameters (mu) by cell_type and cre_id — groups {i+1} to {min(i+groups_per_plot, num_groups)}')
-                plt.xticks(rotation=45, ha='right')
-                plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-                plt.tight_layout()
-                plt.show()
-            return
+        for i in range(0, num_groups, groups_per_plot):
+            group_chunk = all_groups[i:i+groups_per_plot]
+            subset = nbs[nbs['group'].isin(group_chunk)]
 
-        plt.figure(figsize=(12, 6))
+            plt.figure(figsize=(12, 6))
+            sns.violinplot(
+                data=subset, x='group', y='mu',
+                inner=None, palette='Set1'
+            )
+            sns.scatterplot(
+                data=subset[~subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                x='group', y='mu',
+                hue='cell_type', style='id',
+                palette='Set1', s=50, alpha=0.7
+            )
+            sns.scatterplot(
+                data=subset[subset['id'].isin(['primordial cre_id', 'primordial cell_type'])],
+                x='group', y='mu',
+                edgecolor='black', marker='X',
+                s=120, zorder=10, hue='id'
+            )
+            plt.xlabel('cell_type | cre_id')
+            plt.ylabel('mu')
+            plt.title(f'nb parameters (mu) by cell_type and cre_id — groups {i+1} to {min(i+groups_per_plot, num_groups)}')
+            plt.xticks(rotation=45, ha='right')
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            plt.show()
 
-        #useless numeric index
-        nbs = nbs.reset_index(drop=True)
-        # Violin plot
-        sns.violinplot(
-            data=nbs, x='group', y='mu',
-            inner=None, palette='Set1'
-        )
+    def save(self,path,name):
+        """
+        Simple save of a full simulation batch.
+        creates directory 'name' in 'path' (and many subdirectories).
 
-        # Regular points
-        sns.scatterplot(
-            data=nbs[~nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='mu',
-            hue='cell_type', style='id',
-            palette='Set1', edgecolor='black', s=50, alpha=0.7, legend='brief'
-        )
+        Caveats:
+        1. Does not keep a copy of training data in simulated orthos, since 
+        2. It does not save the parameters objects, since they would be redundant with the summary dataframes.
+        Instead, you can use 
+        - description_primordial_by_cre
+        - description_primordial_by_cell_type
+        to get the values of the primordial parameters, and
+        - _nbs
+        - _zi_cre
+        - _zi_cell
+        - _theta_cre
+        - _theta_cell
+        for the parameter values of the simulated replicates.
 
-        # Primordial points overlay (bold black Xs)
-        sns.scatterplot(
-            data=nbs[nbs['id'].isin(['primordial cre_id', 'primordial cell_type'])],
-            x='group', y='mu',
-            color='black', marker='X',
-            s=120, label='primordial', zorder=10
-        )
+        (or you can have them recomputed).
 
-        plt.xlabel('cell_type | cre_id')
-        plt.ylabel('mu')
-        plt.title('nb parameters (mu) by cell_type and cre_id')
-        plt.xticks(rotation=45, ha='right')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.tight_layout()
-        plt.show()
+        Will block & wait for results if not done computing
+        """
+        # Create output directory #
+        root_path=Path(path)/name
+        try:
+            root_path.mkdir(parents=True)
+        except FileExistsError:
+            logger.error(f"Cowardly refusing to overwrite {root_path}.")
+            raise(FileExistsError)
+        # save primordial ortho if present #
+        if self.primordial is not None:
+            self.primordial.save(path=root_path,name="primordial_ortho")
+
+        # save the actual simulated replicate dfs if present. #
+
+        #loop over each set of simulated datasets
+        for from_by in ["simulated_from_cre","simulated_from_cell_type"]:
+        
+            simulations=getattr(self,from_by)
+            
+            #make an output directory
+
+            simulations_path=root_path/from_by
+            simulations_path.mkdir()
+            
+            #if we actually have simulated datsets of this class:
+            if not simulations is None:
+
+                #dump each as a parquet
+                for idx, simulated_dataset in enumerate(simulations):
+                    simulated_dataset.to_parquet(simulations_path/f"{idx}.scmpra")
+
+        # save the simulated replicate orthos if present. #
+
+        #generally, the relationship will be : models mean there are simulated data
+        #simulated data doesn't mean there are models.
+
+        for from_by in ["ortho_simulated_cre","ortho_simulated_cell_type"]:
+            ortho_simulations=getattr(self,from_by)
+            
+            if not ortho_simulations is None:
+                orthos_path=root_path/from_by
+                for idx, simulated_ortho in enumerate(ortho_simulations):
+                    #We strip the data since we just saved it above. 
+                    simulated_ortho.save(path=orthos_path,name=f"{idx}",strip_training_data=True)
+
+
+        #save the primordial descriptions, if they exist.
+        for from_by in ["description_primordial_by_cre","description_primordial_by_cell_type"]:
+            if not getattr(self,from_by) is None:
+                description_path=root_path/from_by
+                getattr(self,from_by).to_parquet(description_path,compression="gzip")
+        
+        # save the parameters of the simulated reps if present
+        sim_parameters_root=root_path/"simulated_rep_parameters"
+        sim_parameters_root.mkdir()
+
+        for from_by in ["_nbs","_zi_cre","_zi_cell","_theta_cre","_theta_cell"]:
+            if not getattr(self,from_by) is None:
+                param_path=sim_parameters_root/from_by
+                pa_data_table=pa.Table.from_pandas(getattr(self,from_by),preserve_index=True)
+                pq.write_table(pa_data_table,param_path,compression="gzip")
+
+    @classmethod
+    def load(cls,client,path,name):
+        """
+        Loads a batch saved with save_batch.
+        See the caveats noted in the docstring for save_batch.
+        Requires you pass a client to re-wrap futures. 
+        """
+        # check directory #
+        root_path=Path(path)/name
+        
+        if not root_path.is_dir():
+            logger.error(f"No directory {root_path}.")
+            raise(FileNotFoundError)
+        
+        # create the batch object #
+        ret=simulation_batch(None)
+        
+        # load primordial orthos if present #
+        primordial_path=root_path/"primordial_ortho"
+        if not root_path.is_dir():
+            logger.info("No primordial found, skipping...")
+        else:
+            ret.primordial=ortho.load(client,path=root_path,name="primordial_ortho")
+
+        
+        # load the actual simulated replicate dfs if present. #
+
+        for from_by in ["simulated_from_cre","simulated_from_cell_type"]:
+            setattr(ret,from_by,[])
+            replicates_root=root_path/from_by
+            for simulated_replicate_path in replicates_root.iterdir():
+                replicate=scMPRA_data.from_parquet(simulated_replicate_path)
+                getattr(ret,from_by).append(replicate)
+
+        # Load the actual simulated replicate orthos #
+
+        for from_by in ["ortho_simulated_cre","ortho_simulated_cell_type"]:
+            setattr(ret,from_by,[])
+            ortho_replicates_root=root_path/from_by
+            for simulated_ortho_path in ortho_replicates_root.iterdir():
+                replicate_ortho=ortho.load(client,ortho_replicates_root,simulated_ortho_path)
+                getattr(ret,from_by).append(replicate_ortho)
+
+        # load the primordial descriptions, if they exist.
+
+        for from_by in ["description_primordial_by_cre","description_primordial_by_cell_type"]:
+            primordial_path=root_path/from_by
+            if primordial_path.exists():
+                setattr(ret,from_by,dd.read_parquet(primordial_path))
+        
+        # load the parameters of the simulated reps if present
+        sim_parameters_root=root_path/"simulated_rep_parameters"
+        if sim_parameters_root.exists():
+            for from_by in ["_nbs","_zi_cre","_zi_cell","_theta_cre","_theta_cell"]:
+                pa_data_table=pq.read_table(sim_parameters_root/from_by)
+                pd_data_table=pa_data_table.to_pandas(types_mapper=pd.ArrowDtype)
+                setattr(ret,from_by,pd_data_table)
+        
+        return ret
+
+
+def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
+    """
+    Function takes a dataframe of ground truth values for each CRE, cell-type combination and compares to estimated parameters.
+
+    Note that mean absolute percentage error is only reported for cases where the truth values is nonzero.
+
+    TODO: clean up duplicate code
+    """
+    ret_mse=[]#mean squared error
+    ret_mbe=[]#mean biased error
+    ret_mape=[]#mean absolute percentage error
+    
+    def mse(df):
+        return np.mean((df["mu"]-df["true_mu"])**2)
+    def mbe(df):
+        return np.mean(df["mu"]-df["true_mu"])
+    def mape(df):
+        df_copy=df[df["true_mu"]!=0].copy()
+        return 100*np.mean(np.abs(df_copy["mu"]-df_copy["true_mu"])/df_copy["true_mu"])
+    
+    ## By cell_type ##
+    if inp_ortho.by_cell_type_parameters is None:
+        ret_mse.append(None)
+        ret_mbe.append(None)
+        ret_mape.append(None)
+        logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+    else:
+        by_cell_type=describe_parameters(parameters=inp_ortho.by_cell_type_parameters,
+                            dat=inp_ortho.training_data.data,
+                            split="cell_type")
+        
+        by_cell_type=by_cell_type.set_index(['cell_type','cre_id'])
+
+        comp_by_cell_type=by_cell_type.join(ground_truth_mu,how="inner")
+        comp_by_cell_type=comp_by_cell_type[["mu","true_mu"]].drop_duplicates()
+        
+        ret_mse.append(mse(comp_by_cell_type))
+        ret_mbe.append(mbe(comp_by_cell_type))
+        ret_mape.append(mape(comp_by_cell_type))
+
+    ## by_cre ##
+    if inp_ortho.by_cre_parameters is None:
+        ret_mse.append(None)
+        ret_mbe.append(None)
+        logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
+    else:
+        by_cre=describe_parameters(parameters=inp_ortho.by_cre_parameters,
+                            dat=inp_ortho.training_data.data,
+                            split="cre_id")
+        
+        by_cre=by_cre.set_index(['cell_type','cre_id'])
+
+        comp_by_cre=by_cre.join(ground_truth_mu,how="inner")
+        comp_by_cre=comp_by_cre[["mu","true_mu"]].drop_duplicates()
+        ret_mse.append(mse(comp_by_cre))
+        ret_mbe.append(mbe(comp_by_cre))
+        ret_mape.append(mape(comp_by_cre))
+    
+    return pd.DataFrame({"by":["cell_type","cre_id"],
+                         "mean_squared_error":ret_mse,
+                         "mean_biased_error":ret_mbe,
+                         "mean_absolute_percent_error":ret_mape})
 
 @unimplemented
 def volcano(results:experiment_model):

@@ -5,7 +5,9 @@ import functools
 import logging
 import umi_tools
 import re
+import pandas as pd
 from dask.distributed import Future
+
 
 logger = logging.getLogger("scMPRAforge")
 
@@ -186,7 +188,7 @@ def dict_wrap(client,dic):
 def dict_unwrap(dic):
     """
     Takes a dict of dask futures & gets their results. 
-    
+    Should replace with client.gather!
     Note: Will hang if computations not done
     Note: Not recursive! 
     Note: Since it pulls all the data to the control process, can take a lot of memory!
