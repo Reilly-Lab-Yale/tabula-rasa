@@ -1,11 +1,9 @@
 
 
 Assumptions:
-1. Barcode flattening is mandatory. Though ideally we would model each barcode as per MPRAmodel for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. 
+1. Barcode flattening is mandatory. Though ideally we would model each barcode (like the approach in MPRAmodel) for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. Not that the barcodes are retained, just not modeled separaately. 
 2. Removal of "false zeroes" through clonotype analysis and transfection reporters is part of pre-processing. 
 3. We are interested in changes in CRE activity within and between cell-types
-4. I've run ahead with the "one big model" approach (instead of the "one model per CRE" approach) but we can change this later based on some exploratory analysis. 
-5. We could potentially add MPRA barcode variability as another mixture-model component : however I expect this to be well-captured in a single set of per-CRE-cell-type ZINB paramater sets (should be tested). (Ought to be tested separately...)
 
 (We may eventually wish to turn the ad-hoc pre-processing steps into common tools.)
 
