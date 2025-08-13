@@ -16,6 +16,7 @@ class Bounds:
     num_cres:int=None
     cells_per_cell_type:dict=None
     moi:float=None
+    theta:float=None
 
     #moi will be multiplicity of infection: number of mprabc per cell
     
