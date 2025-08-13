@@ -21,7 +21,11 @@ import pyarrow.parquet as pq
 import json
 
 from scipy.stats import linregress
-#import statsmodels.discrete.count_model as smdc
+import scipy
+
+import statsmodels.api as sm
+import statsmodels.discrete.discrete_model as smd
+
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
 from formulaic import Formula
@@ -141,6 +145,87 @@ class scMPRA_data:
     
     def flag_emperical(self):
         self.metadata["synthetic"]=False
+    
+    def describe_transfection(self,plot:bool=False):
+        """
+        Fits simple NB & possion models to a the number of transfections per cell, 
+        as proxied by number of unique MPRA barcodes per cell.
+
+        inp is a <scMPRA_data>
+
+        Setting plot to true will produce a histogram with poisson and negative 
+        binomial PMFs overlaid.
+
+        Returns a dictionary with keys:
+        - 'poisson_mu'
+        - 'nb_mu'
+        - 'nb_alpha'
+
+        And saves it in object metadata as "transfection_model"
+
+        Drawing from one of the distributions (or a similar distribution shifted to a different MOI) 
+        can be used to simulate transfection.
+
+        Throws a RuntimeError if the NB model fails to converge. Just uses statsmodels for simplicity.
+        """
+        assert self.table_type=="mpra_umiwise"
+
+        unique_mpra_barcodes_per_cell=self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        #model
+
+        y = np.asarray(unique_mpra_barcodes_per_cell, dtype=int)
+
+        # intercept-only design
+        X = np.ones((len(y), 1))
+
+        # --- Fit Poisson (discrete) ---
+        pois = smd.Poisson(y, X).fit(disp=False)
+        mu_pois = np.exp(pois.params[0])      # intercept-only mean
+
+        if not pois.converged:
+            logger.warning("Poisson model of transfection failed to converge.")
+
+        # --- Fit Negative Binomial NB2 ---
+        # Var = mu + alpha*mu^2, alpha is estimated
+        nb = smd.NegativeBinomial(y, X).fit(disp=False)
+        mu_nb = np.exp(nb.params[0])          # intercept-only mean
+        alpha_nb = nb.params[-1]              # dispersion (NB2 alpha)
+
+        if not nb.converged:
+            logger.error("Negative binomial model of transfection failed to converge.")
+            raise(RuntimeError)
+        
+        
+        if plot:
+            # Convert NB2 (mu, alpha) -> scipy's nbinom (r, p)
+            r = 1.0 / alpha_nb                    # "size"
+            p = r / (r + mu_nb)                   # success prob
+            # Grid for PMFs
+            k = np.arange(0, y.max() + 1)
+            pmf_nb = scipy.stats.nbinom.pmf(k, r, p)
+            pmf_pois = scipy.stats.poisson.pmf(k, mu_pois)
+
+            # --- Plot ---
+            fig, ax = plt.subplots()
+            sns.histplot(
+                y,
+                bins=np.arange(y.min(), y.max() + 2),
+                stat="density", discrete=True, alpha=0.3, ax=ax
+            )
+            ax.plot(k, pmf_nb, marker='o', linestyle='-', label=f'NB fit (μ={mu_nb:.2f}, α={alpha_nb:.3f})')
+            ax.plot(k, pmf_pois, linestyle='--', label=f'Poisson fit (μ={mu_pois:.2f})')
+            ax.set_xlabel('Unique MPRA barcodes per cell')
+            ax.set_ylabel('Density')
+            ax.legend()
+            plt.tight_layout()
+            plt.show()
+
+        
+        return {'poisson_mu':mu_pois,
+             'nb_mu':mu_nb,
+             'nb_alpha':alpha_nb}
+    
+
     
     def set_negative_controls(self,negative_controls:list[str]):
         """
