@@ -29,21 +29,25 @@ python -m pip install tensorflow-macos==2.9.2
 python -m pip install tensorflow-metal==0.5.1
 ```
 
-Temporary (still included as dep for speed-testing)
+
 ```
-conda install statsmodels
+conda install statsmodels 
 ```
 
 Additional required packages
 ```
-conda install matplotlib seaborn bioconda::umi_tools formulaic dask
+conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueue
 ```
+
+may need to install `tensorflow keras` if you didn't above
 
 At this point, it may work fine. However some environments (such as mccleary gpu nodes) may require some more fnagling to get GPU accel working. Perform the following:
 ```
 conda install cudatoolkit=11.2 cudnn=8.1.0
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 ```
+
+latter not necessary on bouchet
 
 then deactivate, activate, and test with
 ```
