@@ -460,28 +460,20 @@ def apply_deseq():
     pass
 
 
-@unimplemented
-def hypothesis_tester(scmpra_models, hypotheses, flavor="wald"):
+def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="wald", test_fn=None):
     """
-    Arguments
-        scmpra_models : <pd.DataFrame>
-        hypotheses : <pd.Dataframe>
-        flavor : <str>
-    Returns
-        <pd.DataFrame>
+    Backward-compatible facade.
 
-    Takes .. and a set of hypotheses and tests them all. Returns
-    a results dataframe. Flavor selects the test type, and can be one of
-    - wald : wald test
-    - wilcox : wilcoxin-rank-sum
-    - permute : permutation test
-    - deseq : uses deseq2
-    
+    Provide either:
+      - test_fn: a per-row callable used by HypothesisTester (preferred while migrating)
+      - or later, we can route based on `flavor` to built-in tests.
+
+    Returns a ResultSet.
     """
-    #calls apply_deseq
-    assert table_type(scmpra_data.columns) == "mpra_umiwise"
-    assert table_type(hypotheses.columns) == "hypotheses"
-    pass
+    if test_fn is None:
+        raise NotImplementedError("Please provide `test_fn` for now. Built-in tests will be added to route by `flavor`.")
+    runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
+    return runner.run(hypotheses)
 
 
 """
@@ -2024,6 +2016,52 @@ class ResultSet(HypothesisSet):
     def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
         return cls(df)
 
+class HypothesisTester:
+    """
+    Orchestrates running a test function on each hypothesis row.
+    You supply `test_fn` that implements a single-row comparison and returns:
+        dict(test_type, test_statistic, p_value, fold_change, flattened)
+    The runner adds BH (`bh_p`) and merges back with the hypothesis columns to return a ResultSet.
+    """
+
+    def __init__(self, test_fn, test_type_name: str):
+        """
+        test_fn(row: pd.Series) -> dict with keys:
+            - test_statistic (float)
+            - p_value (float)
+            - fold_change (float)
+            - flattened (bool)
+        and optionally 'test_type' (overrides test_type_name).
+        """
+        self.test_fn = test_fn
+        self.test_type_name = test_type_name
+
+    def run(self, hypotheses: HypothesisSet) -> ResultSet:
+        rows = []
+        for _, h in hypotheses.to_dataframe().iterrows():
+            out = dict(self.test_fn(h))
+            out.setdefault("test_type", self.test_type_name)
+
+            # required result fields presence
+            missing = [k for k in ("test_statistic","p_value","fold_change","flattened") if k not in out]
+            if missing:
+                raise ValueError(f"test_fn did not return required keys: {missing}")
+
+            # stitch hypothesis + result
+            stitched = {**h.to_dict(), **out}
+            rows.append(stitched)
+
+        df = pd.DataFrame(rows)
+
+        # add BH
+        df["bh_p"] = _bh_adjust(df["p_value"])
+
+        # Coerce columns roughly
+        for c in ("test_statistic","p_value","fold_change","bh_p"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df["flattened"] = df["flattened"].astype(bool)
+
+        return ResultSet.from_dataframe(df)
 
 @unimplemented
 def volcano(results:experiment_model):
