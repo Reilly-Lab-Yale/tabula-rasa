@@ -2016,6 +2016,17 @@ class ResultSet(HypothesisSet):
     def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
         return cls(df)
 
+def _bh_adjust(pvals: pd.Series) -> pd.Series:
+    """Benjamini–Hochberg FDR control on a 1D array-like of p-values."""
+    p = pd.Series(pvals, dtype=float).fillna(1.0)
+    n = p.shape[0]
+    order = p.argsort(kind="mergesort")
+    ranks = pd.Series(np.arange(1, n + 1), index=order.index).iloc[order]
+    adj_sorted = (p.iloc[order] * n / ranks.to_numpy()).cummin()[::-1]
+    out = pd.Series(index=p.index, dtype=float)
+    out.iloc[order] = np.minimum(adj_sorted, 1.0)
+    return out
+    
 class HypothesisTester:
     """
     Orchestrates running a test function on each hypothesis row.
