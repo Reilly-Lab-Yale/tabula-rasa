@@ -44,6 +44,16 @@ logger = logging.getLogger("scMPRAforge")
 MIN_PTS=3
 PARTITION_SIZE_MB=50
 
+# Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
+HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
+HYPOTHESIS_OPTIONAL = {"reference_CRE", "reference_cell_type", "meta"}
+HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
+
+RESULT_REQUIRED = {
+    "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
+}
+RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
+
 #functions
 @unimplemented
 def always_unfinished():
@@ -76,30 +86,33 @@ def table_type(column_names):
 
     TODO: move to the inside of the scMPRA object
     """
+    ### UPDATE: ENG refactored slightly to incorporate hypothesis table and simplify some lines
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
     
     #If columns match no definitions the table is malformed: so this is the default. 
-    ret='malformed'
-    
-    #check mandatory columns of read-wise MPRA
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'mpra_umi', 'reads_mpra'}<=set(column_names):
-        if ret=='malformed':
-            ret='mpra_readwise'
-        else:
-            return 'malformed'
-    
-    #check mandatory columns of umi-wise full MPRA
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'umis_mpra_bc'}<=set(column_names):
-        if ret=='malformed':
-            ret='mpra_umiwise'
-        else:
-            return 'malformed'
-    
-    #check mandatory columns of umi-wise flattened MPRA
-    #unimplemented
+    cols = set(map(str, column_names))  # tolerate ArrowDtype/Index types
+    ret = 'malformed'
+    matches = 0
 
-    return ret
+    # Read-wise MPRA (use the names used elsewhere in the codebase)
+    if {'cell_bc','rep_id','cre_id','cell_type','mpra_bc','umi','reads'} <= cols:
+        ret = 'mpra_readwise'; matches += 1
+
+    # UMI-wise MPRA
+    if {'cell_bc','rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
+        ret = 'mpra_umiwise'; matches += 1
+
+    # Hypotheses (must have required; optional ok)
+    if HYPOTHESIS_REQUIRED <= cols and cols <= (HYPOTHESIS_ALL | cols):
+        # Distinguish result vs hypothesis next:
+        if RESULT_REQUIRED <= cols:
+            ret = 'results'
+        else:
+            ret = 'hypotheses'
+        matches += 1
+
+    return ret if matches == 1 else 'malformed'
 
 @unimplemented
 def load_hypothesis_set(filepath):
@@ -1867,6 +1880,140 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
                          "mean_squared_error":ret_mse,
                          "mean_biased_error":ret_mbe,
                          "mean_absolute_percent_error":ret_mape})
+
+
+class HypothesisSet:
+    """
+    A validated container for hypothesis rows.
+
+    Columns:
+      - comparison_CRE (str) [T]
+      - comparison_cell_type (str) [T]
+      - reference_CRE (str or NA) [F]
+      - reference_cell_type (str or NA) [F]
+      - meta (str or NA) [F]
+
+    Rules:
+      - If both reference_* are NA: interpret as "compare to zero" (activity vs 0).
+            - maybe change this to use the references from the scMPRA data object? discuss what we want the appropriate default to be
+      - If exactly one of reference_CRE / reference_cell_type is provided: malformed.
+    """
+
+    def __init__(self, df: pd.DataFrame):
+        self.df = df.copy()
+        self._coerce_and_validate()
+
+    # -------- Construction / IO --------
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "HypothesisSet":
+        return cls(df)
+
+    @classmethod
+    def from_tsv(cls, path: str) -> "HypothesisSet":
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
+        return cls(df)
+
+    @classmethod
+    def from_csv(cls, path: str) -> "HypothesisSet":
+        df = pd.read_csv(path, dtype=str, keep_default_na=True)
+        return cls(df)
+
+    # @classmethod
+    ## Probably not needed for this class but it's here if we change our minds
+    # def from_parquet(cls, path: str) -> "HypothesisSet":
+    #     t = pq.read_table(path)
+    #     df = t.to_pandas(types_mapper=pd.ArrowDtype)
+    #     # convert ArrowDtype to pandas strings where appropriate
+    #     for col in df.columns:
+    #         if col in HYPOTHESIS_ALL:
+    #             df[col] = df[col].astype("string")
+    #     return cls(df)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return self.df.copy()
+
+    def to_tsv(self, path: str) -> None:
+        self.df.to_csv(path, sep="\t", index=False)
+
+    def to_csv(self, path: str) -> None:
+        self.df.to_csv(path, index=False)
+
+    # def to_parquet(self, path: str) -> None:
+    #     table = pa.Table.from_pandas(self.df, preserve_index=False)
+    #     pq.write_table(table, path, compression="gzip")
+
+    # -------- Validation / Utilities --------
+    def _coerce_and_validate(self) -> None:
+        # Ensure expected cols exist; extra cols are allowed (and kept)
+        for col in HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL:
+            if col not in self.df.columns:
+                self.df[col] = pd.Series([pd.NA] * len(self.df), dtype="string")
+
+        # Cast to string dtype (allows NA)
+        for col in HYPOTHESIS_ALL:
+            self.df[col] = self.df[col].astype("string")
+
+        # Required present
+        missing_req = [c for c in HYPOTHESIS_REQUIRED if self.df[c].isna().any()]
+        if missing_req:
+            raise ValueError(f"Missing required entries in columns: {missing_req}")
+
+        # Rule: either both reference_* are NA, or both are present (non-NA)
+        # Debating whether this rule is actually necessary or not
+        ref_cre_na = self.df["reference_CRE"].isna()
+        ref_ct_na  = self.df["reference_cell_type"].isna()
+        malformed_mask = (ref_cre_na ^ ref_ct_na)  # xor -> exactly one NA
+        if malformed_mask.any():
+            bad_rows = list(self.df.index[malformed_mask][:10])
+            raise ValueError(
+                "Malformed hypotheses: rows contain only one of reference_CRE / reference_cell_type. "
+                f"Example indices: {bad_rows} (showing up to 10)."
+            )
+
+    def is_zero_reference(self) -> pd.Series:
+        """Row-wise boolean: True if comparing against implicit zero (both reference_* are NA)."""
+        return self.df["reference_CRE"].isna() & self.df["reference_cell_type"].isna()
+
+    def add_meta(self, series_like) -> None:
+        """Attach/overwrite a meta column (useful for painting plots)."""
+        self.df["meta"] = pd.Series(series_like, index=self.df.index, dtype="string")
+
+    def __len__(self):
+        return len(self.df)
+
+
+class ResultSet(HypothesisSet):
+    """
+    Extends HypothesisSet with result columns:
+      - test_type (str)     [T]
+      - test_statistic (float) [T]
+      - p_value (float)     [T]
+      - fold_change (float) [T]
+      - bh_p (float)        [T]
+      - flattened (bool)    [T]
+    """
+
+    def __init__(self, df: pd.DataFrame):
+        super().__init__(df)
+        self._validate_results_block()
+
+    def _validate_results_block(self) -> None:
+        missing = [c for c in RESULT_REQUIRED if c not in self.df.columns]
+        if missing:
+            raise ValueError(f"Results table missing required columns: {missing}")
+
+        # Basic dtype coercions (tolerant)
+        self.df["test_type"] = self.df["test_type"].astype("string")
+        for c in ("test_statistic", "p_value", "fold_change", "bh_p"):
+            self.df[c] = pd.to_numeric(self.df[c], errors="coerce")
+        # flattened must be boolean-ish
+        if self.df["flattened"].dtype != bool:
+            self.df["flattened"] = self.df["flattened"].astype("boolean")
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
+        return cls(df)
+
 
 @unimplemented
 def volcano(results:experiment_model):
