@@ -115,29 +115,7 @@ def table_type(column_names):
     return ret if matches == 1 else 'malformed'
 
 
-def load_hypothesis_set(filepath):
-    """
-    Loads a hypothesis (or result) table from disk and returns a HypothesisSet or ResultSet.
-    Supports .tsv/.csv/.parquet by extension.
-    """
-    path = Path(filepath)
-    ext = path.suffix.lower()
-    if ext == ".tsv":
-        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
-    elif ext == ".csv":
-        df = pd.read_csv(path, dtype=str, keep_default_na=True)
-    # elif ext in {".parquet", ".pq"}:
-    #     df = pq.read_table(path).to_pandas(types_mapper=pd.ArrowDtype)
-    else:
-        raise ValueError(f"Unsupported file extension: {ext}")
 
-    ttype = table_type(df.columns)
-    if ttype == "hypotheses":
-        return HypothesisSet.from_dataframe(df)
-    elif ttype == "results":
-        return ResultSet.from_dataframe(df)
-    else:
-        raise ValueError(f"Loaded table does not look like a hypothesis/results table (got type '{ttype}').")
 
 
 class scMPRA_data:
@@ -460,20 +438,7 @@ def apply_deseq():
     pass
 
 
-def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="wald", test_fn=None):
-    """
-    Backward-compatible facade.
 
-    Provide either:
-      - test_fn: a per-row callable used by HypothesisTester (preferred while migrating)
-      - or later, we can route based on `flavor` to built-in tests.
-
-    Returns a ResultSet.
-    """
-    if test_fn is None:
-        raise NotImplementedError("Please provide `test_fn` for now. Built-in tests will be added to route by `flavor`.")
-    runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
-    return runner.run(hypotheses)
 
 
 """
@@ -2074,6 +2039,46 @@ class HypothesisTester:
 
         return ResultSet.from_dataframe(df)
 
+def load_hypothesis_set(filepath):
+    """
+    Loads a hypothesis (or result) table from disk and returns a HypothesisSet or ResultSet.
+    Supports .tsv/.csv/.parquet by extension.
+    """
+    path = Path(filepath)
+    ext = path.suffix.lower()
+    if ext == ".tsv":
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
+    elif ext == ".csv":
+        df = pd.read_csv(path, dtype=str, keep_default_na=True)
+    # elif ext in {".parquet", ".pq"}:
+    #     df = pq.read_table(path).to_pandas(types_mapper=pd.ArrowDtype)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
+
+    ttype = table_type(df.columns)
+    if ttype == "hypotheses":
+        return HypothesisSet.from_dataframe(df)
+    elif ttype == "results":
+        return ResultSet.from_dataframe(df)
+    else:
+        raise ValueError(f"Loaded table does not look like a hypothesis/results table (got type '{ttype}').")
+
+def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="wald", test_fn=None):
+    """
+    Backward-compatible facade.
+
+    Provide either:
+      - test_fn: a per-row callable used by HypothesisTester (preferred while migrating)
+      - or later, we can route based on `flavor` to built-in tests.
+
+    Returns a ResultSet.
+    """
+    if test_fn is None:
+        raise NotImplementedError("Please provide `test_fn` for now. Built-in tests will be added to route by `flavor`.")
+    runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
+    return runner.run(hypotheses)
+
+    
 @unimplemented
 def volcano(results:experiment_model):
     """
