@@ -114,20 +114,30 @@ def table_type(column_names):
 
     return ret if matches == 1 else 'malformed'
 
-@unimplemented
+
 def load_hypothesis_set(filepath):
     """
-    Arguments
-        filepath <str>
-    Returns
-        <pd.DataFrame>
-
-    Loads a hypothesis or hypothesis+results set from disc.
+    Loads a hypothesis (or result) table from disk and returns a HypothesisSet or ResultSet.
+    Supports .tsv/.csv/.parquet by extension.
     """
-    #load table...
-    #assert table_type(table.columns)=="hypothesis" or table_type(table.columns)=="results"
-    #return table
-    pass
+    path = Path(filepath)
+    ext = path.suffix.lower()
+    if ext == ".tsv":
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
+    elif ext == ".csv":
+        df = pd.read_csv(path, dtype=str, keep_default_na=True)
+    # elif ext in {".parquet", ".pq"}:
+    #     df = pq.read_table(path).to_pandas(types_mapper=pd.ArrowDtype)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
+
+    ttype = table_type(df.columns)
+    if ttype == "hypotheses":
+        return HypothesisSet.from_dataframe(df)
+    elif ttype == "results":
+        return ResultSet.from_dataframe(df)
+    else:
+        raise ValueError(f"Loaded table does not look like a hypothesis/results table (got type '{ttype}').")
 
 
 class scMPRA_data:
