@@ -20,7 +20,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import json
 
-from scipy.stats import linregress
+from scipy.stats import linregress, chi2, norm
 #import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
@@ -33,6 +33,12 @@ import dask.dataframe as dd
 import dask.array as da
 
 from enum import Enum
+
+# tensorflow import for Wald test Hessian/SE computation
+try:
+    import tensorflow as tf  # optional dep
+except Exception as _tf_err:
+    tf = None
 
 #internal imports
 from .utils import unimplemented
@@ -65,6 +71,12 @@ def helloworld():
     print("hello world!")
     pass
 
+def _require_tensorflow():
+    if tf is None:
+        raise ImportError(
+            "TensorFlow is required for Wald test Hessian/SE computation. "
+            "Please install tensorflow>=2.x."
+        )
 
 def table_type(column_names):
     """
@@ -1992,6 +2004,334 @@ def _bh_adjust(pvals: pd.Series) -> pd.Series:
     out.iloc[order] = np.minimum(adj_sorted, 1.0)
     return out
     
+def zinb_loglik_tf(params, exog, exog_infl, endog):
+    """
+    TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
+
+    params = concat([x_mu, x_pi, log_theta])
+    """
+    N = tf.cast(tf.shape(endog)[0], tf.float32)
+
+    num_features = tf.shape(exog)[1]
+    num_infl_features = tf.shape(exog_infl)[1]
+
+    x_mu = params[:num_features]
+    x_pi = params[num_features:num_features + num_infl_features]
+    log_theta = params[-1]
+    theta = tf.exp(log_theta)
+
+    mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
+    pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+
+    # zero-inflation logits -> log(q0), log(q1) as in your code
+    log_q0 = -tf.nn.softplus(-pi_logits)
+    log_q1 = log_q0 - pi_logits
+
+    y = tf.cast(endog, tf.float32)
+
+    # NB log-likelihood (for y>0)
+    t1 = tf.math.lgamma(y + theta)
+    t2 = -tf.math.lgamma(theta)
+    t3 = theta * log_theta
+    t4 = y * tf.math.log(mu + 1e-8)
+    ty = tf.math.log(mu + theta + 1e-8)
+    t5 = -(theta + y) * ty
+    nb_case = t1 + t2 + t3 + t4 + t5 + log_q1
+
+    # Zero case
+    p1 = theta * (log_theta - ty) + log_q1
+    zero_case = tf.reduce_logsumexp(tf.stack([log_q0, p1], axis=0), axis=0)
+
+    ll = tf.where(y < 1e-8, zero_case, nb_case)
+
+    # 3-step reduction (mean neg LL per output, add back log-factorial, sum)
+    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                      # (num_outputs,)
+    log_fact = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)    # ∑ ln(y!)
+    llfs = -(mean_neg_ll * N + log_fact)                           # (num_outputs,)
+    log_likelihood = tf.reduce_sum(llfs)
+    return log_likelihood
+
+def _setup_params_from_fit(zinb_model_fit):
+    """
+    Extract params vector and TF variable (x_mu, x_pi, theta) from a single
+    fitted TensorZINB result dict with labeled weights.
+    """
+    x_mu = zinb_model_fit['weights']['x_mu']
+    x_pi = zinb_model_fit['weights']['x_pi']
+    log_theta = zinb_model_fit['weights']['theta'].flatten()  # already log-space
+
+    # N.B. x_mu and x_pi are already pandas Series with names; keep arrays here
+    params = np.concatenate([np.asarray(x_mu).ravel(),
+                             np.asarray(x_pi).ravel(),
+                             np.asarray(log_theta).ravel()])
+    params_tensor = tf.Variable(params, dtype=tf.float32)
+    return params, params_tensor
+
+def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
+    """
+    Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
+    """
+    y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+    Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+
+    endog = y.to_numpy().reshape((-1, 1))
+    exog = X.to_numpy()
+    exog_infl = Z.to_numpy()
+
+    exog_tensor = tf.constant(exog, dtype=tf.float32)
+    endog_tensor = tf.constant(endog, dtype=tf.float32)
+    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
+    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+
+def _hessian_se(params_tensor, exog_tensor, exog_infl_tensor, endog_tensor):
+    """
+    Compute Hessian, invert to covariance, return standard errors and covariance.
+    No shape assumptions; x_mu size = exog.shape[1], x_pi size = exog_infl.shape[1].
+    """
+    _require_tensorflow()
+
+    with tf.GradientTape() as tape2:
+        with tf.GradientTape() as tape1:
+            ll = zinb_loglik_tf(params_tensor, exog_tensor, exog_infl_tensor, endog_tensor)
+        grad = tape1.gradient(ll, params_tensor)
+    hessian = tape2.jacobian(grad, params_tensor)
+
+    sess = tf.compat.v1.Session()
+    sess.run(tf.compat.v1.global_variables_initializer())
+    hessian_val = sess.run(hessian)
+
+    cov_matrix = np.linalg.inv(-hessian_val)
+    standard_errors = np.sqrt(np.diag(cov_matrix))
+    return standard_errors, cov_matrix
+
+def _slice_se(standard_errors, exog_cols, infl_cols):
+    """
+    Split the stacked SE vector into (se_x_mu, se_x_pi, se_theta) by actual sizes.
+    """
+    k_nb = len(exog_cols)
+    k_zi = len(infl_cols)
+    se_x_mu = standard_errors[:k_nb]
+    se_x_pi = standard_errors[k_nb:k_nb+k_zi]
+    se_theta = standard_errors[k_nb+k_zi:]
+    return se_x_mu, se_x_pi, se_theta
+
+def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
+    """
+    Wald test: compare a CRE within a fixed cell_type.
+
+    H = {comparison_CRE, comparison_cell_type, [optional reference_CRE==baseline], [reference_cell_type==same]}
+
+    Returns dict for HypothesisTester:
+      test_statistic, p_value, fold_change, flattened, (and optional extras)
+    """
+    _require_tensorflow()
+
+    cell_type = str(h["comparison_cell_type"])
+    comp_cre = str(h["comparison_CRE"])
+
+    # sanity: use the by_cell_type model
+    model_dict = ortho.by_cell_type.model[cell_type].result()
+    design = ortho.by_cell_type_design[cell_type].result()
+    nb_formula, zi_formula = design['nb_formula'], design['zi_formula']
+
+    # subset counts to this cell_type
+    df = counts.data[counts.data["cell_type"] == cell_type]
+
+    # Build matrices and params
+    (_, X, Z), (_, exog, exog_infl), (endog_t, exog_t, exog_infl_t) = _model_matrices_for_subset(df, nb_formula, zi_formula)
+    params_vec, params_t = _setup_params_from_fit(model_dict)
+
+    # Hessian-based SEs
+    se_all, cov = _hessian_se(params_t, exog_t, exog_infl_t, endog_t)
+    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+
+    # NB coefficient names are taken from labeled weights (already applied in annotate_models)
+    x_mu_series = model_dict['weights']['x_mu']
+    xmu_names = list(x_mu_series.index)
+
+    # Locate the coefficient that represents comp_cre vs baseline
+    # With treatment coding: columns look like "Intercept", "C(cre_id)[T.<level>]", etc.
+    # We want the index of the C(cre_id)[T.<comp_cre>] term if present.
+    target_col = f"C(cre_id)[T.{comp_cre}]"
+    if target_col in xmu_names:
+        j = xmu_names.index(target_col)
+        beta = float(np.asarray(x_mu_series).ravel()[j])
+        se_beta = float(se_x_mu[j])
+        z = beta / se_beta
+        W = z**2
+        p = 1 - chi2.cdf(W, df=1)
+    else:
+        # If comp_cre is actually the baseline ("reference") level, the contrast to baseline is 0
+        # → Wald z = 0, p = 1.0 (no change). Keep consistent with your original intent.
+        # You can instead raise if you prefer explicitness.
+        beta = 0.0
+        se_beta = np.nan
+        z = 0.0
+        p = 1.0
+
+    # Fold-change on the NB mean scale for a 1-unit change in that coefficient
+    # (treatment-coded main-effect → multiplicative factor)
+    fc = float(np.exp(beta))
+
+    # flattened flag: if the CRE was flattened earlier (insufficient UMIs) we could mark it.
+    # We don't track it yet per CRE here, so return False for now.
+    return {
+        "test_statistic": z,         # z-stat (you used z or chi^2; either is fine; BH is on p)
+        "p_value": p,
+        "fold_change": fc,
+        "flattened": False,
+        # optional extras you might want to keep (won’t be stored by ResultSet unless you add cols)
+        # "beta": beta,
+        # "se_beta": se_beta,
+    }
+
+def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_reference"):
+    """
+    Wald test using the by-CRE model.
+
+    Modes:
+      - "vs_reference": test a single NB coefficient for comparison_cell_type
+                        against the baseline (reference) cell type.
+                        (Symmetric to _wald_by_celltype_row where we test a CRE vs baseline CRE.)
+      - "top_vs_rest":  original notebook behavior — contrast the largest cell-type
+                        coefficient vs the average of the others.
+
+    Returns dict(test_statistic, p_value, fold_change, flattened).
+    """
+    _require_tensorflow()
+
+    cre_id = str(h["comparison_CRE"])
+    comp_ct = str(h["comparison_cell_type"])
+
+    model_dict = ortho.by_cre.model[cre_id].result()
+    design = ortho.by_cre_design[cre_id].result()
+    nb_formula, zi_formula = design['nb_formula'], design['zi_formula']
+
+    df = counts.data[counts.data["cre_id"] == cre_id]
+
+    # Build matrices + params
+    (_, X, Z), (_, exog, exog_infl), (endog_t, exog_t, exog_infl_t) = _model_matrices_for_subset(df, nb_formula, zi_formula)
+    params_vec, params_t = _setup_params_from_fit(model_dict)
+
+    # Hessian-based SEs
+    se_all, cov = _hessian_se(params_t, exog_t, exog_infl_t, endog_t)
+    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+
+    x_mu_series = model_dict['weights']['x_mu']
+    xmu = np.asarray(x_mu_series).ravel()
+    xmu_names = list(x_mu_series.index)
+    k_nb = len(X.columns)
+
+    # --- Mode 1: single coefficient vs baseline (recommended) ---
+    if mode == "vs_reference":
+        # Treatment coding column for the target cell_type, if it exists:
+        target_col = f"C(cell_type)[T.{comp_ct}]"
+        if target_col in xmu_names:
+            j = xmu_names.index(target_col)
+            beta = float(xmu[j])
+            se_beta = float(se_x_mu[j])
+            z = beta / se_beta
+            W = z**2
+            p = 1 - chi2.cdf(W, df=1)
+            fc = float(np.exp(beta))
+        else:
+            # comp_ct is the baseline (reference) level → 0 vs baseline
+            z = 0.0
+            p = 1.0
+            fc = 1.0
+
+        return {
+            "test_statistic": z,
+            "p_value": p,
+            "fold_change": fc,
+            "flattened": False,
+        }
+
+    # --- Mode 2: top-vs-rest contrast (closest to 'specificity' test from Lalanne et al. (Shendure)) ---
+    elif mode == "top_vs_rest":
+        # find all treatment-coded cell_type terms
+        ct_terms = [i for i, nm in enumerate(xmu_names) if nm.startswith("C(cell_type)[T.")]
+        p_levels = len(ct_terms) + 1  # include baseline
+        if p_levels <= 1:
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        # find which coefficient corresponds to comp_ct (could be baseline)
+        comp_term = f"C(cell_type)[T.{comp_ct}]"
+        if comp_term in xmu_names:
+            k_comp = xmu_names.index(comp_term)
+        else:
+            k_comp = None  # baseline
+
+        # map names→positions for NB block
+        name_to_j = {nm: j for j, nm in enumerate(xmu_names)}
+        baseline_pos = name_to_j.get("Intercept", None)
+        nonbase_pos = [name_to_j[nm] for nm in xmu_names if nm.startswith("C(cell_type)[T.")]
+        pos = [baseline_pos] + nonbase_pos
+
+        # index of comp_ct in that p-vector
+        comp_ix = 0 if k_comp is None else (1 + nonbase_pos.index(k_comp))
+
+        # contrast weights over p cell types: +1 for comp, -1/(p-1) for others
+        c_p = np.full(p_levels, -1.0/(p_levels-1))
+        c_p[comp_ix] = 1.0
+
+        # lift to β-space
+        c_beta = np.zeros(k_nb)
+        for w, j in zip(c_p, pos):
+            if j is not None:
+                c_beta[j] = w
+
+        cov_nb = cov[:k_nb, :k_nb]
+        lnFC = float(c_beta @ xmu)
+        se_lnFC = float(np.sqrt(c_beta @ cov_nb @ c_beta))
+        if se_lnFC == 0 or np.isnan(se_lnFC):
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        z = lnFC / se_lnFC
+        W = z**2
+        p = 1 - chi2.cdf(W, df=1)
+        fc = float(np.exp(lnFC))
+
+        return {
+            "test_statistic": z,
+            "p_value": p,
+            "fold_change": fc,
+            "flattened": False,
+        }
+
+    else:
+        raise ValueError(f"Unknown by-CRE Wald mode: {mode}")
+
+def build_wald_test_fn(ortho_obj: "ortho", counts_obj: "scMPRA_data", cre_mode: str = "vs_reference"):
+    """
+    Returns `test_fn(row)` for HypothesisTester.
+
+    Logic:
+      - If reference_cell_type is NA or equals comparison_cell_type:
+            use by-cell-type model (test CRE vs baseline in that cell type)
+      - elif reference_CRE is NA or equals comparison_CRE:
+            use by-CRE model (test cell_type vs baseline in that CRE), mode controlled by `cre_mode`
+      - else: raise (crossed CRE & cell_type → add later)
+    """
+    def test_fn(row: pd.Series):
+        comp_ct = str(row["comparison_cell_type"])
+        comp_cre = str(row["comparison_CRE"])
+        ref_ct = row.get("reference_cell_type")
+        ref_cre = row.get("reference_CRE")
+        ref_ct = None if pd.isna(ref_ct) else str(ref_ct)
+        ref_cre = None if pd.isna(ref_cre) else str(ref_cre)
+
+        if (ref_ct is None) or (ref_ct == comp_ct):
+            return _wald_by_celltype_row(row, ortho_obj, counts_obj)
+
+        if (ref_cre is None) or (ref_cre == comp_cre):
+            return _wald_by_cre_row(row, ortho_obj, counts_obj, mode=cre_mode)
+
+        raise NotImplementedError(
+            "Crossed comparisons (both CRE and cell_type differ) are not supported yet in the Wald test."
+        )
+    return test_fn
+        
 class HypothesisTester:
     """
     Orchestrates running a test function on each hypothesis row.
