@@ -164,9 +164,9 @@ class Bounds:
                 zis.append(current)
             zis=pd.concat(zis,axis=1)
             if var=="by_cell_type_parameters":
-                ret.by_cell_type_zi=zis.mean(axis=1)
+                ret.by_cell_type_zi=zis.mean(axis=1).mean()
             elif var=="by_cre_parameters":
-                ret.by_cre_zi=zis.mean(axis=1)
+                ret.by_cre_zi=zis.mean(axis=1).mean()
 
         
         #min & max nb and add to the return object
