@@ -7,6 +7,12 @@ import tarfile
 import tempfile
 import os
 
+from scipy.stats import nbinom
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
 @dataclass()
 class Bounds:
     """
@@ -19,6 +25,22 @@ class Bounds:
     cres than cell types, which should be the case for most
     datasets.
     """
+
+    def plot_transfection(self):
+        self.update_transfection_params()
+        #scale the plot to get 99% of the probability density
+        k_max = int(np.ceil(nbinom.ppf(0.999, self.r, self.p)))
+        k = np.arange(0, k_max + 1)
+        pmf_nb = nbinom.pmf(k, self.r, self.p)
+        
+        fig, ax = plt.subplots()
+        ax.plot(k, pmf_nb, marker='o', linestyle='-')#, label=f'NB fit (μ={mu_nb:.2f}, α={alpha_nb:.3f})'
+        ax.set_xlabel('Unique MPRA barcodes per cell')
+        ax.set_ylabel('Density')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+
     metadata:dict=None
 
     min_mpra_umi:float=None
