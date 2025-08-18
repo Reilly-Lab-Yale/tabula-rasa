@@ -138,6 +138,14 @@ A result table is the same as a hypothesis table with the following additional c
 | bh_p           | float | benjamini hochberg corrected p-value                   | T          |
 | flattened      | bool  | whether the CRE was flattened due to insufficient UMIs | T          |
 
+# Ground-truth formatting
+These tables store made-up ground truth, for the purposes of simulation. 
+| Column name | Type  | Description                           |
+|-------------|-------|---------------------------------------|
+| cell_type   | str   | cell-type                             |
+| cre_id      | str   | CRE id or name                        |
+| true_mean   | float | Ground-truth # MPRA barcode UMIs/cell |
+
 # Model formatting
 
 (If we change our mind and instead desire a per-CRE model approach, we could replace this with a pandas dataframe). 
