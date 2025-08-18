@@ -1,7 +1,11 @@
 from typing import Dict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import numpy as np
 import pandas as pd
+import json
+import tarfile
+import tempfile
+import os
 
 @dataclass()
 class Bounds:
@@ -30,13 +34,47 @@ class Bounds:
     transfection_nb_mu:float=None
     transfection_nb_alpha:float=None
 
+    def copy(self, **kwargs):
+        return replace(self, **kwargs)
 
-    def to_parquet():
-        raise(NotImplementedError)
-    
+    def to_tgz(self, out_file):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # dump members as parquet files
+            for name, value in self.__dict__.items():
+                path = os.path.join(tmpdir, f"{name}.parquet")
+                if isinstance(value, pd.DataFrame):
+                    value.to_parquet(path, engine="pyarrow", index=True)
+                elif isinstance(value, pd.Series):
+                    value.to_frame(name).to_parquet(path, engine="pyarrow", index=True)
+                else:
+                    pd.DataFrame({name: [value]}).to_parquet(path, engine="pyarrow", index=False)
+
+            # pack into a tgz
+            with tarfile.open(out_file, "w:gz") as tar:
+                tar.add(tmpdir, arcname="")
+
     @classmethod
-    def from_parquet():
-        raise(NotImplementedError)
+    def from_tgz(cls, in_file):
+        ret=Bounds()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # extract archive
+            with tarfile.open(in_file, "r:gz") as tar:
+                tar.extractall(tmpdir)
+
+            # load parquet members back
+            for fname in os.listdir(tmpdir):
+                if fname.endswith(".parquet"):
+                    name = fname[:-8]
+                    path = os.path.join(tmpdir, fname)
+                    df = pd.read_parquet(path, engine="pyarrow")
+                    if df.shape == (1, 1):
+                        val = df.iloc[0, 0]
+                    elif df.shape[1] == 1:
+                        val = df.iloc[:, 0]
+                    else:
+                        val = df
+                    setattr(ret, name, val)
+        return ret
     
     @classmethod
     def from_ortho(cls,inp):
