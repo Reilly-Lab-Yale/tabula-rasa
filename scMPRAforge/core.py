@@ -57,7 +57,6 @@ def always_unfinished():
 
 def helloworld():
     print("hello world!")
-    pass
 
 
 def table_type(column_names):
@@ -77,8 +76,6 @@ def table_type(column_names):
     Is kind with respect to extra columns & optional columns. 
     
     (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
-
-    TODO: move to the inside of the scMPRA object
     """
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
@@ -223,8 +220,7 @@ class scMPRA_data:
         
         return {'poisson_mu':mu_pois,
              'nb_mu':mu_nb,
-             'nb_alpha':alpha_nb,
-             }
+             'nb_alpha':alpha_nb}
     
 
     
