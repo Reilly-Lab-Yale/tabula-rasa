@@ -153,3 +153,8 @@ class Bounds:
 
 #class wet_bounds
 #   read_depth
+
+from pathlib import Path
+working_dir = Path(__file__).resolve().parent
+
+SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
