@@ -223,7 +223,8 @@ class scMPRA_data:
         
         return {'poisson_mu':mu_pois,
              'nb_mu':mu_nb,
-             'nb_alpha':alpha_nb}
+             'nb_alpha':alpha_nb,
+             }
     
 
     

@@ -34,6 +34,21 @@ class Bounds:
     transfection_nb_mu:float=None
     transfection_nb_alpha:float=None
 
+    def get_effective_moi(self):
+        return self.transfection_nb_mu
+
+    def set_effective_moi(self,moi):
+        self.transfection_nb_mu=moi
+        self.update_transfection_params()
+    
+    def update_transfection_params(self):
+        """
+        Adds an alternate parametrization of the NB model of
+        transfection to the object. 
+        """
+        self.r = 1.0 / self.transfection_nb_alpha             # "size"
+        self.p = self.r / (self.r + self.transfection_nb_mu)  # success prob
+
     def copy(self, **kwargs):
         return replace(self, **kwargs)
 
@@ -74,6 +89,7 @@ class Bounds:
                     else:
                         val = df
                     setattr(ret, name, val)
+        ret.update_transfection_params()
         return ret
     
     @classmethod
@@ -149,6 +165,7 @@ class Bounds:
         #number of CREs
         ret.num_cres=inp.training_data.data["cre_id"].nunique()
         
+        ret.update_transfection_params()
         return ret
 
 #class wet_bounds
