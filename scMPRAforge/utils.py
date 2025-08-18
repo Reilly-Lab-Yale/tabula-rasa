@@ -198,6 +198,25 @@ def dict_unwrap(dic):
         ret[key]=dic[key].result()
     return ret
 
+def find_treatment_column(xmu_names: list[str], factor: str, level: str) -> str | None:
+    """
+    Find the design column name for a treatment-coded factor/level, being tolerant to
+    the presence/absence of 'contr.treatment(...)' in the name.
+
+    Returns the matching column name or None if not found.
+    """
+    # simplest form
+    simple = f"C({factor})[T.{level}]"
+    if simple in xmu_names:
+        return simple
+
+    # tolerant scan, e.g. "C(cell_type, contr.treatment(base='reference'))[T.Level]"
+    suffix = f")[T.{level}]"
+    prefix = f"C({factor},"
+    for nm in xmu_names:
+        if nm.startswith(prefix) and nm.endswith(suffix):
+            return nm
+    return None
 ## tools for easy generation of hypotheses
 
 

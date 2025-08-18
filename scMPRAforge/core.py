@@ -34,6 +34,8 @@ import dask.array as da
 
 from enum import Enum
 
+import warnings
+
 # tensorflow import for Wald test Hessian/SE computation
 try:
     import tensorflow as tf  # optional dep
@@ -45,6 +47,7 @@ from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
+from .utils import one_versus_all, find_treatment_column
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -1860,6 +1863,32 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
                          "mean_biased_error":ret_mbe,
                          "mean_absolute_percent_error":ret_mape})
 
+def _normalize_cell_type_label(label, scmpra: scMPRA_data):
+    """
+    Map a user-facing cell type name to the internal label used in the data/models.
+    If the dataset has a reference cell type set, that name is mapped to 'reference'.
+    """
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return None
+    s = str(label)
+    if scmpra.reference_cell_type and s == scmpra.reference_cell_type:
+        return "reference"
+    return s
+
+def _normalize_cre_label(label, scmpra: scMPRA_data):
+    """
+    Map a user-facing CRE name to the internal label used in the data/models.
+    If negative controls were flattened to 'reference', map those original names to 'reference'.
+    """
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return None
+    s = str(label)
+    if "cre_id_original" in scmpra.data.columns:
+        df = scmpra.data[["cre_id", "cre_id_original"]].dropna()
+        # Was this original label collapsed to 'reference'?
+        if ((df["cre_id_original"] == s) & (df["cre_id"] == "reference")).any():
+            return "reference"
+    return s
 
 class HypothesisSet:
     """
@@ -1961,6 +1990,293 @@ class HypothesisSet:
         return len(self.df)
 
 
+# ---------------------------------------------------------------------
+# Convenience hypothesis builders (wrap one_versus_all)
+# ---------------------------------------------------------------------
+
+
+def make_by_celltype_hypotheses(
+    *,
+    comparison_cell_type: str,
+    counts: "scMPRA_data",
+    comparison_cres: "list[str] | str" = "all",
+    reference_cre: str | None = "reference",
+    meta: str | None = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses that test many CREs within a single cell type
+    (CRE varies; cell_type fixed). This is the natural input for the
+    by-cell-type Wald test (CRE vs baseline CRE in that cell type).
+
+    Examples:
+        hs = make_by_celltype_hypotheses(
+                comparison_cell_type="NeuroectodermBrain",
+                counts=shendure,
+                comparison_cres="all",
+                reference_cre="reference",   # your flattened minP/noP
+                meta="emvar_screen")
+
+    Notes:
+        - We set BOTH reference columns per the table spec:
+            reference_CRE = `reference_cre`
+            reference_cell_type = `comparison_cell_type`
+        - Passing reference_cre=None will generate the "compare‐to‐zero" flavor,
+          but the current Wald code ignores zero and interprets baseline from the model.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    cell_type = str(comparison_cell_type)
+
+    # What CREs exist in this cell type?
+    df = counts.data
+    available = (
+        df.loc[df["cell_type"] == cell_type, "cre_id"]
+        .astype(str).unique().tolist()
+    )
+
+    if comparison_cres == "all":
+        cand = available.copy()
+        # If the negative control is labeled "reference", users usually
+        # don’t want a “reference vs reference” row; drop it.
+        if "reference" in cand:
+            cand.remove("reference")
+    else:
+        cand = [str(x) for x in comparison_cres]
+        missing = sorted(set(cand) - set(available))
+        if missing:
+            warnings.warn(f"[make_by_celltype_hypotheses] Skipping CREs not present in '{cell_type}': {missing}")
+            cand = [c for c in cand if c in available]
+
+    # Build (cre, cell_type) pairs for one_versus_all (comparison_on='cre')
+    pairs = [(cre, cell_type) for cre in cand]
+
+    hyp_df = one_versus_all(
+        pairs,
+        comparison_on="cre",
+        reference_CRE=reference_cre,
+        reference_cell_type=cell_type,
+        meta=meta,
+    )
+    return HypothesisSet.from_dataframe(hyp_df)
+
+
+def make_by_cre_hypotheses(
+    *,
+    comparison_cre: str,
+    counts: "scMPRA_data",
+    comparison_cell_types: "list[str] | str" = "all",
+    reference_cell_type: str | None = None,
+    meta: str | None = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses that test many cell types for one CRE
+    (cell_type varies; CRE fixed). This is the natural input for the
+    by-CRE Wald test (cell_type vs baseline cell type for the same CRE).
+
+    Examples:
+        hs = make_by_cre_hypotheses(
+                comparison_cre="CRE123",
+                counts=shendure,
+                comparison_cell_types="all",
+                reference_cell_type="Pluripotent",
+                meta="cell_specificity")
+
+    Notes:
+        - We set BOTH reference columns per the table spec:
+            reference_CRE = `comparison_cre`
+            reference_cell_type = provided (or inferred)
+        - If `reference_cell_type` is not provided, we try:
+            counts.reference_cell_type, then literal "reference" if present.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    cre = str(comparison_cre)
+
+    # What cell types exist for this CRE?
+    df = counts.data
+    available = (
+        df.loc[df["cre_id"] == cre, "cell_type"]
+        .astype(str).unique().tolist()
+    )
+
+    # Pick/validate reference cell type
+    # Normalize the reference to internal labeling (e.g., "Pluripotent" -> "reference")
+    ref_ct = reference_cell_type
+    if ref_ct is None:
+        if getattr(counts, "reference_cell_type", None):
+            ref_ct = counts.reference_cell_type
+        elif "reference" in available:
+            ref_ct = "reference"
+        else:
+            raise ValueError(
+                "reference_cell_type not provided and could not be inferred "
+                "(counts.reference_cell_type not set and 'reference' not found for this CRE)."
+            )
+    ref_ct = _normalize_cell_type_label(ref_ct, counts)
+
+    if comparison_cell_types == "all":
+        cand = [ct for ct in available if ct != ref_ct]
+    else:
+        # also normalize any user-provided labels before comparing to 'available'
+        cand = [_normalize_cell_type_label(x, counts) for x in comparison_cell_types]
+        missing = sorted(set(cand) - set(available))
+        if missing:
+            warnings.warn(f"[make_by_cre_hypotheses] Skipping cell types not present for '{cre}': {missing}")
+            cand = [c for c in cand if c in available]
+        cand = [c for c in cand if c != ref_ct]
+
+    # Build (cell_type, cre) pairs for one_versus_all (comparison_on='cell_type')
+    pairs = [(ct, cre) for ct in cand]
+
+    hyp_df = one_versus_all(
+        pairs,
+        comparison_on="cell_type",
+        reference_CRE=cre,                 # same CRE = “within-CRE” contrast
+        reference_cell_type=ref_ct,        # baseline cell type
+        meta=meta,
+    )
+    return HypothesisSet.from_dataframe(hyp_df)
+
+def make_all_by_celltype_hypotheses(
+    *,
+    counts: "scMPRA_data",
+    reference_cre: str | None = "reference",
+    meta: str | None = None,
+    include_cell_types: "list[str] | None" = None,
+    exclude_cell_types: "list[str] | None" = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses for *every* cell type in the dataset, testing all CREs
+    within each cell type against the provided baseline CRE (default: 'reference').
+
+    Effectively: concat over cell types of
+        make_by_celltype_hypotheses(comparison_cell_type=ct, comparison_cres="all")
+
+    Parameters
+    ----------
+    counts : scMPRA_data
+        Dataset.
+    reference_cre : str or None
+        Baseline CRE label used in the by-cell-type test (typically the flattened negative controls -> 'reference').
+        If None, you get the "compare-to-zero" flavor, though the Wald code currently focuses on baseline contrasts.
+    meta : str or None
+        Optional label propagated to the 'meta' column.
+    include_cell_types : list[str] or None
+        If provided, restrict to this whitelist of cell types (user-facing labels OK; they’ll be normalized).
+    exclude_cell_types : list[str] or None
+        If provided, drop these cell types (applied after include).
+
+    Returns
+    -------
+    HypothesisSet
+        A validated hypothesis set spanning all requested cell types.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    all_cts = sorted(map(str, counts.data["cell_type"].unique().tolist()))
+
+    # Optional include/exclude
+    if include_cell_types is not None:
+        want = set(map(str, include_cell_types))
+        all_cts = [ct for ct in all_cts if ct in want]
+    if exclude_cell_types is not None:
+        drop = set(map(str, exclude_cell_types))
+        all_cts = [ct for ct in all_cts if ct not in drop]
+
+    frames = []
+    for ct in all_cts:
+        # keep user-facing ct string; per-row normalization happens in the test functions
+        hs_ct = make_by_celltype_hypotheses(
+            comparison_cell_type=ct,
+            counts=counts,
+            comparison_cres="all",
+            reference_cre=reference_cre,
+            meta=meta,
+        )
+        frames.append(hs_ct.to_dataframe())
+
+    if not frames:
+        return HypothesisSet.from_dataframe(pd.DataFrame(columns=list(HYPOTHESIS_ALL)))
+
+    big = pd.concat(frames, ignore_index=True)
+    return HypothesisSet.from_dataframe(big)
+
+
+def make_all_by_cre_hypotheses(
+    *,
+    counts: "scMPRA_data",
+    reference_cell_type: str | None = None,
+    meta: str | None = None,
+    include_cres: "list[str] | None" = None,
+    exclude_cres: "list[str] | None" = None,
+    drop_reference_cre: bool = True,
+) -> "HypothesisSet":
+    """
+    Build hypotheses for *every* CRE in the dataset, testing all cell types
+    within each CRE against a baseline cell type (defaults to the dataset’s
+    reference cell type if available, otherwise tries literal 'reference').
+
+    Effectively: concat over CREs of
+        make_by_cre_hypotheses(comparison_cre=cre, comparison_cell_types='all')
+
+    Parameters
+    ----------
+    counts : scMPRA_data
+        Dataset.
+    reference_cell_type : str or None
+        Baseline cell type label for within-CRE contrasts. If None, we try
+        counts.reference_cell_type, else literal 'reference' if present. 
+        (Same behavior as make_by_cre_hypotheses.)
+    meta : str or None
+        Optional label propagated to the 'meta' column.
+    include_cres : list[str] or None
+        If provided, restrict to this whitelist of CREs.
+    exclude_cres : list[str] or None
+        If provided, drop these CREs (applied after include).
+    drop_reference_cre : bool
+        If True (default), skip the collapsed negative-control CRE named 'reference'
+        to avoid generating “reference vs baseline cell type” rows.
+
+    Returns
+    -------
+    HypothesisSet
+        A validated hypothesis set spanning all requested CREs.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    all_cres = sorted(map(str, counts.data["cre_id"].unique().tolist()))
+    if drop_reference_cre and "reference" in all_cres:
+        all_cres.remove("reference")
+
+    # Optional include/exclude
+    if include_cres is not None:
+        want = set(map(str, include_cres))
+        all_cres = [c for c in all_cres if c in want]
+    if exclude_cres is not None:
+        drop = set(map(str, exclude_cres))
+        all_cres = [c for c in all_cres if c not in drop]
+
+    frames = []
+    for cre in all_cres:
+        hs_cre = make_by_cre_hypotheses(
+            comparison_cre=cre,
+            counts=counts,
+            comparison_cell_types="all",
+            reference_cell_type=reference_cell_type,
+            meta=meta,
+        )
+        frames.append(hs_cre.to_dataframe())
+
+    if not frames:
+        return HypothesisSet.from_dataframe(pd.DataFrame(columns=list(HYPOTHESIS_ALL)))
+
+    big = pd.concat(frames, ignore_index=True)
+    return HypothesisSet.from_dataframe(big)
+
 class ResultSet(HypothesisSet):
     """
     Extends HypothesisSet with result columns:
@@ -2004,7 +2320,7 @@ def _bh_adjust(pvals: pd.Series) -> pd.Series:
     out.iloc[order] = np.minimum(adj_sorted, 1.0)
     return out
     
-def zinb_loglik_tf(params, exog, exog_infl, endog):
+def _zinb_loglik_tf(params, exog, exog_infl, endog):
     """
     TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
 
@@ -2083,26 +2399,32 @@ def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
 
-def _hessian_se(params_tensor, exog_tensor, exog_infl_tensor, endog_tensor):
+def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
     """
-    Compute Hessian, invert to covariance, return standard errors and covariance.
-    No shape assumptions; x_mu size = exog.shape[1], x_pi size = exog_infl.shape[1].
+    Compute Hessian-based SEs of the ZINB parameters.
+    Works in both TF2 eager and TF1 graph modes.
     """
-    _require_tensorflow()
-
+    # Build Hessian with nested GradientTapes
     with tf.GradientTape() as tape2:
         with tf.GradientTape() as tape1:
-            ll = zinb_loglik_tf(params_tensor, exog_tensor, exog_infl_tensor, endog_tensor)
+            ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
         grad = tape1.gradient(ll, params_tensor)
-    hessian = tape2.jacobian(grad, params_tensor)
+    hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
 
-    sess = tf.compat.v1.Session()
-    sess.run(tf.compat.v1.global_variables_initializer())
-    hessian_val = sess.run(hessian)
+    # Evaluate to numpy depending on execution mode
+    if tf.executing_eagerly():
+        H = hess.numpy()
+    else:
+        # Graph mode
+        sess = tf.compat.v1.Session()
+        with sess.as_default():
+            sess.run(tf.compat.v1.global_variables_initializer())
+            H = sess.run(hess)
 
-    cov_matrix = np.linalg.inv(-hessian_val)
-    standard_errors = np.sqrt(np.diag(cov_matrix))
-    return standard_errors, cov_matrix
+    # Wald covariance = inverse observed information = (-H)^{-1}
+    cov = np.linalg.inv(-H)
+    se = np.sqrt(np.diag(cov))
+    return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -2126,8 +2448,20 @@ def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
     """
     _require_tensorflow()
 
-    cell_type = str(h["comparison_cell_type"])
-    comp_cre = str(h["comparison_CRE"])
+    cell_type_user = str(h["comparison_cell_type"])
+    comp_cre_user  = str(h["comparison_CRE"])
+
+    # Apply normalization
+    cell_type = _normalize_cell_type_label(cell_type_user, counts)
+    comp_cre  = _normalize_cre_label(comp_cre_user, counts)
+
+    # sanity: use the by_cell_type model
+    if cell_type not in ortho.by_cell_type.model:
+        valid = sorted(list(ortho.by_cell_type.model.keys()))
+        raise KeyError(
+            f"Unknown cell_type '{cell_type_user}' (normalized to '{cell_type}'). "
+            f"Available by_cell_type model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
+        )
 
     # sanity: use the by_cell_type model
     model_dict = ortho.by_cell_type.model[cell_type].result()
@@ -2147,14 +2481,14 @@ def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
 
     # NB coefficient names are taken from labeled weights (already applied in annotate_models)
     x_mu_series = model_dict['weights']['x_mu']
-    xmu_names = list(x_mu_series.index)
+    x_mu_names = list(x_mu_series.index)
 
     # Locate the coefficient that represents comp_cre vs baseline
     # With treatment coding: columns look like "Intercept", "C(cre_id)[T.<level>]", etc.
     # We want the index of the C(cre_id)[T.<comp_cre>] term if present.
-    target_col = f"C(cre_id)[T.{comp_cre}]"
-    if target_col in xmu_names:
-        j = xmu_names.index(target_col)
+    target_col = find_treatment_column(x_mu_names, "cre_id", comp_cre)
+    if target_col in x_mu_names:
+        j = x_mu_names.index(target_col)
         beta = float(np.asarray(x_mu_series).ravel()[j])
         se_beta = float(se_x_mu[j])
         z = beta / se_beta
@@ -2200,8 +2534,20 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
     """
     _require_tensorflow()
 
-    cre_id = str(h["comparison_CRE"])
-    comp_ct = str(h["comparison_cell_type"])
+
+    cre_id_user = str(h["comparison_CRE"])
+    comp_ct_user = str(h["comparison_cell_type"])
+
+    # Apply normalization
+    cre_id = _normalize_cre_label(cre_id_user, counts)
+    comp_ct = _normalize_cell_type_label(comp_ct_user, counts)
+
+    if cre_id not in ortho.by_cre.model:
+        valid = sorted(list(ortho.by_cre.model.keys()))
+        raise KeyError(
+            f"Unknown CRE '{cre_id_user}' (normalized to '{cre_id}'). "
+            f"Available by_cre model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
+        )
 
     model_dict = ortho.by_cre.model[cre_id].result()
     design = ortho.by_cre_design[cre_id].result()
@@ -2219,15 +2565,20 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
 
     x_mu_series = model_dict['weights']['x_mu']
     xmu = np.asarray(x_mu_series).ravel()
-    xmu_names = list(x_mu_series.index)
+    x_mu_names = list(x_mu_series.index)
     k_nb = len(X.columns)
 
     # --- Mode 1: single coefficient vs baseline (recommended) ---
     if mode == "vs_reference":
         # Treatment coding column for the target cell_type, if it exists:
-        target_col = f"C(cell_type)[T.{comp_ct}]"
-        if target_col in xmu_names:
-            j = xmu_names.index(target_col)
+        target_col = find_treatment_column(x_mu_names, "cell_type", comp_ct)
+        if comp_ct == "reference":
+            # comp_ct is the baseline (reference) level → 0 vs baseline
+            z = 0.0
+            p = 1.0
+            fc = 1.0
+        elif target_col in x_mu_names:
+            j = x_mu_names.index(target_col)
             beta = float(xmu[j])
             se_beta = float(se_x_mu[j])
             z = beta / se_beta
@@ -2235,10 +2586,13 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
             p = 1 - chi2.cdf(W, df=1)
             fc = float(np.exp(beta))
         else:
-            # comp_ct is the baseline (reference) level → 0 vs baseline
-            z = 0.0
-            p = 1.0
-            fc = 1.0
+            # Not found: treat as non-estimable for this CRE (e.g. filtered level)
+            return {
+                "test_statistic": np.nan,
+                "p_value": np.nan,
+                "fold_change": np.nan,
+                "flattened": False,
+            }
 
         return {
             "test_statistic": z,
@@ -2250,22 +2604,22 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
     # --- Mode 2: top-vs-rest contrast (closest to 'specificity' test from Lalanne et al. (Shendure)) ---
     elif mode == "top_vs_rest":
         # find all treatment-coded cell_type terms
-        ct_terms = [i for i, nm in enumerate(xmu_names) if nm.startswith("C(cell_type)[T.")]
+        ct_terms = [i for i, nm in enumerate(x_mu_names) if nm.startswith("C(cell_type)[T.")]
         p_levels = len(ct_terms) + 1  # include baseline
         if p_levels <= 1:
             return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
         # find which coefficient corresponds to comp_ct (could be baseline)
-        comp_term = f"C(cell_type)[T.{comp_ct}]"
-        if comp_term in xmu_names:
-            k_comp = xmu_names.index(comp_term)
+        comp_term = find_treatment_column(x_mu_names, "cell_type", comp_ct)
+        if comp_term in x_mu_names:
+            k_comp = x_mu_names.index(comp_term)
         else:
             k_comp = None  # baseline
 
         # map names→positions for NB block
-        name_to_j = {nm: j for j, nm in enumerate(xmu_names)}
+        name_to_j = {nm: j for j, nm in enumerate(x_mu_names)}
         baseline_pos = name_to_j.get("Intercept", None)
-        nonbase_pos = [name_to_j[nm] for nm in xmu_names if nm.startswith("C(cell_type)[T.")]
+        nonbase_pos = [name_to_j[nm] for nm in x_mu_names if nm.startswith("C(cell_type)[T.")]
         pos = [baseline_pos] + nonbase_pos
 
         # index of comp_ct in that p-vector
@@ -2331,7 +2685,18 @@ def build_wald_test_fn(ortho_obj: "ortho", counts_obj: "scMPRA_data", cre_mode: 
             "Crossed comparisons (both CRE and cell_type differ) are not supported yet in the Wald test."
         )
     return test_fn
-        
+
+def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace=False) -> HypothesisSet:
+    df = hs.df if inplace else hs.df.copy()
+    for col, fn in [
+        ("comparison_cell_type", lambda v: _normalize_cell_type_label(v, scmpra)),
+        ("reference_cell_type", lambda v: _normalize_cell_type_label(v, scmpra)),
+        ("comparison_CRE",       lambda v: _normalize_cre_label(v, scmpra)),
+        ("reference_CRE",        lambda v: _normalize_cre_label(v, scmpra)),
+    ]:
+        df[col] = df[col].map(fn)
+    return hs if inplace else HypothesisSet.from_dataframe(df)
+
 class HypothesisTester:
     """
     Orchestrates running a test function on each hypothesis row.
