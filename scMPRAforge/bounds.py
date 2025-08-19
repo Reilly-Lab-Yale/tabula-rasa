@@ -19,6 +19,11 @@ class Bounds:
     Describes the boundaries of an experiment.
     Specifically the UMI portion.
 
+    Bounds objects just average zero inflation parameters, as there
+    is no reason to complicate simulations with multiple values.
+    (If multiple ZI are expected for some reason, just adjust geometrically
+    or run multiple simulation batches.)
+
     by_cell_type_theta and by_cell_type_zi are probably 
     more accurate for downstream simulation than their 
     by_cre counterparts, assuming that there are more 
