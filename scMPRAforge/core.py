@@ -47,7 +47,7 @@ from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
-from .utils import one_versus_all, find_treatment_column
+from .utils import one_versus_all, find_treatment_index
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -718,6 +718,8 @@ class ortho:
         
         self.training_data=None
 
+        self.wald_precomp = None  # WaldPrecomp or None
+
     def save(self,path,name,strip_training_data=False):
         """
         Simple pickle save.
@@ -773,6 +775,12 @@ class ortho:
         else:
             simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
+        if getattr(self, "wald_precomp", None) is None:
+            with open(full_path/"wald_precomp.pkl","wb") as f:
+                pickle.dump(None, f)
+        else:
+            self.wald_precomp.save(full_path/"wald_precomp.pkl")
+
         ## training data
         if not strip_training_data:
             simple_write(self.training_data,"training_data.pkl")
@@ -813,7 +821,12 @@ class ortho:
         ## Training data
         ret_ortho.training_data=simple_load("training_data.pkl")
    
-        
+        try:
+            wp = WaldPrecomp.load(client, full_path/"wald_precomp.pkl")
+        except Exception:
+            wp = None
+        setattr(ret_ortho, "wald_precomp", wp)
+
         return ret_ortho
 
     @unimplemented
@@ -940,6 +953,41 @@ class ortho:
             
             QC[model_level]=ret
         return QC
+
+    def precompute_wald(self, client: Client):
+        """
+        Compute and cache Wald precomputations (SEs, covariances, name maps) for
+        every by-cell-type model and every by-CRE model in this ortho.
+        Stores results in self.wald_precomp (as Futures); persists with save().
+        """
+        if self.training_data is None:
+            raise RuntimeError("precompute_wald requires self.training_data to subset matrices.")
+
+        if (self.by_cell_type is None) or (self.by_cre is None):
+            raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
+
+        by_ct = {}
+        for ct in self.by_cell_type.model.keys():
+            model_f = self.by_cell_type.model[ct]
+            design_f = self.by_cell_type_design[ct]
+            # subset on the worker to avoid shipping big data repeatedly
+            df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+            by_ct[ct] = client.submit(
+                _build_wald_precomp_for_subset,
+                model_f, design_f, df_ct
+            )
+
+        by_cr = {}
+        for cr in self.by_cre.model.keys():
+            model_f = self.by_cre.model[cr]
+            design_f = self.by_cre_design[cr]
+            df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+            by_cr[cr] = client.submit(
+                _build_wald_precomp_for_subset,
+                model_f, design_f, df_cr
+            )
+
+        self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
 class parameters:
     """
@@ -1863,6 +1911,60 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
                          "mean_biased_error":ret_mbe,
                          "mean_absolute_percent_error":ret_mape})
 
+
+class WaldPrecompEntry:
+    """
+    Minimal payload needed to evaluate Wald tests quickly for a single fitted model.
+    All numpy; safe to pickle.
+    """
+    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb")
+
+    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb):
+        self.xmu_names = list(map(str, xmu_names))
+        self.se_x_mu   = np.asarray(se_x_mu, dtype=float)
+        self.cov_nb    = np.asarray(cov_nb, dtype=float)
+        self.k_nb      = int(k_nb)
+
+    def name_to_idx(self):
+        # build lazily to keep pickle small
+        return {nm: j for j, nm in enumerate(self.xmu_names)}
+
+
+class WaldPrecomp:
+
+    """
+    Mirrors the shape of `parameters`: dicts keyed by split level.
+    Values are WaldPrecompEntry objects (or Futures thereof when live on a cluster).
+    """
+    def __init__(self, by_cell_type=None, by_cre=None):
+        self.by_cell_type = by_cell_type or {}
+        self.by_cre       = by_cre or {}
+
+    def _unflatten_futures(self, client: Client):
+        # wrap raw objects in futures, for symmetry with other classes
+        for d in (self.by_cell_type, self.by_cre):
+            for k in list(d.keys()):
+                d[k] = client.submit(lambda x: x, d[k])
+
+    def flattened_copy(self):
+        # gather futures to plain objects
+        def _gather(d):
+            return {k: (v.result() if isinstance(v, Future) else v) for k, v in d.items()}
+        return WaldPrecomp(by_cell_type=_gather(self.by_cell_type),
+                           by_cre=_gather(self.by_cre))
+
+    def save(self, path: str | Path):
+        with open(path, "wb") as f:
+            pickle.dump(self.flattened_copy(), f)
+
+    @staticmethod
+    def load(client: Client, path: str | Path) -> "WaldPrecomp":
+        with open(path, "rb") as f:
+            obj: WaldPrecomp = pickle.load(f)
+        # re-wrap as futures so downstream access is uniform
+        obj._unflatten_futures(client)
+        return obj
+
 def _normalize_cell_type_label(label, scmpra: scMPRA_data):
     """
     Map a user-facing cell type name to the internal label used in the data/models.
@@ -2437,6 +2539,28 @@ def _slice_se(standard_errors, exog_cols, infl_cols):
     se_theta = standard_errors[k_nb+k_zi:]
     return se_x_mu, se_x_pi, se_theta
 
+def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPrecompEntry:
+    """
+    Worker-safe function: builds X/Z/y, computes Hessian, splits SE, returns WaldPrecompEntry.
+    """
+    _require_tensorflow()
+
+    nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
+    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+
+    # Params var
+    _, params_t = _setup_params_from_fit(model_dict)
+
+    # Hessian and covariance
+    se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+
+    k_nb  = len(X.columns)
+    cov_nb = cov[:k_nb, :k_nb]
+
+    xmu_names = list(model_dict['weights']['x_mu'].index)
+    return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
+
 def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
     """
     Wald test: compare a CRE within a fixed cell_type.
@@ -2446,12 +2570,9 @@ def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
     Returns dict for HypothesisTester:
       test_statistic, p_value, fold_change, flattened, (and optional extras)
     """
-    _require_tensorflow()
-
+    # --- normalize user-facing labels to internal labels ('reference' etc.) ---
     cell_type_user = str(h["comparison_cell_type"])
     comp_cre_user  = str(h["comparison_CRE"])
-
-    # Apply normalization
     cell_type = _normalize_cell_type_label(cell_type_user, counts)
     comp_cre  = _normalize_cre_label(comp_cre_user, counts)
 
@@ -2463,54 +2584,63 @@ def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
             f"Available by_cell_type model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
         )
 
-    # sanity: use the by_cell_type model
-    model_dict = ortho.by_cell_type.model[cell_type].result()
-    design = ortho.by_cell_type_design[cell_type].result()
-    nb_formula, zi_formula = design['nb_formula'], design['zi_formula']
+    # ----------------------------------------------------------------------
+    # FAST PATH ONLY: use precomputed SE/cov from the ortho cache
+    # If missing, try to compute once via ortho.precompute_wald()
+    # ----------------------------------------------------------------------
+    def _get_entry():
+        wp = getattr(ortho, "wald_precomp", None)
+        if (wp is None) or (getattr(wp, "by_cell_type", None) is None) or (cell_type not in wp.by_cell_type):
+            # try to populate
+            precomp = getattr(ortho, "precompute_wald", None)
+            if callable(precomp):
+                precomp()  # compute/cache everything (or at least this cell_type)
+                wp = getattr(ortho, "wald_precomp", None)
+        if (wp is None) or (getattr(wp, "by_cell_type", None) is None) or (cell_type not in wp.by_cell_type):
+            raise RuntimeError(
+                "Precomputed Wald pieces not available for by_cell_type. "
+                "Implement ortho.precompute_wald() to fill ortho.wald_precomp."
+            )
+        entry = wp.by_cell_type[cell_type]
+        # resolve Future if needed
+        if isinstance(entry, Future):
+            entry = entry.result()
+        return entry
 
-    # subset counts to this cell_type
-    df = counts.data[counts.data["cell_type"] == cell_type]
+    entry = _get_entry()
 
-    # Build matrices and params
-    (_, X, Z), (_, exog, exog_infl), (endog_t, exog_t, exog_infl_t) = _model_matrices_for_subset(df, nb_formula, zi_formula)
-    params_vec, params_t = _setup_params_from_fit(model_dict)
+    # If comp_cre is actually the baseline ("reference") level, the contrast to baseline is 0
+    if comp_cre == "reference":
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+        }
 
-    # Hessian-based SEs
-    se_all, cov = _hessian_se(params_t, exog_t, exog_infl_t, endog_t)
-    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
-
-    # NB coefficient names are taken from labeled weights (already applied in annotate_models)
-    x_mu_series = model_dict['weights']['x_mu']
-    x_mu_names = list(x_mu_series.index)
+    # NB coefficient names come from labeled weights (already applied in annotate_models)
+    model_dict   = ortho.by_cell_type.model[cell_type].result()
+    x_mu_series  = model_dict['weights']['x_mu']  # pandas Series, aligned to names
+    xmu_names    = entry.xmu_names
+    name_to_idx  = {nm: j for j, nm in enumerate(xmu_names)}
 
     # Locate the coefficient that represents comp_cre vs baseline
     # With treatment coding: columns look like "Intercept", "C(cre_id)[T.<level>]", etc.
-    # We want the index of the C(cre_id)[T.<comp_cre>] term if present.
-    target_col = find_treatment_column(x_mu_names, "cre_id", comp_cre)
-    if target_col in x_mu_names:
-        j = x_mu_names.index(target_col)
-        beta = float(np.asarray(x_mu_series).ravel()[j])
-        se_beta = float(se_x_mu[j])
-        z = beta / se_beta
-        W = z**2
-        p = 1 - chi2.cdf(W, df=1)
-    else:
-        # If comp_cre is actually the baseline ("reference") level, the contrast to baseline is 0
-        # → Wald z = 0, p = 1.0 (no change). Keep consistent with your original intent.
-        # You can instead raise if you prefer explicitness.
-        beta = 0.0
-        se_beta = np.nan
-        z = 0.0
-        p = 1.0
+    j = find_treatment_index(xmu_names, factor="cre_id", level=comp_cre)
+    if j is None:
+        # e.g. level filtered; no coefficient estimated
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-    # Fold-change on the NB mean scale for a 1-unit change in that coefficient
-    # (treatment-coded main-effect → multiplicative factor)
-    fc = float(np.exp(beta))
+    beta    = float(np.asarray(x_mu_series).ravel()[j])
+    se_beta = float(entry.se_x_mu[j])
+    z       = beta / se_beta
+    p       = 1 - chi2.cdf(z*z, df=1)
+    fc      = float(np.exp(beta))
 
     # flattened flag: if the CRE was flattened earlier (insufficient UMIs) we could mark it.
     # We don't track it yet per CRE here, so return False for now.
     return {
-        "test_statistic": z,         # z-stat (you used z or chi^2; either is fine; BH is on p)
+        "test_statistic": z,         # z-stat (you used z or chi^2; BH is on p)
         "p_value": p,
         "fold_change": fc,
         "flattened": False,
@@ -2532,13 +2662,10 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
 
     Returns dict(test_statistic, p_value, fold_change, flattened).
     """
-    _require_tensorflow()
 
-
+    # --- normalize user-facing labels to internal labels ('reference' etc.) ---
     cre_id_user = str(h["comparison_CRE"])
     comp_ct_user = str(h["comparison_cell_type"])
-
-    # Apply normalization
     cre_id = _normalize_cre_label(cre_id_user, counts)
     comp_ct = _normalize_cell_type_label(comp_ct_user, counts)
 
@@ -2549,109 +2676,92 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
             f"Available by_cre model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
         )
 
-    model_dict = ortho.by_cre.model[cre_id].result()
-    design = ortho.by_cre_design[cre_id].result()
-    nb_formula, zi_formula = design['nb_formula'], design['zi_formula']
+    # ----------------------------------------------------------------------
+    # FAST PATH ONLY: use precomputed SE/cov from the ortho cache
+    # If missing, try to compute once via ortho.precompute_wald()
+    # ----------------------------------------------------------------------
+    def _get_entry():
+        wp = getattr(ortho, "wald_precomp", None)
+        if (wp is None) or (getattr(wp, "by_cre", None) is None) or (cre_id not in wp.by_cre):
+            precomp = getattr(ortho, "precompute_wald", None)
+            if callable(precomp):
+                precomp()  # compute/cache everything (or at least this CRE)
+                wp = getattr(ortho, "wald_precomp", None)
+        if (wp is None) or (getattr(wp, "by_cre", None) is None) or (cre_id not in wp.by_cre):
+            raise RuntimeError(
+                "Precomputed Wald pieces not available for by_cre. "
+                "Implement ortho.precompute_wald() to fill ortho.wald_precomp."
+            )
+        entry = wp.by_cre[cre_id]
+        # resolve Future if needed
+        if isinstance(entry, Future):
+            entry = entry.result()
+        return entry
 
-    df = counts.data[counts.data["cre_id"] == cre_id]
+    entry = _get_entry()
 
-    # Build matrices + params
-    (_, X, Z), (_, exog, exog_infl), (endog_t, exog_t, exog_infl_t) = _model_matrices_for_subset(df, nb_formula, zi_formula)
-    params_vec, params_t = _setup_params_from_fit(model_dict)
-
-    # Hessian-based SEs
-    se_all, cov = _hessian_se(params_t, exog_t, exog_infl_t, endog_t)
-    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
-
+    # pull labeled weights once (cheap) for betas
+    model_dict  = ortho.by_cre.model[cre_id].result()
     x_mu_series = model_dict['weights']['x_mu']
-    xmu = np.asarray(x_mu_series).ravel()
-    x_mu_names = list(x_mu_series.index)
-    k_nb = len(X.columns)
+    xmu         = np.asarray(x_mu_series).ravel()
+    xmu_names   = entry.xmu_names
+    name_to_idx = {nm: j for j, nm in enumerate(xmu_names)}
+    k_nb        = entry.k_nb  # NB block size
 
     # --- Mode 1: single coefficient vs baseline (recommended) ---
     if mode == "vs_reference":
-        # Treatment coding column for the target cell_type, if it exists:
-        target_col = find_treatment_column(x_mu_names, "cell_type", comp_ct)
         if comp_ct == "reference":
             # comp_ct is the baseline (reference) level → 0 vs baseline
-            z = 0.0
-            p = 1.0
-            fc = 1.0
-        elif target_col in x_mu_names:
-            j = x_mu_names.index(target_col)
-            beta = float(xmu[j])
-            se_beta = float(se_x_mu[j])
-            z = beta / se_beta
-            W = z**2
-            p = 1 - chi2.cdf(W, df=1)
-            fc = float(np.exp(beta))
-        else:
-            # Not found: treat as non-estimable for this CRE (e.g. filtered level)
-            return {
-                "test_statistic": np.nan,
-                "p_value": np.nan,
-                "fold_change": np.nan,
-                "flattened": False,
-            }
+            return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
 
-        return {
-            "test_statistic": z,
-            "p_value": p,
-            "fold_change": fc,
-            "flattened": False,
-        }
+        j = find_treatment_index(xmu_names, factor="cell_type", level=comp_ct)
+        if j is None:
+            # Not found: treat as non-estimable for this CRE (e.g. filtered level)
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        beta    = float(xmu[j])
+        se_beta = float(entry.se_x_mu[j])
+        z       = beta / se_beta
+        p       = 1 - chi2.cdf(z*z, df=1)
+        fc      = float(np.exp(beta))
+        return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
 
     # --- Mode 2: top-vs-rest contrast (closest to 'specificity' test from Lalanne et al. (Shendure)) ---
     elif mode == "top_vs_rest":
-        # find all treatment-coded cell_type terms
-        ct_terms = [i for i, nm in enumerate(x_mu_names) if nm.startswith("C(cell_type)[T.")]
-        p_levels = len(ct_terms) + 1  # include baseline
+        base_pos = name_to_idx.get("Intercept", None)
+        nonbase_pos = [i for i, nm in enumerate(xmu_names)
+                    if nm.startswith("C(cell_type") and "][T." not in nm and nm.endswith("]")]
+        # Better:
+        nonbase_pos = [find_treatment_index(xmu_names, "cell_type", nm.split("[T.",1)[1][:-1])
+                    for nm in xmu_names
+                    if nm.startswith("C(cell_type") and nm.endswith("]")]
+        p_levels     = 1 + len(nonbase_pos)
         if p_levels <= 1:
             return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-        # find which coefficient corresponds to comp_ct (could be baseline)
-        comp_term = find_treatment_column(x_mu_names, "cell_type", comp_ct)
-        if comp_term in x_mu_names:
-            k_comp = x_mu_names.index(comp_term)
-        else:
-            k_comp = None  # baseline
-
-        # map names→positions for NB block
-        name_to_j = {nm: j for j, nm in enumerate(x_mu_names)}
-        baseline_pos = name_to_j.get("Intercept", None)
-        nonbase_pos = [name_to_j[nm] for nm in x_mu_names if nm.startswith("C(cell_type)[T.")]
-        pos = [baseline_pos] + nonbase_pos
-
-        # index of comp_ct in that p-vector
-        comp_ix = 0 if k_comp is None else (1 + nonbase_pos.index(k_comp))
+        comp_nm  = f"C(cell_type)[T.{comp_ct}]"
+        # index of comp_ct in that p-vector (0 = baseline/Intercept)
+        comp_ix  = 0 if comp_nm not in name_to_idx else (1 + nonbase_pos.index(name_to_idx[comp_nm]))
 
         # contrast weights over p cell types: +1 for comp, -1/(p-1) for others
-        c_p = np.full(p_levels, -1.0/(p_levels-1))
-        c_p[comp_ix] = 1.0
+        c_p = np.full(p_levels, -1.0/(p_levels-1)); c_p[comp_ix] = 1.0
 
-        # lift to β-space
+        # lift to β-space (NB block only)
         c_beta = np.zeros(k_nb)
+        pos    = [base_pos] + nonbase_pos
         for w, j in zip(c_p, pos):
             if j is not None:
                 c_beta[j] = w
 
-        cov_nb = cov[:k_nb, :k_nb]
-        lnFC = float(c_beta @ xmu)
-        se_lnFC = float(np.sqrt(c_beta @ cov_nb @ c_beta))
+        lnFC    = float(c_beta @ xmu[:k_nb])
+        se_lnFC = float(np.sqrt(c_beta @ entry.cov_nb @ c_beta))
         if se_lnFC == 0 or np.isnan(se_lnFC):
             return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-        z = lnFC / se_lnFC
-        W = z**2
-        p = 1 - chi2.cdf(W, df=1)
+        z  = lnFC / se_lnFC
+        p  = 1 - chi2.cdf(z*z, df=1)
         fc = float(np.exp(lnFC))
-
-        return {
-            "test_statistic": z,
-            "p_value": p,
-            "fold_change": fc,
-            "flattened": False,
-        }
+        return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
 
     else:
         raise ValueError(f"Unknown by-CRE Wald mode: {mode}")
