@@ -37,6 +37,7 @@ import dask.dataframe as dd
 import dask.array as da
 
 from enum import Enum
+from typing import List
 
 #internal imports
 from .utils import unimplemented
@@ -101,6 +102,84 @@ def table_type(column_names):
     #unimplemented
 
     return ret
+
+
+
+def simple_spread(cell_types:List[str],min:int,max:int,fineness:int=10):
+    """
+    Create a ground truth dataframe tiling all cell-types.
+    with synthetic CREs at a variety of strengths.
+
+    Returns a tuple of (,None) 
+    (none will be replaced by hypothesis object)
+
+    Useful for simulation and power calculations.
+    (see readme for ground truth dataframe specification)
+
+    min, max are the min & max MPRA UMI / cell values.
+
+    
+    
+    Also returns a hypothesis object (UNIMPLEMENTED)
+    This has the cartesian product of CREs.
+    In general, same CRE name 
+    """
+  
+    
+    #to generally tile the space
+    even_tiling=np.linspace(start=min, stop=max, num=fineness)
+    
+    even_names=["reference"]+[f"CRE_even_{i}" for i in range(1,len(even_tiling))]
+    even_df=pd.DataFrame({"cre_id":even_names,"true_mean":even_tiling})
+    #duplicate df for each cell-type
+    even_df=pd.concat([even_df]*len(cell_types))
+    even_df["cell_type"]=np.repeat(cell_types,len(even_tiling))
+    
+    #to create a large number of low-expression CREs
+    fractional_tiling=1/(2**np.linspace(start=1,stop=fineness,num=fineness))*(max-min)+min
+    fractional_tiling_names=[f"CRE_fractional_{i}" for i in range(0,len(fractional_tiling))]
+    fractional_tiling_df=pd.DataFrame({"cre_id":fractional_tiling_names,"true_mean":fractional_tiling})
+    #duplicate df for each cell-type
+    fractional_tiling_df=pd.concat([fractional_tiling_df]*len(cell_types))
+    fractional_tiling_df["cell_type"]=np.repeat(cell_types,len(fractional_tiling))
+    
+
+    #Then we create some "cell-type-specific CREs". 
+    #these are simply "high in one cell-type and low in every other".
+    #where "high" is a value from even tiling+1. 
+    #and "low" =ln(high)
+
+    #cell-type specific
+    ct_specific=even_df
+    ct_specific=ct_specific.rename({"true_mean":"high","cell_type":"expressed_cell_type"},axis=1)
+    ct_specific["high"]=ct_specific["high"]+1
+    ct_specific["low"]=np.log(ct_specific["high"])
+
+    #ok, so we've created a high and low value for each CRE. 
+    #"expressed_cell_type" will be highest cell-type
+    #so let's rename accordingly
+    ct_specific["cre_id"]=\
+        ct_specific["cre_id"].astype(str)+\
+        "_high_in_"+\
+        ct_specific["expressed_cell_type"].astype(str)
+    
+    #let's repeat the DF across all cell-types
+    #every CRE in every cell-type, after all...
+    ct_specific=pd.concat([ct_specific]*len(cell_types))
+    ct_specific["cell_type"]=np.repeat(cell_types,int(len(ct_specific)/len(cell_types)))
+    #now let's assign values...
+    ct_specific=ct_specific.assign(
+        true_mean=np.where(ct_specific["cell_type"]==ct_specific["expressed_cell_type"],
+                           ct_specific["high"],
+                           ct_specific["low"])
+    )
+    #drop extranious columns
+    ct_specific=ct_specific[["cre_id","cell_type","true_mean"]]
+
+    final_ground_truth=pd.concat([even_df,fractional_tiling_df,ct_specific])
+    
+    hypothesis_set=None
+    return (final_ground_truth,hypothesis_set)
 
 @unimplemented
 def load_hypothesis_set(filepath):
