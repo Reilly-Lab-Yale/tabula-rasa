@@ -20,10 +20,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import json
 
-from scipy.stats import linregress
+from scipy.stats import linregress, chi2, norm
 #import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
+from statsmodels.stats.multitest import fdrcorrection
 from formulaic import Formula
 
 from dask.distributed import Client
@@ -34,15 +35,34 @@ import dask.array as da
 
 from enum import Enum
 
+import warnings
+
+# tensorflow import for Wald test Hessian/SE computation
+try:
+    import tensorflow as tf  # optional dep
+except Exception as _tf_err:
+    tf = None
+
 #internal imports
 from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
+from .utils import one_versus_all, find_treatment_column
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
+
+# Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
+HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
+HYPOTHESIS_OPTIONAL = {"reference_CRE", "reference_cell_type", "meta"}
+HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
+
+RESULT_REQUIRED = {
+    "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
+}
+RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
 
 #functions
 @unimplemented
@@ -55,6 +75,12 @@ def helloworld():
     print("hello world!")
     pass
 
+def _require_tensorflow():
+    if tf is None:
+        raise ImportError(
+            "TensorFlow is required for Wald test Hessian/SE computation. "
+            "Please install tensorflow>=2.x."
+        )
 
 def table_type(column_names):
     """
@@ -76,46 +102,33 @@ def table_type(column_names):
 
     TODO: move to the inside of the scMPRA object
     """
+    ### UPDATE: ENG refactored slightly to incorporate hypothesis table and simplify some lines
     #Performs subset checking so that extra columns are allowed.
     #Matching multiple definitions however is NOT allowed. 
     
     #If columns match no definitions the table is malformed: so this is the default. 
-    ret='malformed'
-    
-    #check mandatory columns of read-wise MPRA
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'mpra_umi', 'reads_mpra'}<=set(column_names):
-        if ret=='malformed':
-            ret='mpra_readwise'
+    cols = set(map(str, column_names))  # tolerate ArrowDtype/Index types
+    ret = 'malformed'
+    matches = 0
+
+    # Read-wise MPRA (use the names used elsewhere in the codebase)
+    if {'cell_bc','rep_id','cre_id','cell_type','mpra_bc','umi','reads'} <= cols:
+        ret = 'mpra_readwise'; matches += 1
+
+    # UMI-wise MPRA
+    if {'cell_bc','rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
+        ret = 'mpra_umiwise'; matches += 1
+
+    # Hypotheses (must have required; optional ok)
+    if HYPOTHESIS_REQUIRED <= cols and cols <= (HYPOTHESIS_ALL | cols):
+        # Distinguish result vs hypothesis next:
+        if RESULT_REQUIRED <= cols:
+            ret = 'results'
         else:
-            return 'malformed'
-    
-    #check mandatory columns of umi-wise full MPRA
-    if {'cell_bc', 'rep_id', 'cre_id', 'cell_type', 'umis_mpra_bc'}<=set(column_names):
-        if ret=='malformed':
-            ret='mpra_umiwise'
-        else:
-            return 'malformed'
-    
-    #check mandatory columns of umi-wise flattened MPRA
-    #unimplemented
+            ret = 'hypotheses'
+        matches += 1
 
-    return ret
-
-@unimplemented
-def load_hypothesis_set(filepath):
-    """
-    Arguments
-        filepath <str>
-    Returns
-        <pd.DataFrame>
-
-    Loads a hypothesis or hypothesis+results set from disc.
-    """
-    #load table...
-    #assert table_type(table.columns)=="hypothesis" or table_type(table.columns)=="results"
-    #return table
-    pass
-
+    return ret if matches == 1 else 'malformed'
 
 class scMPRA_data:
     """
@@ -437,28 +450,7 @@ def apply_deseq():
     pass
 
 
-@unimplemented
-def hypothesis_tester(scmpra_models, hypotheses, flavor="wald"):
-    """
-    Arguments
-        scmpra_models : <pd.DataFrame>
-        hypotheses : <pd.Dataframe>
-        flavor : <str>
-    Returns
-        <pd.DataFrame>
 
-    Takes .. and a set of hypotheses and tests them all. Returns
-    a results dataframe. Flavor selects the test type, and can be one of
-    - wald : wald test
-    - wilcox : wilcoxin-rank-sum
-    - permute : permutation test
-    - deseq : uses deseq2
-    
-    """
-    #calls apply_deseq
-    assert table_type(scmpra_data.columns) == "mpra_umiwise"
-    assert table_type(hypotheses.columns) == "hypotheses"
-    pass
 
 
 """
@@ -723,6 +715,8 @@ class ortho:
         
         self.training_data=None
 
+        self.wald_precomp = None  # WaldPrecomp or None
+
     def save(self,path,name,strip_training_data=False):
         """
         Simple pickle save.
@@ -778,6 +772,12 @@ class ortho:
         else:
             simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
+        if getattr(self, "wald_precomp", None) is None:
+            with open(full_path/"wald_precomp.pkl","wb") as f:
+                pickle.dump(None, f)
+        else:
+            self.wald_precomp.save(full_path/"wald_precomp.pkl")
+
         ## training data
         if not strip_training_data:
             simple_write(self.training_data,"training_data.pkl")
@@ -818,7 +818,12 @@ class ortho:
         ## Training data
         ret_ortho.training_data=simple_load("training_data.pkl")
    
-        
+        try:
+            wp = WaldPrecomp.load(client, full_path/"wald_precomp.pkl")
+        except Exception:
+            wp = None
+        setattr(ret_ortho, "wald_precomp", wp)
+
         return ret_ortho
 
     @unimplemented
@@ -945,6 +950,63 @@ class ortho:
             
             QC[model_level]=ret
         return QC
+
+    def precompute_wald(self, client: Client):
+        """
+        Compute and cache Wald precomputations (SEs, covariances, name maps) for
+        every by-cell-type model and every by-CRE model in this ortho.
+        Stores results in self.wald_precomp (as Futures); persists with save().
+        """
+        if self.training_data is None:
+            raise RuntimeError("precompute_wald requires self.training_data to subset matrices.")
+
+        if (self.by_cell_type is None) or (self.by_cre is None):
+            raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
+
+        by_ct = {}
+        for ct in self.by_cell_type.model.keys():
+            model_f = self.by_cell_type.model[ct]
+            design_f = self.by_cell_type_design[ct]
+            # subset on the worker to avoid shipping big data repeatedly
+            df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+            by_ct[ct] = client.submit(
+                _build_wald_precomp_for_subset,
+                model_f, design_f, df_ct
+            )
+
+        by_cr = {}
+        for cr in self.by_cre.model.keys():
+            model_f = self.by_cre.model[cr]
+            design_f = self.by_cre_design[cr]
+            df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+            by_cr[cr] = client.submit(
+                _build_wald_precomp_for_subset,
+                model_f, design_f, df_cr
+            )
+
+        self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
+
+    def make_wald_eval_bundle(self) -> dict:
+        """
+        Build a small, pickle-friendly snapshot with everything the workers
+        need to evaluate Wald tests. No Dask Futures inside.
+        """
+        if self.wald_precomp is None:
+            raise RuntimeError("Call ortho.precompute_wald(...) first.")
+
+        wp = self.wald_precomp.flattened_copy()  # resolve futures
+
+        by_ct = {}
+        for ct, entry in wp.by_cell_type.items():
+            model = _to_plain(self.by_cell_type.model[ct])
+            by_ct[str(ct)] = _pack_model_block(model, entry)
+
+        by_cr = {}
+        for cr, entry in wp.by_cre.items():
+            model = _to_plain(self.by_cre.model[cr])
+            by_cr[str(cr)] = _pack_model_block(model, entry)
+
+        return {"by_cell_type": by_ct, "by_cre": by_cr}
 
 class parameters:
     """
@@ -1868,6 +1930,860 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
                          "mean_biased_error":ret_mbe,
                          "mean_absolute_percent_error":ret_mape})
 
+
+class WaldPrecompEntry:
+    """
+    Minimal payload needed to evaluate Wald tests quickly for a single fitted model.
+    All numpy; safe to pickle.
+    """
+    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb")
+
+    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb):
+        self.xmu_names = list(map(str, xmu_names))
+        self.se_x_mu   = np.asarray(se_x_mu, dtype=float)
+        self.cov_nb    = np.asarray(cov_nb, dtype=float)
+        self.k_nb      = int(k_nb)
+
+    def name_to_idx(self):
+        # build lazily to keep pickle small
+        return {nm: j for j, nm in enumerate(self.xmu_names)}
+
+
+class WaldPrecomp:
+
+    """
+    Mirrors the shape of `parameters`: dicts keyed by split level.
+    Values are WaldPrecompEntry objects (or Futures thereof when live on a cluster).
+    """
+    def __init__(self, by_cell_type=None, by_cre=None):
+        self.by_cell_type = by_cell_type or {}
+        self.by_cre       = by_cre or {}
+
+    def _unflatten_futures(self, client: Client):
+        # wrap raw objects in futures, for symmetry with other classes
+        for d in (self.by_cell_type, self.by_cre):
+            for k in list(d.keys()):
+                d[k] = client.submit(lambda x: x, d[k])
+
+    def flattened_copy(self):
+        # gather futures to plain objects
+        def _gather(d):
+            return {k: (v.result() if isinstance(v, Future) else v) for k, v in d.items()}
+        return WaldPrecomp(by_cell_type=_gather(self.by_cell_type),
+                           by_cre=_gather(self.by_cre))
+
+    def save(self, path: str | Path):
+        with open(path, "wb") as f:
+            pickle.dump(self.flattened_copy(), f)
+
+    @staticmethod
+    def load(client: Client, path: str | Path) -> "WaldPrecomp":
+        with open(path, "rb") as f:
+            obj: WaldPrecomp = pickle.load(f)
+        # re-wrap as futures so downstream access is uniform
+        obj._unflatten_futures(client)
+        return obj
+
+def _normalize_cell_type_label(label, scmpra: scMPRA_data):
+    """
+    Map a user-facing cell type name to the internal label used in the data/models.
+    If the dataset has a reference cell type set, that name is mapped to 'reference'.
+    """
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return None
+    s = str(label)
+    if scmpra.reference_cell_type and s == scmpra.reference_cell_type:
+        return "reference"
+    return s
+
+def _normalize_cre_label(label, scmpra: scMPRA_data):
+    """
+    Map a user-facing CRE name to the internal label used in the data/models.
+    If negative controls were flattened to 'reference', map those original names to 'reference'.
+    """
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return None
+    s = str(label)
+    if "cre_id_original" in scmpra.data.columns:
+        df = scmpra.data[["cre_id", "cre_id_original"]].dropna()
+        # Was this original label collapsed to 'reference'?
+        if ((df["cre_id_original"] == s) & (df["cre_id"] == "reference")).any():
+            return "reference"
+    return s
+
+class HypothesisSet:
+    """
+    A validated container for hypothesis rows.
+
+    Columns:
+      - comparison_CRE (str) [T]
+      - comparison_cell_type (str) [T]
+      - reference_CRE (str or NA) [F]
+      - reference_cell_type (str or NA) [F]
+      - meta (str or NA) [F]
+
+    Rules:
+      - If both reference_* are NA: interpret as "compare to zero" (activity vs 0).
+            - maybe change this to use the references from the scMPRA data object? discuss what we want the appropriate default to be
+      - If exactly one of reference_CRE / reference_cell_type is provided: malformed.
+    """
+
+    def __init__(self, df: pd.DataFrame):
+        self.df = df.copy()
+        self._coerce_and_validate()
+
+    # -------- Construction / IO --------
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "HypothesisSet":
+        return cls(df)
+
+    @classmethod
+    def from_tsv(cls, path: str) -> "HypothesisSet":
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
+        return cls(df)
+
+    @classmethod
+    def from_csv(cls, path: str) -> "HypothesisSet":
+        df = pd.read_csv(path, dtype=str, keep_default_na=True)
+        return cls(df)
+
+    # @classmethod
+    ## Probably not needed for this class but it's here if we change our minds
+    # def from_parquet(cls, path: str) -> "HypothesisSet":
+    #     t = pq.read_table(path)
+    #     df = t.to_pandas(types_mapper=pd.ArrowDtype)
+    #     # convert ArrowDtype to pandas strings where appropriate
+    #     for col in df.columns:
+    #         if col in HYPOTHESIS_ALL:
+    #             df[col] = df[col].astype("string")
+    #     return cls(df)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return self.df.copy()
+
+    def to_tsv(self, path: str) -> None:
+        self.df.to_csv(path, sep="\t", index=False)
+
+    def to_csv(self, path: str) -> None:
+        self.df.to_csv(path, index=False)
+
+    # def to_parquet(self, path: str) -> None:
+    #     table = pa.Table.from_pandas(self.df, preserve_index=False)
+    #     pq.write_table(table, path, compression="gzip")
+
+    # -------- Validation / Utilities --------
+    def _coerce_and_validate(self) -> None:
+        # Ensure expected cols exist; extra cols are allowed (and kept)
+        for col in HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL:
+            if col not in self.df.columns:
+                self.df[col] = pd.Series([pd.NA] * len(self.df), dtype="string")
+
+        # Cast to string dtype (allows NA)
+        for col in HYPOTHESIS_ALL:
+            self.df[col] = self.df[col].astype("string")
+
+        # Required present
+        missing_req = [c for c in HYPOTHESIS_REQUIRED if self.df[c].isna().any()]
+        if missing_req:
+            raise ValueError(f"Missing required entries in columns: {missing_req}")
+
+        # Rule: either both reference_* are NA, or both are present (non-NA)
+        # Debating whether this rule is actually necessary or not
+        ref_cre_na = self.df["reference_CRE"].isna()
+        ref_ct_na  = self.df["reference_cell_type"].isna()
+        malformed_mask = (ref_cre_na ^ ref_ct_na)  # xor -> exactly one NA
+        if malformed_mask.any():
+            bad_rows = list(self.df.index[malformed_mask][:10])
+            raise ValueError(
+                "Malformed hypotheses: rows contain only one of reference_CRE / reference_cell_type. "
+                f"Example indices: {bad_rows} (showing up to 10)."
+            )
+
+    def is_zero_reference(self) -> pd.Series:
+        """Row-wise boolean: True if comparing against implicit zero (both reference_* are NA)."""
+        return self.df["reference_CRE"].isna() & self.df["reference_cell_type"].isna()
+
+    def add_meta(self, series_like) -> None:
+        """Attach/overwrite a meta column (useful for painting plots)."""
+        self.df["meta"] = pd.Series(series_like, index=self.df.index, dtype="string")
+
+    def __len__(self):
+        return len(self.df)
+
+
+# ---------------------------------------------------------------------
+# Convenience hypothesis builders (wrap one_versus_all)
+# ---------------------------------------------------------------------
+
+
+def make_by_celltype_hypotheses(
+    *,
+    comparison_cell_type: str,
+    counts: "scMPRA_data",
+    comparison_cres: "list[str] | str" = "all",
+    reference_cre: str | None = "reference",
+    meta: str | None = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses that test many CREs within a single cell type
+    (CRE varies; cell_type fixed). This is the natural input for the
+    by-cell-type Wald test (CRE vs baseline CRE in that cell type).
+
+    Examples:
+        hs = make_by_celltype_hypotheses(
+                comparison_cell_type="NeuroectodermBrain",
+                counts=shendure,
+                comparison_cres="all",
+                reference_cre="reference",   # your flattened minP/noP
+                meta="emvar_screen")
+
+    Notes:
+        - We set BOTH reference columns per the table spec:
+            reference_CRE = `reference_cre`
+            reference_cell_type = `comparison_cell_type`
+        - Passing reference_cre=None will generate the "compare‐to‐zero" flavor,
+          but the current Wald code ignores zero and interprets baseline from the model.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    cell_type = str(comparison_cell_type)
+
+    # What CREs exist in this cell type?
+    df = counts.data
+    available = (
+        df.loc[df["cell_type"] == cell_type, "cre_id"]
+        .astype(str).unique().tolist()
+    )
+
+    if comparison_cres == "all":
+        cand = available.copy()
+        # If the negative control is labeled "reference", users usually
+        # don’t want a “reference vs reference” row; drop it.
+        if "reference" in cand:
+            cand.remove("reference")
+    else:
+        cand = [str(x) for x in comparison_cres]
+        missing = sorted(set(cand) - set(available))
+        if missing:
+            warnings.warn(f"[make_by_celltype_hypotheses] Skipping CREs not present in '{cell_type}': {missing}")
+            cand = [c for c in cand if c in available]
+
+    # Build (cre, cell_type) pairs for one_versus_all (comparison_on='cre')
+    pairs = [(cre, cell_type) for cre in cand]
+
+    hyp_df = one_versus_all(
+        pairs,
+        comparison_on="cre",
+        reference_CRE=reference_cre,
+        reference_cell_type=cell_type,
+        meta=meta,
+    )
+    return HypothesisSet.from_dataframe(hyp_df)
+
+
+def make_by_cre_hypotheses(
+    *,
+    comparison_cre: str,
+    counts: "scMPRA_data",
+    comparison_cell_types: "list[str] | str" = "all",
+    reference_cell_type: str | None = None,
+    meta: str | None = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses that test many cell types for one CRE
+    (cell_type varies; CRE fixed). This is the natural input for the
+    by-CRE Wald test (cell_type vs baseline cell type for the same CRE).
+
+    Examples:
+        hs = make_by_cre_hypotheses(
+                comparison_cre="CRE123",
+                counts=shendure,
+                comparison_cell_types="all",
+                reference_cell_type="Pluripotent",
+                meta="cell_specificity")
+
+    Notes:
+        - We set BOTH reference columns per the table spec:
+            reference_CRE = `comparison_cre`
+            reference_cell_type = provided (or inferred)
+        - If `reference_cell_type` is not provided, we try:
+            counts.reference_cell_type, then literal "reference" if present.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    cre = str(comparison_cre)
+
+    # What cell types exist for this CRE?
+    df = counts.data
+    available = (
+        df.loc[df["cre_id"] == cre, "cell_type"]
+        .astype(str).unique().tolist()
+    )
+
+    # Pick/validate reference cell type
+    # Normalize the reference to internal labeling (e.g., "Pluripotent" -> "reference")
+    ref_ct = reference_cell_type
+    if ref_ct is None:
+        if getattr(counts, "reference_cell_type", None):
+            ref_ct = counts.reference_cell_type
+        elif "reference" in available:
+            ref_ct = "reference"
+        else:
+            raise ValueError(
+                "reference_cell_type not provided and could not be inferred "
+                "(counts.reference_cell_type not set and 'reference' not found for this CRE)."
+            )
+    ref_ct = _normalize_cell_type_label(ref_ct, counts)
+
+    if comparison_cell_types == "all":
+        cand = [ct for ct in available if ct != ref_ct]
+    else:
+        # also normalize any user-provided labels before comparing to 'available'
+        cand = [_normalize_cell_type_label(x, counts) for x in comparison_cell_types]
+        missing = sorted(set(cand) - set(available))
+        if missing:
+            warnings.warn(f"[make_by_cre_hypotheses] Skipping cell types not present for '{cre}': {missing}")
+            cand = [c for c in cand if c in available]
+        cand = [c for c in cand if c != ref_ct]
+
+    # Build (cell_type, cre) pairs for one_versus_all (comparison_on='cell_type')
+    pairs = [(ct, cre) for ct in cand]
+
+    hyp_df = one_versus_all(
+        pairs,
+        comparison_on="cell_type",
+        reference_CRE=cre,                 # same CRE = “within-CRE” contrast
+        reference_cell_type=ref_ct,        # baseline cell type
+        meta=meta,
+    )
+    return HypothesisSet.from_dataframe(hyp_df)
+
+def make_all_by_celltype_hypotheses(
+    *,
+    counts: "scMPRA_data",
+    reference_cre: str | None = "reference",
+    meta: str | None = None,
+    include_cell_types: "list[str] | None" = None,
+    exclude_cell_types: "list[str] | None" = None,
+) -> "HypothesisSet":
+    """
+    Build hypotheses for *every* cell type in the dataset, testing all CREs
+    within each cell type against the provided baseline CRE (default: 'reference').
+
+    Effectively: concat over cell types of
+        make_by_celltype_hypotheses(comparison_cell_type=ct, comparison_cres="all")
+
+    Parameters
+    ----------
+    counts : scMPRA_data
+        Dataset.
+    reference_cre : str or None
+        Baseline CRE label used in the by-cell-type test (typically the flattened negative controls -> 'reference').
+        If None, you get the "compare-to-zero" flavor, though the Wald code currently focuses on baseline contrasts.
+    meta : str or None
+        Optional label propagated to the 'meta' column.
+    include_cell_types : list[str] or None
+        If provided, restrict to this whitelist of cell types (user-facing labels OK; they’ll be normalized).
+    exclude_cell_types : list[str] or None
+        If provided, drop these cell types (applied after include).
+
+    Returns
+    -------
+    HypothesisSet
+        A validated hypothesis set spanning all requested cell types.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    all_cts = sorted(map(str, counts.data["cell_type"].unique().tolist()))
+
+    # Optional include/exclude
+    if include_cell_types is not None:
+        want = set(map(str, include_cell_types))
+        all_cts = [ct for ct in all_cts if ct in want]
+    if exclude_cell_types is not None:
+        drop = set(map(str, exclude_cell_types))
+        all_cts = [ct for ct in all_cts if ct not in drop]
+
+    frames = []
+    for ct in all_cts:
+        # keep user-facing ct string; per-row normalization happens in the test functions
+        hs_ct = make_by_celltype_hypotheses(
+            comparison_cell_type=ct,
+            counts=counts,
+            comparison_cres="all",
+            reference_cre=reference_cre,
+            meta=meta,
+        )
+        frames.append(hs_ct.to_dataframe())
+
+    if not frames:
+        return HypothesisSet.from_dataframe(pd.DataFrame(columns=list(HYPOTHESIS_ALL)))
+
+    big = pd.concat(frames, ignore_index=True)
+    return HypothesisSet.from_dataframe(big)
+
+
+def make_all_by_cre_hypotheses(
+    *,
+    counts: "scMPRA_data",
+    reference_cell_type: str | None = None,
+    meta: str | None = None,
+    include_cres: "list[str] | None" = None,
+    exclude_cres: "list[str] | None" = None,
+    drop_reference_cre: bool = True,
+) -> "HypothesisSet":
+    """
+    Build hypotheses for *every* CRE in the dataset, testing all cell types
+    within each CRE against a baseline cell type (defaults to the dataset’s
+    reference cell type if available, otherwise tries literal 'reference').
+
+    Effectively: concat over CREs of
+        make_by_cre_hypotheses(comparison_cre=cre, comparison_cell_types='all')
+
+    Parameters
+    ----------
+    counts : scMPRA_data
+        Dataset.
+    reference_cell_type : str or None
+        Baseline cell type label for within-CRE contrasts. If None, we try
+        counts.reference_cell_type, else literal 'reference' if present. 
+        (Same behavior as make_by_cre_hypotheses.)
+    meta : str or None
+        Optional label propagated to the 'meta' column.
+    include_cres : list[str] or None
+        If provided, restrict to this whitelist of CREs.
+    exclude_cres : list[str] or None
+        If provided, drop these CREs (applied after include).
+    drop_reference_cre : bool
+        If True (default), skip the collapsed negative-control CRE named 'reference'
+        to avoid generating “reference vs baseline cell type” rows.
+
+    Returns
+    -------
+    HypothesisSet
+        A validated hypothesis set spanning all requested CREs.
+    """
+    if not isinstance(counts, scMPRA_data):
+        raise TypeError("counts must be an scMPRA_data object.")
+
+    all_cres = sorted(map(str, counts.data["cre_id"].unique().tolist()))
+    if drop_reference_cre and "reference" in all_cres:
+        all_cres.remove("reference")
+
+    # Optional include/exclude
+    if include_cres is not None:
+        want = set(map(str, include_cres))
+        all_cres = [c for c in all_cres if c in want]
+    if exclude_cres is not None:
+        drop = set(map(str, exclude_cres))
+        all_cres = [c for c in all_cres if c not in drop]
+
+    frames = []
+    for cre in all_cres:
+        hs_cre = make_by_cre_hypotheses(
+            comparison_cre=cre,
+            counts=counts,
+            comparison_cell_types="all",
+            reference_cell_type=reference_cell_type,
+            meta=meta,
+        )
+        frames.append(hs_cre.to_dataframe())
+
+    if not frames:
+        return HypothesisSet.from_dataframe(pd.DataFrame(columns=list(HYPOTHESIS_ALL)))
+
+    big = pd.concat(frames, ignore_index=True)
+    return HypothesisSet.from_dataframe(big)
+
+class ResultSet(HypothesisSet):
+    """
+    Extends HypothesisSet with result columns:
+      - test_type (str)     [T]
+      - test_statistic (float) [T]
+      - p_value (float)     [T]
+      - fold_change (float) [T]
+      - bh_p (float)        [T]
+      - flattened (bool)    [T]
+    """
+
+    def __init__(self, df: pd.DataFrame):
+        super().__init__(df)
+        self._validate_results_block()
+
+    def _validate_results_block(self) -> None:
+        missing = [c for c in RESULT_REQUIRED if c not in self.df.columns]
+        if missing:
+            raise ValueError(f"Results table missing required columns: {missing}")
+
+        # Basic dtype coercions (tolerant)
+        self.df["test_type"] = self.df["test_type"].astype("string")
+        for c in ("test_statistic", "p_value", "fold_change", "bh_p"):
+            self.df[c] = pd.to_numeric(self.df[c], errors="coerce")
+        # flattened must be boolean-ish
+        if self.df["flattened"].dtype != bool:
+            self.df["flattened"] = self.df["flattened"].astype("boolean")
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
+        return cls(df)
+
+def _bh_adjust(pvals: pd.Series) -> pd.Series:
+    """Benjamini–Hochberg FDR control on a 1D array-like of p-values."""
+    p = pd.Series(pvals, dtype=float).fillna(1.0).clip(0, 1)
+    # alpha only affects the boolean 'reject'; the adjusted p-values are
+    # independent of alpha for BH, so any alpha is fine here.
+    _, p_adj = fdrcorrection(p.values, alpha=0.05, is_sorted=False)
+    return pd.Series(p_adj, index=p.index)
+    
+def _zinb_loglik_tf(params, exog, exog_infl, endog):
+    """
+    TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
+
+    params = concat([x_mu, x_pi, log_theta])
+    """
+    N = tf.cast(tf.shape(endog)[0], tf.float32)
+
+    num_features = tf.shape(exog)[1]
+    num_infl_features = tf.shape(exog_infl)[1]
+
+    x_mu = params[:num_features]
+    x_pi = params[num_features:num_features + num_infl_features]
+    log_theta = params[-1]
+    theta = tf.exp(log_theta)
+
+    mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
+    pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+
+    # zero-inflation logits -> log(q0), log(q1) as in your code
+    log_q0 = -tf.nn.softplus(-pi_logits)
+    log_q1 = log_q0 - pi_logits
+
+    y = tf.cast(endog, tf.float32)
+
+    # NB log-likelihood (for y>0)
+    t1 = tf.math.lgamma(y + theta)
+    t2 = -tf.math.lgamma(theta)
+    t3 = theta * log_theta
+    t4 = y * tf.math.log(mu + 1e-8)
+    ty = tf.math.log(mu + theta + 1e-8)
+    t5 = -(theta + y) * ty
+    nb_case = t1 + t2 + t3 + t4 + t5 + log_q1
+
+    # Zero case
+    p1 = theta * (log_theta - ty) + log_q1
+    zero_case = tf.reduce_logsumexp(tf.stack([log_q0, p1], axis=0), axis=0)
+
+    ll = tf.where(y < 1e-8, zero_case, nb_case)
+
+    # 3-step reduction (mean neg LL per output, add back log-factorial, sum)
+    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                      # (num_outputs,)
+    log_fact = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)    # ∑ ln(y!)
+    llfs = -(mean_neg_ll * N + log_fact)                           # (num_outputs,)
+    log_likelihood = tf.reduce_sum(llfs)
+    return log_likelihood
+
+def _setup_params_from_fit(zinb_model_fit):
+    """
+    Extract params vector and TF variable (x_mu, x_pi, theta) from a single
+    fitted TensorZINB result dict with labeled weights.
+    """
+    x_mu = zinb_model_fit['weights']['x_mu']
+    x_pi = zinb_model_fit['weights']['x_pi']
+    log_theta = zinb_model_fit['weights']['theta'].flatten()  # already log-space
+
+    # N.B. x_mu and x_pi are already pandas Series with names; keep arrays here
+    params = np.concatenate([np.asarray(x_mu).ravel(),
+                             np.asarray(x_pi).ravel(),
+                             np.asarray(log_theta).ravel()])
+    params_tensor = tf.Variable(params, dtype=tf.float32)
+    return params, params_tensor
+
+def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
+    """
+    Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
+    """
+    y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+    Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+
+    endog = y.to_numpy().reshape((-1, 1))
+    exog = X.to_numpy()
+    exog_infl = Z.to_numpy()
+
+    exog_tensor = tf.constant(exog, dtype=tf.float32)
+    endog_tensor = tf.constant(endog, dtype=tf.float32)
+    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
+    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+
+def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+    """
+    Compute Hessian-based SEs of the ZINB parameters.
+    Works in both TF2 eager and TF1 graph modes.
+    """
+    # Build Hessian with nested GradientTapes
+    with tf.GradientTape() as tape2:
+        with tf.GradientTape() as tape1:
+            ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
+        grad = tape1.gradient(ll, params_tensor)
+    hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+
+    # Evaluate to numpy depending on execution mode
+    if tf.executing_eagerly():
+        H = hess.numpy()
+    else:
+        # Graph mode
+        sess = tf.compat.v1.Session()
+        with sess.as_default():
+            sess.run(tf.compat.v1.global_variables_initializer())
+            H = sess.run(hess)
+
+    # Wald covariance = inverse observed information = (-H)^{-1}
+    cov = np.linalg.inv(-H)
+    se = np.sqrt(np.diag(cov))
+    return se, cov
+
+def _slice_se(standard_errors, exog_cols, infl_cols):
+    """
+    Split the stacked SE vector into (se_x_mu, se_x_pi, se_theta) by actual sizes.
+    """
+    k_nb = len(exog_cols)
+    k_zi = len(infl_cols)
+    se_x_mu = standard_errors[:k_nb]
+    se_x_pi = standard_errors[k_nb:k_nb+k_zi]
+    se_theta = standard_errors[k_nb+k_zi:]
+    return se_x_mu, se_x_pi, se_theta
+
+def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPrecompEntry:
+    """
+    Worker-safe function: builds X/Z/y, computes Hessian, splits SE, returns WaldPrecompEntry.
+    """
+    _require_tensorflow()
+
+    nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
+    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+
+    # Params var
+    _, params_t = _setup_params_from_fit(model_dict)
+
+    # Hessian and covariance
+    se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+
+    k_nb  = len(X.columns)
+    cov_nb = cov[:k_nb, :k_nb]
+
+    xmu_names = list(model_dict['weights']['x_mu'].index)
+    return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
+
+
+def _wald_by_celltype_row(row: dict, bundle: dict):
+    ct  = row["comparison_cell_type"]
+    cre = row["comparison_CRE"]
+    blk = bundle["by_cell_type"].get(ct)
+    if blk is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if cre == "reference":
+        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+
+    col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
+    if col is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    j   = blk["xmu_names"].index(col)
+    beta = float(blk["xmu"][j])
+    se   = float(blk["se_x_mu"][j])
+    if not np.isfinite(se) or se == 0:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    z = beta / se
+    p = 1.0 - chi2.cdf(z*z, 1)
+    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+def _wald_by_cre_row(row: dict, bundle: dict):
+    cre = row["comparison_CRE"]
+    ct  = row["comparison_cell_type"]
+    blk = bundle["by_cre"].get(cre)
+    if blk is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if ct == "reference":
+        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+
+    col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
+    if col is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    j   = blk["xmu_names"].index(col)
+    beta = float(blk["xmu"][j])
+    se   = float(blk["se_x_mu"][j])
+    if not np.isfinite(se) or se == 0:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    z = beta / se
+    p = 1.0 - chi2.cdf(z*z, 1)
+    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+def _dispatch_wald_row(row: dict, bundle: dict):
+    # We assume hypotheses were canonicalized already (labels normalized).
+    ref_ct  = row.get("reference_cell_type")
+    ref_cre = row.get("reference_CRE")
+    comp_ct  = row["comparison_cell_type"]
+    comp_cre = row["comparison_CRE"]
+
+    # by-cell-type if reference cell type missing or equals the comparison
+    if pd.isna(ref_ct) or (ref_ct == comp_ct):
+        return _wald_by_celltype_row(row, bundle)
+    # by-CRE if reference CRE missing or equals the comparison
+    if pd.isna(ref_cre) or (ref_cre == comp_cre):
+        return _wald_by_cre_row(row, bundle)
+    # crossed case not supported here
+    return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: bool = False) -> HypothesisSet:
+    df = hs.df if inplace else hs.df.copy()
+
+    ct_cols  = ["comparison_cell_type", "reference_cell_type"]
+    cre_cols = ["comparison_CRE", "reference_CRE"]
+
+    # 1) Cell types: reference name -> "reference" (vectorized)
+    ref_ct = getattr(scmpra, "reference_cell_type", None)
+    if ref_ct is not None:
+        # mask is a DataFrame of booleans with same shape as df[ct_cols]
+        m = df[ct_cols].eq(ref_ct)
+        if m.values.any():
+            df[ct_cols] = df[ct_cols].mask(m, "reference")
+
+    # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
+    #    We only need the set of originals that ended up as 'reference'
+    if "cre_id_original" in getattr(scmpra, "data", pd.DataFrame()).columns:
+        collapsed = scmpra.data.loc[
+            scmpra.data["cre_id"] == "reference", "cre_id_original"
+        ].astype(str).unique()
+        if len(collapsed) > 0:
+            collapsed_set = set(collapsed)
+            m = df[cre_cols].isin(collapsed_set)
+            if m.values.any():
+                df[cre_cols] = df[cre_cols].mask(m, "reference")
+
+    # keep dtype consistent
+    for col in ct_cols + cre_cols:
+        df[col] = df[col].astype("string")
+
+    return hs if inplace else HypothesisSet.from_dataframe(df)
+
+def _to_plain(obj):
+    # resolve dask Futures to plain objects
+    from dask.distributed import Future
+    return obj.result() if isinstance(obj, Future) else obj
+
+def _pack_model_block(model_dict, entry):
+    # model_dict['weights']['x_mu'] is a Series with names
+    w = model_dict['weights']['x_mu']
+    return {
+        "xmu_names": list(w.index),
+        "xmu":      np.asarray(w).ravel(),     # betas
+        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
+        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
+        "k_nb":     int(entry.k_nb),
+    }
+
+
+
+class HypothesisTester:
+    """
+    Orchestrates running a test function on each hypothesis row.
+    You supply `test_fn` that implements a single-row comparison and returns:
+        dict(test_type, test_statistic, p_value, fold_change, flattened)
+    The runner adds BH (`bh_p`) and merges back with the hypothesis columns to return a ResultSet.
+    """
+
+    def __init__(self, test_type_name: str):
+        """
+        # test_fn(row: pd.Series) -> dict with keys:
+        #     - test_statistic (float)
+        #     - p_value (float)
+        #     - fold_change (float)
+        #     - flattened (bool)
+        and optionally 'test_type' (overrides test_type_name).
+        # """
+        # self.test_fn = test_fn
+        self.test_type_name = test_type_name
+
+    def run(self, hypotheses: HypothesisSet, ortho_obj: ortho, client: Client) -> ResultSet:
+        df_h = hypotheses.to_dataframe().copy()
+
+                # -------- parallel path --------
+        # IMPORTANT: canonicalize once on driver (no label logic on workers)
+        print("canonicalize")
+        df_h = canonicalize_hypotheses(HypothesisSet.from_dataframe(df_h), scmpra=ortho_obj.training_data).to_dataframe()  # if you have counts_obj in scope
+        # Or do this before calling run() and pass in the canonicalized HypothesisSet.
+
+        # Build & scatter compact bundle once
+        print("bundle")
+        bundle = ortho_obj.make_wald_eval_bundle()   # must be plain python/numpy
+        bundle_f = client.scatter(bundle, broadcast=True)
+
+        # Map over plain dict rows
+        print("map")
+        recs = df_h.to_dict(orient="records")
+        print("client submit dispatch wald")
+        futures = [client.submit(_dispatch_wald_row, r, bundle_f) for r in recs]
+        results = client.gather(futures)
+
+        print("stitch and out")
+        # Stitch back
+        df_out = pd.concat(
+            [df_h.reset_index(drop=True), pd.DataFrame(results)],
+            axis=1
+        )
+        df_out["test_type"] = self.test_type_name
+        df_out["bh_p"] = _bh_adjust(df_out["p_value"])
+        df_out["flattened"] = df_out["flattened"].astype(bool)
+        return ResultSet.from_dataframe(df_out)
+
+def load_hypothesis_set(filepath):
+    """
+    Loads a hypothesis (or result) table from disk and returns a HypothesisSet or ResultSet.
+    Supports .tsv/.csv/.parquet by extension.
+    """
+    path = Path(filepath)
+    ext = path.suffix.lower()
+    if ext == ".tsv":
+        df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=True)
+    elif ext == ".csv":
+        df = pd.read_csv(path, dtype=str, keep_default_na=True)
+    # elif ext in {".parquet", ".pq"}:
+    #     df = pq.read_table(path).to_pandas(types_mapper=pd.ArrowDtype)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
+
+    ttype = table_type(df.columns)
+    if ttype == "hypotheses":
+        return HypothesisSet.from_dataframe(df)
+    elif ttype == "results":
+        return ResultSet.from_dataframe(df)
+    else:
+        raise ValueError(f"Loaded table does not look like a hypothesis/results table (got type '{ttype}').")
+
+def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="wald", test_fn=None):
+    """
+    Backward-compatible facade.
+
+    Provide either:
+      - test_fn: a per-row callable used by HypothesisTester (preferred while migrating)
+      - or later, we can route based on `flavor` to built-in tests.
+
+    Returns a ResultSet.
+    """
+    if test_fn is None:
+        raise NotImplementedError("Please provide `test_fn` for now. Built-in tests will be added to route by `flavor`.")
+    runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
+    return runner.run(hypotheses)
+
+    
 @unimplemented
 def volcano(results:experiment_model):
     """
