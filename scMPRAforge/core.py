@@ -47,7 +47,7 @@ from .utils import unimplemented
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
-from .utils import one_versus_all, find_treatment_index
+from .utils import one_versus_all, find_treatment_column
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -2413,14 +2413,11 @@ class ResultSet(HypothesisSet):
 
 def _bh_adjust(pvals: pd.Series) -> pd.Series:
     """Benjamini–Hochberg FDR control on a 1D array-like of p-values."""
-    p = pd.Series(pvals, dtype=float).fillna(1.0)
-    n = p.shape[0]
-    order = p.argsort(kind="mergesort")
-    ranks = pd.Series(np.arange(1, n + 1), index=order.index).iloc[order]
-    adj_sorted = (p.iloc[order] * n / ranks.to_numpy()).cummin()[::-1]
-    out = pd.Series(index=p.index, dtype=float)
-    out.iloc[order] = np.minimum(adj_sorted, 1.0)
-    return out
+    p = pd.Series(pvals, dtype=float).fillna(1.0).clip(0, 1)
+    # alpha only affects the boolean 'reject'; the adjusted p-values are
+    # independent of alpha for BH, so any alpha is fine here.
+    _, p_adj = fdrcorrection(p.values, alpha=0.05, is_sorted=False)
+    return pd.Series(p_adj, index=p.index)
     
 def _zinb_loglik_tf(params, exog, exog_infl, endog):
     """
@@ -2626,11 +2623,13 @@ def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
 
     # Locate the coefficient that represents comp_cre vs baseline
     # With treatment coding: columns look like "Intercept", "C(cre_id)[T.<level>]", etc.
-    j = find_treatment_index(xmu_names, factor="cre_id", level=comp_cre)
-    if j is None:
+    target_col = find_treatment_column(xmu_names, "cre_id", comp_cre)
+
+    if target_col is None:
         # e.g. level filtered; no coefficient estimated
         return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
+    j = xmu_names.index(target_col)
     beta    = float(np.asarray(x_mu_series).ravel()[j])
     se_beta = float(entry.se_x_mu[j])
     z       = beta / se_beta
@@ -2714,11 +2713,13 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
             # comp_ct is the baseline (reference) level → 0 vs baseline
             return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
 
-        j = find_treatment_index(xmu_names, factor="cell_type", level=comp_ct)
-        if j is None:
+        target_col = find_treatment_column(xmu_names, "cell_type", comp_ct)
+
+        if target_col is None:
             # Not found: treat as non-estimable for this CRE (e.g. filtered level)
             return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
+        j = xmu_names.index(target_col)
         beta    = float(xmu[j])
         se_beta = float(entry.se_x_mu[j])
         z       = beta / se_beta
@@ -2728,40 +2729,41 @@ def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_r
 
     # --- Mode 2: top-vs-rest contrast (closest to 'specificity' test from Lalanne et al. (Shendure)) ---
     elif mode == "top_vs_rest":
-        base_pos = name_to_idx.get("Intercept", None)
-        nonbase_pos = [i for i, nm in enumerate(xmu_names)
-                    if nm.startswith("C(cell_type") and "][T." not in nm and nm.endswith("]")]
-        # Better:
-        nonbase_pos = [find_treatment_index(xmu_names, "cell_type", nm.split("[T.",1)[1][:-1])
-                    for nm in xmu_names
-                    if nm.startswith("C(cell_type") and nm.endswith("]")]
-        p_levels     = 1 + len(nonbase_pos)
-        if p_levels <= 1:
-            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        # base_pos = name_to_idx.get("Intercept", None)
+        # nonbase_pos = [i for i, nm in enumerate(xmu_names)
+        #             if nm.startswith("C(cell_type") and "][T." not in nm and nm.endswith("]")]
+        # # Better:
+        # nonbase_pos = [find_treatment_index(xmu_names, "cell_type", nm.split("[T.",1)[1][:-1])
+        #             for nm in xmu_names
+        #             if nm.startswith("C(cell_type") and nm.endswith("]")]
+        # p_levels     = 1 + len(nonbase_pos)
+        # if p_levels <= 1:
+        #     return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-        comp_nm  = f"C(cell_type)[T.{comp_ct}]"
-        # index of comp_ct in that p-vector (0 = baseline/Intercept)
-        comp_ix  = 0 if comp_nm not in name_to_idx else (1 + nonbase_pos.index(name_to_idx[comp_nm]))
+        # comp_nm  = f"C(cell_type)[T.{comp_ct}]"
+        # # index of comp_ct in that p-vector (0 = baseline/Intercept)
+        # comp_ix  = 0 if comp_nm not in name_to_idx else (1 + nonbase_pos.index(name_to_idx[comp_nm]))
 
-        # contrast weights over p cell types: +1 for comp, -1/(p-1) for others
-        c_p = np.full(p_levels, -1.0/(p_levels-1)); c_p[comp_ix] = 1.0
+        # # contrast weights over p cell types: +1 for comp, -1/(p-1) for others
+        # c_p = np.full(p_levels, -1.0/(p_levels-1)); c_p[comp_ix] = 1.0
 
-        # lift to β-space (NB block only)
-        c_beta = np.zeros(k_nb)
-        pos    = [base_pos] + nonbase_pos
-        for w, j in zip(c_p, pos):
-            if j is not None:
-                c_beta[j] = w
+        # # lift to β-space (NB block only)
+        # c_beta = np.zeros(k_nb)
+        # pos    = [base_pos] + nonbase_pos
+        # for w, j in zip(c_p, pos):
+        #     if j is not None:
+        #         c_beta[j] = w
 
-        lnFC    = float(c_beta @ xmu[:k_nb])
-        se_lnFC = float(np.sqrt(c_beta @ entry.cov_nb @ c_beta))
-        if se_lnFC == 0 or np.isnan(se_lnFC):
-            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        # lnFC    = float(c_beta @ xmu[:k_nb])
+        # se_lnFC = float(np.sqrt(c_beta @ entry.cov_nb @ c_beta))
+        # if se_lnFC == 0 or np.isnan(se_lnFC):
+        #     return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-        z  = lnFC / se_lnFC
-        p  = 1 - chi2.cdf(z*z, df=1)
-        fc = float(np.exp(lnFC))
-        return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
+        # z  = lnFC / se_lnFC
+        # p  = 1 - chi2.cdf(z*z, df=1)
+        # fc = float(np.exp(lnFC))
+        # return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
+        raise ValueError("top_vs_rest not implemented yet")
 
     else:
         raise ValueError(f"Unknown by-CRE Wald mode: {mode}")

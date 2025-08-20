@@ -198,7 +198,7 @@ def dict_unwrap(dic):
         ret[key]=dic[key].result()
     return ret
 
-def find_treatment_index(xmu_names: list[str], factor: str, level: str) -> str | None:
+def find_treatment_column(xmu_names: list[str], factor: str, level: str) -> str | None:
     """
     Find the design column name for a treatment-coded factor/level, being tolerant to
     the presence/absence of 'contr.treatment(...)' in the name.
