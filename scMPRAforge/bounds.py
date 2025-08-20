@@ -52,6 +52,7 @@ class Bounds:
     max_mpra_umi:float=None
     by_cre_theta:float=None
     by_cell_type_theta:float=None
+    zi:float=None
     by_cre_zi:float=None
     by_cell_type_zi:float=None
 
@@ -120,7 +121,7 @@ class Bounds:
         return ret
     
     @classmethod
-    def from_ortho(cls,inp):
+    def from_ortho(cls,inp,preferred="by_cell_type"):
         """
         Takes an ortho object and abstracts out its bounds.
 
@@ -193,6 +194,14 @@ class Bounds:
         ret.num_cres=inp.training_data.data["cre_id"].nunique()
         
         ret.update_transfection_params()
+
+        if preferred=="by_cell_type":
+            ret.zi=ret.by_cell_type_zi
+        elif preferred=="by_cre":
+            ret.zi=ret.by_cre_zi
+        else:
+            assert False, "Unrecognized direction."
+
         return ret
 
 #class wet_bounds
