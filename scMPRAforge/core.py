@@ -24,6 +24,7 @@ from scipy.stats import linregress, chi2, norm
 #import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
+from statsmodels.stats.multitest import fdrcorrection
 from formulaic import Formula
 
 from dask.distributed import Client
@@ -128,10 +129,6 @@ def table_type(column_names):
         matches += 1
 
     return ret if matches == 1 else 'malformed'
-
-
-
-
 
 class scMPRA_data:
     """
@@ -988,6 +985,28 @@ class ortho:
             )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
+
+    def make_wald_eval_bundle(self) -> dict:
+        """
+        Build a small, pickle-friendly snapshot with everything the workers
+        need to evaluate Wald tests. No Dask Futures inside.
+        """
+        if self.wald_precomp is None:
+            raise RuntimeError("Call ortho.precompute_wald(...) first.")
+
+        wp = self.wald_precomp.flattened_copy()  # resolve futures
+
+        by_ct = {}
+        for ct, entry in wp.by_cell_type.items():
+            model = _to_plain(self.by_cell_type.model[ct])
+            by_ct[str(ct)] = _pack_model_block(model, entry)
+
+        by_cr = {}
+        for cr, entry in wp.by_cre.items():
+            model = _to_plain(self.by_cre.model[cr])
+            by_cr[str(cr)] = _pack_model_block(model, entry)
+
+        return {"by_cell_type": by_ct, "by_cre": by_cr}
 
 class parameters:
     """
@@ -2558,256 +2577,120 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
-def _wald_by_celltype_row(h, ortho: "ortho", counts: "scMPRA_data"):
-    """
-    Wald test: compare a CRE within a fixed cell_type.
 
-    H = {comparison_CRE, comparison_cell_type, [optional reference_CRE==baseline], [reference_cell_type==same]}
-
-    Returns dict for HypothesisTester:
-      test_statistic, p_value, fold_change, flattened, (and optional extras)
-    """
-    # --- normalize user-facing labels to internal labels ('reference' etc.) ---
-    cell_type_user = str(h["comparison_cell_type"])
-    comp_cre_user  = str(h["comparison_CRE"])
-    cell_type = _normalize_cell_type_label(cell_type_user, counts)
-    comp_cre  = _normalize_cre_label(comp_cre_user, counts)
-
-    # sanity: use the by_cell_type model
-    if cell_type not in ortho.by_cell_type.model:
-        valid = sorted(list(ortho.by_cell_type.model.keys()))
-        raise KeyError(
-            f"Unknown cell_type '{cell_type_user}' (normalized to '{cell_type}'). "
-            f"Available by_cell_type model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
-        )
-
-    # ----------------------------------------------------------------------
-    # FAST PATH ONLY: use precomputed SE/cov from the ortho cache
-    # If missing, try to compute once via ortho.precompute_wald()
-    # ----------------------------------------------------------------------
-    def _get_entry():
-        wp = getattr(ortho, "wald_precomp", None)
-        if (wp is None) or (getattr(wp, "by_cell_type", None) is None) or (cell_type not in wp.by_cell_type):
-            # try to populate
-            precomp = getattr(ortho, "precompute_wald", None)
-            if callable(precomp):
-                precomp()  # compute/cache everything (or at least this cell_type)
-                wp = getattr(ortho, "wald_precomp", None)
-        if (wp is None) or (getattr(wp, "by_cell_type", None) is None) or (cell_type not in wp.by_cell_type):
-            raise RuntimeError(
-                "Precomputed Wald pieces not available for by_cell_type. "
-                "Implement ortho.precompute_wald() to fill ortho.wald_precomp."
-            )
-        entry = wp.by_cell_type[cell_type]
-        # resolve Future if needed
-        if isinstance(entry, Future):
-            entry = entry.result()
-        return entry
-
-    entry = _get_entry()
-
-    # If comp_cre is actually the baseline ("reference") level, the contrast to baseline is 0
-    if comp_cre == "reference":
-        return {
-            "test_statistic": 0.0,
-            "p_value": 1.0,
-            "fold_change": 1.0,
-            "flattened": False,
-        }
-
-    # NB coefficient names come from labeled weights (already applied in annotate_models)
-    model_dict   = ortho.by_cell_type.model[cell_type].result()
-    x_mu_series  = model_dict['weights']['x_mu']  # pandas Series, aligned to names
-    xmu_names    = entry.xmu_names
-    name_to_idx  = {nm: j for j, nm in enumerate(xmu_names)}
-
-    # Locate the coefficient that represents comp_cre vs baseline
-    # With treatment coding: columns look like "Intercept", "C(cre_id)[T.<level>]", etc.
-    target_col = find_treatment_column(xmu_names, "cre_id", comp_cre)
-
-    if target_col is None:
-        # e.g. level filtered; no coefficient estimated
+def _wald_by_celltype_row(row: dict, bundle: dict):
+    ct  = row["comparison_cell_type"]
+    cre = row["comparison_CRE"]
+    blk = bundle["by_cell_type"].get(ct)
+    if blk is None:
         return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-    j = xmu_names.index(target_col)
-    beta    = float(np.asarray(x_mu_series).ravel()[j])
-    se_beta = float(entry.se_x_mu[j])
-    z       = beta / se_beta
-    p       = 1 - chi2.cdf(z*z, df=1)
-    fc      = float(np.exp(beta))
+    if cre == "reference":
+        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
 
-    # flattened flag: if the CRE was flattened earlier (insufficient UMIs) we could mark it.
-    # We don't track it yet per CRE here, so return False for now.
+    col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
+    if col is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    j   = blk["xmu_names"].index(col)
+    beta = float(blk["xmu"][j])
+    se   = float(blk["se_x_mu"][j])
+    if not np.isfinite(se) or se == 0:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    z = beta / se
+    p = 1.0 - chi2.cdf(z*z, 1)
+    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+def _wald_by_cre_row(row: dict, bundle: dict):
+    cre = row["comparison_CRE"]
+    ct  = row["comparison_cell_type"]
+    blk = bundle["by_cre"].get(cre)
+    if blk is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if ct == "reference":
+        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+
+    col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
+    if col is None:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    j   = blk["xmu_names"].index(col)
+    beta = float(blk["xmu"][j])
+    se   = float(blk["se_x_mu"][j])
+    if not np.isfinite(se) or se == 0:
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    z = beta / se
+    p = 1.0 - chi2.cdf(z*z, 1)
+    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+def _dispatch_wald_row(row: dict, bundle: dict):
+    # We assume hypotheses were canonicalized already (labels normalized).
+    ref_ct  = row.get("reference_cell_type")
+    ref_cre = row.get("reference_CRE")
+    comp_ct  = row["comparison_cell_type"]
+    comp_cre = row["comparison_CRE"]
+
+    # by-cell-type if reference cell type missing or equals the comparison
+    if pd.isna(ref_ct) or (ref_ct == comp_ct):
+        return _wald_by_celltype_row(row, bundle)
+    # by-CRE if reference CRE missing or equals the comparison
+    if pd.isna(ref_cre) or (ref_cre == comp_cre):
+        return _wald_by_cre_row(row, bundle)
+    # crossed case not supported here
+    return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: bool = False) -> HypothesisSet:
+    df = hs.df if inplace else hs.df.copy()
+
+    ct_cols  = ["comparison_cell_type", "reference_cell_type"]
+    cre_cols = ["comparison_CRE", "reference_CRE"]
+
+    # 1) Cell types: reference name -> "reference" (vectorized)
+    ref_ct = getattr(scmpra, "reference_cell_type", None)
+    if ref_ct is not None:
+        # mask is a DataFrame of booleans with same shape as df[ct_cols]
+        m = df[ct_cols].eq(ref_ct)
+        if m.values.any():
+            df[ct_cols] = df[ct_cols].mask(m, "reference")
+
+    # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
+    #    We only need the set of originals that ended up as 'reference'
+    if "cre_id_original" in getattr(scmpra, "data", pd.DataFrame()).columns:
+        collapsed = scmpra.data.loc[
+            scmpra.data["cre_id"] == "reference", "cre_id_original"
+        ].astype(str).unique()
+        if len(collapsed) > 0:
+            collapsed_set = set(collapsed)
+            m = df[cre_cols].isin(collapsed_set)
+            if m.values.any():
+                df[cre_cols] = df[cre_cols].mask(m, "reference")
+
+    # keep dtype consistent
+    for col in ct_cols + cre_cols:
+        df[col] = df[col].astype("string")
+
+    return hs if inplace else HypothesisSet.from_dataframe(df)
+
+def _to_plain(obj):
+    # resolve dask Futures to plain objects
+    from dask.distributed import Future
+    return obj.result() if isinstance(obj, Future) else obj
+
+def _pack_model_block(model_dict, entry):
+    # model_dict['weights']['x_mu'] is a Series with names
+    w = model_dict['weights']['x_mu']
     return {
-        "test_statistic": z,         # z-stat (you used z or chi^2; BH is on p)
-        "p_value": p,
-        "fold_change": fc,
-        "flattened": False,
-        # optional extras you might want to keep (won’t be stored by ResultSet unless you add cols)
-        # "beta": beta,
-        # "se_beta": se_beta,
+        "xmu_names": list(w.index),
+        "xmu":      np.asarray(w).ravel(),     # betas
+        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
+        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
+        "k_nb":     int(entry.k_nb),
     }
 
-def _wald_by_cre_row(h, ortho: "ortho", counts: "scMPRA_data", mode: str = "vs_reference"):
-    """
-    Wald test using the by-CRE model.
 
-    Modes:
-      - "vs_reference": test a single NB coefficient for comparison_cell_type
-                        against the baseline (reference) cell type.
-                        (Symmetric to _wald_by_celltype_row where we test a CRE vs baseline CRE.)
-      - "top_vs_rest":  original notebook behavior — contrast the largest cell-type
-                        coefficient vs the average of the others.
-
-    Returns dict(test_statistic, p_value, fold_change, flattened).
-    """
-
-    # --- normalize user-facing labels to internal labels ('reference' etc.) ---
-    cre_id_user = str(h["comparison_CRE"])
-    comp_ct_user = str(h["comparison_cell_type"])
-    cre_id = _normalize_cre_label(cre_id_user, counts)
-    comp_ct = _normalize_cell_type_label(comp_ct_user, counts)
-
-    if cre_id not in ortho.by_cre.model:
-        valid = sorted(list(ortho.by_cre.model.keys()))
-        raise KeyError(
-            f"Unknown CRE '{cre_id_user}' (normalized to '{cre_id}'). "
-            f"Available by_cre model keys include: {valid[:8]}{'...' if len(valid)>8 else ''}"
-        )
-
-    # ----------------------------------------------------------------------
-    # FAST PATH ONLY: use precomputed SE/cov from the ortho cache
-    # If missing, try to compute once via ortho.precompute_wald()
-    # ----------------------------------------------------------------------
-    def _get_entry():
-        wp = getattr(ortho, "wald_precomp", None)
-        if (wp is None) or (getattr(wp, "by_cre", None) is None) or (cre_id not in wp.by_cre):
-            precomp = getattr(ortho, "precompute_wald", None)
-            if callable(precomp):
-                precomp()  # compute/cache everything (or at least this CRE)
-                wp = getattr(ortho, "wald_precomp", None)
-        if (wp is None) or (getattr(wp, "by_cre", None) is None) or (cre_id not in wp.by_cre):
-            raise RuntimeError(
-                "Precomputed Wald pieces not available for by_cre. "
-                "Implement ortho.precompute_wald() to fill ortho.wald_precomp."
-            )
-        entry = wp.by_cre[cre_id]
-        # resolve Future if needed
-        if isinstance(entry, Future):
-            entry = entry.result()
-        return entry
-
-    entry = _get_entry()
-
-    # pull labeled weights once (cheap) for betas
-    model_dict  = ortho.by_cre.model[cre_id].result()
-    x_mu_series = model_dict['weights']['x_mu']
-    xmu         = np.asarray(x_mu_series).ravel()
-    xmu_names   = entry.xmu_names
-    name_to_idx = {nm: j for j, nm in enumerate(xmu_names)}
-    k_nb        = entry.k_nb  # NB block size
-
-    # --- Mode 1: single coefficient vs baseline (recommended) ---
-    if mode == "vs_reference":
-        if comp_ct == "reference":
-            # comp_ct is the baseline (reference) level → 0 vs baseline
-            return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
-
-        target_col = find_treatment_column(xmu_names, "cell_type", comp_ct)
-
-        if target_col is None:
-            # Not found: treat as non-estimable for this CRE (e.g. filtered level)
-            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
-
-        j = xmu_names.index(target_col)
-        beta    = float(xmu[j])
-        se_beta = float(entry.se_x_mu[j])
-        z       = beta / se_beta
-        p       = 1 - chi2.cdf(z*z, df=1)
-        fc      = float(np.exp(beta))
-        return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
-
-    # --- Mode 2: top-vs-rest contrast (closest to 'specificity' test from Lalanne et al. (Shendure)) ---
-    elif mode == "top_vs_rest":
-        # base_pos = name_to_idx.get("Intercept", None)
-        # nonbase_pos = [i for i, nm in enumerate(xmu_names)
-        #             if nm.startswith("C(cell_type") and "][T." not in nm and nm.endswith("]")]
-        # # Better:
-        # nonbase_pos = [find_treatment_index(xmu_names, "cell_type", nm.split("[T.",1)[1][:-1])
-        #             for nm in xmu_names
-        #             if nm.startswith("C(cell_type") and nm.endswith("]")]
-        # p_levels     = 1 + len(nonbase_pos)
-        # if p_levels <= 1:
-        #     return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
-
-        # comp_nm  = f"C(cell_type)[T.{comp_ct}]"
-        # # index of comp_ct in that p-vector (0 = baseline/Intercept)
-        # comp_ix  = 0 if comp_nm not in name_to_idx else (1 + nonbase_pos.index(name_to_idx[comp_nm]))
-
-        # # contrast weights over p cell types: +1 for comp, -1/(p-1) for others
-        # c_p = np.full(p_levels, -1.0/(p_levels-1)); c_p[comp_ix] = 1.0
-
-        # # lift to β-space (NB block only)
-        # c_beta = np.zeros(k_nb)
-        # pos    = [base_pos] + nonbase_pos
-        # for w, j in zip(c_p, pos):
-        #     if j is not None:
-        #         c_beta[j] = w
-
-        # lnFC    = float(c_beta @ xmu[:k_nb])
-        # se_lnFC = float(np.sqrt(c_beta @ entry.cov_nb @ c_beta))
-        # if se_lnFC == 0 or np.isnan(se_lnFC):
-        #     return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
-
-        # z  = lnFC / se_lnFC
-        # p  = 1 - chi2.cdf(z*z, df=1)
-        # fc = float(np.exp(lnFC))
-        # return {"test_statistic": z, "p_value": p, "fold_change": fc, "flattened": False}
-        raise ValueError("top_vs_rest not implemented yet")
-
-    else:
-        raise ValueError(f"Unknown by-CRE Wald mode: {mode}")
-
-def build_wald_test_fn(ortho_obj: "ortho", counts_obj: "scMPRA_data", cre_mode: str = "vs_reference"):
-    """
-    Returns `test_fn(row)` for HypothesisTester.
-
-    Logic:
-      - If reference_cell_type is NA or equals comparison_cell_type:
-            use by-cell-type model (test CRE vs baseline in that cell type)
-      - elif reference_CRE is NA or equals comparison_CRE:
-            use by-CRE model (test cell_type vs baseline in that CRE), mode controlled by `cre_mode`
-      - else: raise (crossed CRE & cell_type → add later)
-    """
-    def test_fn(row: pd.Series):
-        comp_ct = str(row["comparison_cell_type"])
-        comp_cre = str(row["comparison_CRE"])
-        ref_ct = row.get("reference_cell_type")
-        ref_cre = row.get("reference_CRE")
-        ref_ct = None if pd.isna(ref_ct) else str(ref_ct)
-        ref_cre = None if pd.isna(ref_cre) else str(ref_cre)
-
-        if (ref_ct is None) or (ref_ct == comp_ct):
-            return _wald_by_celltype_row(row, ortho_obj, counts_obj)
-
-        if (ref_cre is None) or (ref_cre == comp_cre):
-            return _wald_by_cre_row(row, ortho_obj, counts_obj, mode=cre_mode)
-
-        raise NotImplementedError(
-            "Crossed comparisons (both CRE and cell_type differ) are not supported yet in the Wald test."
-        )
-    return test_fn
-
-def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace=False) -> HypothesisSet:
-    df = hs.df if inplace else hs.df.copy()
-    for col, fn in [
-        ("comparison_cell_type", lambda v: _normalize_cell_type_label(v, scmpra)),
-        ("reference_cell_type", lambda v: _normalize_cell_type_label(v, scmpra)),
-        ("comparison_CRE",       lambda v: _normalize_cre_label(v, scmpra)),
-        ("reference_CRE",        lambda v: _normalize_cre_label(v, scmpra)),
-    ]:
-        df[col] = df[col].map(fn)
-    return hs if inplace else HypothesisSet.from_dataframe(df)
 
 class HypothesisTester:
     """
@@ -2817,44 +2700,49 @@ class HypothesisTester:
     The runner adds BH (`bh_p`) and merges back with the hypothesis columns to return a ResultSet.
     """
 
-    def __init__(self, test_fn, test_type_name: str):
+    def __init__(self, test_type_name: str):
         """
-        test_fn(row: pd.Series) -> dict with keys:
-            - test_statistic (float)
-            - p_value (float)
-            - fold_change (float)
-            - flattened (bool)
+        # test_fn(row: pd.Series) -> dict with keys:
+        #     - test_statistic (float)
+        #     - p_value (float)
+        #     - fold_change (float)
+        #     - flattened (bool)
         and optionally 'test_type' (overrides test_type_name).
-        """
-        self.test_fn = test_fn
+        # """
+        # self.test_fn = test_fn
         self.test_type_name = test_type_name
 
-    def run(self, hypotheses: HypothesisSet) -> ResultSet:
-        rows = []
-        for _, h in hypotheses.to_dataframe().iterrows():
-            out = dict(self.test_fn(h))
-            out.setdefault("test_type", self.test_type_name)
+    def run(self, hypotheses: HypothesisSet, ortho_obj: ortho, client: Client) -> ResultSet:
+        df_h = hypotheses.to_dataframe().copy()
 
-            # required result fields presence
-            missing = [k for k in ("test_statistic","p_value","fold_change","flattened") if k not in out]
-            if missing:
-                raise ValueError(f"test_fn did not return required keys: {missing}")
+                # -------- parallel path --------
+        # IMPORTANT: canonicalize once on driver (no label logic on workers)
+        print("canonicalize")
+        df_h = canonicalize_hypotheses(HypothesisSet.from_dataframe(df_h), scmpra=ortho_obj.training_data).to_dataframe()  # if you have counts_obj in scope
+        # Or do this before calling run() and pass in the canonicalized HypothesisSet.
 
-            # stitch hypothesis + result
-            stitched = {**h.to_dict(), **out}
-            rows.append(stitched)
+        # Build & scatter compact bundle once
+        print("bundle")
+        bundle = ortho_obj.make_wald_eval_bundle()   # must be plain python/numpy
+        bundle_f = client.scatter(bundle, broadcast=True)
 
-        df = pd.DataFrame(rows)
+        # Map over plain dict rows
+        print("map")
+        recs = df_h.to_dict(orient="records")
+        print("client submit dispatch wald")
+        futures = [client.submit(_dispatch_wald_row, r, bundle_f) for r in recs]
+        results = client.gather(futures)
 
-        # add BH
-        df["bh_p"] = _bh_adjust(df["p_value"])
-
-        # Coerce columns roughly
-        for c in ("test_statistic","p_value","fold_change","bh_p"):
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-        df["flattened"] = df["flattened"].astype(bool)
-
-        return ResultSet.from_dataframe(df)
+        print("stitch and out")
+        # Stitch back
+        df_out = pd.concat(
+            [df_h.reset_index(drop=True), pd.DataFrame(results)],
+            axis=1
+        )
+        df_out["test_type"] = self.test_type_name
+        df_out["bh_p"] = _bh_adjust(df_out["p_value"])
+        df_out["flattened"] = df_out["flattened"].astype(bool)
+        return ResultSet.from_dataframe(df_out)
 
 def load_hypothesis_set(filepath):
     """
