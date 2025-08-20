@@ -48,6 +48,8 @@ class Bounds:
 
     metadata:dict=None
 
+    preferred:str=None
+    
     min_mpra_umi:float=None
     max_mpra_umi:float=None
     by_cre_theta:float=None
@@ -195,6 +197,8 @@ class Bounds:
         
         ret.update_transfection_params()
 
+        ret.preferred=preferred
+        
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
         elif preferred=="by_cre":
