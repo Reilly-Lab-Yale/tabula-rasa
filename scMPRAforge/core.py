@@ -2250,7 +2250,6 @@ def make_by_cre_hypotheses(
 
     # Build (cell_type, cre) pairs for one_versus_all (comparison_on='cell_type')
     pairs = [(ct, cre) for ct in cand]
-
     hyp_df = one_versus_all(
         pairs,
         comparison_on="cell_type",
