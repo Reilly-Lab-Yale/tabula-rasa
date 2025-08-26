@@ -125,7 +125,8 @@ class Bounds:
                     else:
                         val = df
                     setattr(ret, name, val)
-        ret.update_transfection_params()
+        #re-initalize 
+        #ret.update_transfection_params()
         return ret
     
     @classmethod

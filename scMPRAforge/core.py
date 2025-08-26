@@ -197,6 +197,112 @@ def load_hypothesis_set(filepath):
     pass
 
 
+class simple_counts:
+    """
+    This class stores information pertaining to a simple negative binomial model.
+    It is low performance and NOT used for primary modeling of RNA-sequencing data.
+    Instead, it us used for small, discrete modeling tasks whch need flexibility but not 
+    performance. 
+    """
+    def __init__(self,data=None):
+        if not data is None:
+            self.from_data(data)
+
+    def from_data(self,data):
+        """
+        Initializes the object from count (not frequency) data.
+        Computes poisson and nb using statsmodels.
+        """
+        if type(data) != list:
+            data=data.tolist()
+
+        self.data=data
+        
+        # intercept-only design
+        X = np.ones((len(data), 1))
+
+        #poisson
+        pois = smd.Poisson(data, X).fit(disp=False)
+        if not pois.converged:
+            logger.warning("Poisson model of transfection failed to converge.")
+        self.mu_pois = np.exp(pois.params[0])      # intercept-only mean
+
+        # NB2
+        # Var = mu + alpha*mu^2, alpha is estimated
+        nb = smd.NegativeBinomial(data, X).fit(disp=False)
+        self.mu_nb = np.exp(nb.params[0])          # intercept-only mean
+        self.alpha_nb = nb.params[-1]              # dispersion (NB2 alpha)
+
+        if not nb.converged:
+            logger.error("Negative binomial model of transfection failed to converge.")
+            raise(RuntimeError)
+        
+        self.update_alt_nb_param()
+        self.original_fit=True
+
+    def update_alt_nb_param(self):
+        self.r = 1.0 / self.alpha_nb
+        self.p = self.r / (self.r + self.mu_nb)
+    
+    def plot(self):
+        """
+        Plots a histogram of the source data and draws lines
+        for zinb and poisson fits.
+        """
+
+        data=np.array(self.data)
+
+        k = np.arange(0, data.max() + 1)
+        pmf_nb = scipy.stats.nbinom.pmf(k, self.r, self.p)
+        pmf_pois = scipy.stats.poisson.pmf(k, self.mu_pois)
+
+        # Plot
+        fig, ax = plt.subplots()
+        sns.histplot(
+            data,
+            bins=np.arange(data.min(), data.max() + 2),
+            stat="density", discrete=True, alpha=0.3, ax=ax
+        )
+        ax.plot(k, pmf_nb, marker='o', linestyle='-', label=f'NB fit (μ={self.mu_nb:.2f}, α={self.alpha_nb:.3f})')
+        ax.plot(k, pmf_pois, linestyle='--', label=f'Poisson fit (μ={self.mu_pois:.2f})')
+        ax.set_xlabel('Unique MPRA barcodes per cell')
+        ax.set_ylabel('Density')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def adjust_nb(self,new_nb):
+        self.original_fit=False
+        self.nb=new_nb
+        self.update_alt_nb_param()
+    
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        Represent the object as a single-row DataFrame.
+        All non-hidden attributes are included.
+        """
+        d = {
+            k: v
+            for k, v in self.__dict__.items()
+            if not k.startswith("_")
+        }
+        return pd.DataFrame([d])
+    
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "simple_counts":
+        """
+        Recreate an object from a single-row DataFrame.
+        """
+        if len(df) != 1:
+            raise ValueError("Expected DataFrame with exactly one row.")
+        row = df.iloc[0].to_dict()
+
+        obj = cls.__new__(cls)  # bypass __init__
+        for k, v in row.items():
+            setattr(obj, k, v)
+
+        return obj
+
 class scMPRA_data:
     """
     Wrapper around a pandas dataframe of MPRA data. 
