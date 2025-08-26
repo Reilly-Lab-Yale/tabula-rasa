@@ -58,9 +58,15 @@ class Bounds:
     by_cre_zi:float=None
     by_cell_type_zi:float=None
 
+    #library comp
     num_cres:int=None
+    MPRA_barcodes_per_CRE:pd.Series=None
+    avg_MPRA_barcodes_per_CRE:float=None
+    var_MPRA_barcodes_per_CRE:float=None
+    
     cells_per_cell_type:dict=None
 
+    #transfection
     transfection_nb_mu:float=None
     transfection_nb_alpha:float=None
 
@@ -194,6 +200,8 @@ class Bounds:
 
         #number of CREs
         ret.num_cres=inp.training_data.data["cre_id"].nunique()
+
+        ret.MPRA_barcodes_per_CRE=inp.training_data.data[["mpra_bc","cre_id"]].groupby("cre_id")["mpra_bc"].nunique()
         
         ret.update_transfection_params()
 

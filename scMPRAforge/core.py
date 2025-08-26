@@ -254,14 +254,14 @@ class scMPRA_data:
         # intercept-only design
         X = np.ones((len(y), 1))
 
-        # --- Fit Poisson (discrete) ---
+        # Poisson
         pois = smd.Poisson(y, X).fit(disp=False)
         mu_pois = np.exp(pois.params[0])      # intercept-only mean
 
         if not pois.converged:
             logger.warning("Poisson model of transfection failed to converge.")
 
-        # --- Fit Negative Binomial NB2 ---
+        # NB2
         # Var = mu + alpha*mu^2, alpha is estimated
         nb = smd.NegativeBinomial(y, X).fit(disp=False)
         mu_nb = np.exp(nb.params[0])          # intercept-only mean
@@ -281,7 +281,7 @@ class scMPRA_data:
             pmf_nb = scipy.stats.nbinom.pmf(k, r, p)
             pmf_pois = scipy.stats.poisson.pmf(k, mu_pois)
 
-            # --- Plot ---
+            # Plot
             fig, ax = plt.subplots()
             sns.histplot(
                 y,
