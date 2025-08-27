@@ -20,7 +20,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import json
 
-from scipy.stats import linregress, chi2, norm
+from scipy.stats import linregress, chi2, norm, mannwhitneyu
 #import statsmodels.discrete.count_model as smdc
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
@@ -63,6 +63,7 @@ RESULT_REQUIRED = {
     "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
 }
 RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
+
 
 #functions
 @unimplemented
@@ -493,7 +494,6 @@ triples
 #    'reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + umis_transfection_bc:C(cre_id) + umis_transfection_bc:C(cell_type):C(cre_id) -1']
 #SUGGESTED_ZI=['C(replicate)']
 #SUGGESTED_BREAKBY=['']
-
 
 
 def abort_on_failure(future,client):
@@ -2438,6 +2438,52 @@ def _bh_adjust(pvals: pd.Series) -> pd.Series:
     _, p_adj = fdrcorrection(p.values, alpha=0.05, is_sorted=False)
     return pd.Series(p_adj, index=p.index)
     
+
+def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: bool = False) -> HypothesisSet:
+    df = hs.df if inplace else hs.df.copy()
+
+    ct_cols  = ["comparison_cell_type", "reference_cell_type"]
+    cre_cols = ["comparison_CRE", "reference_CRE"]
+
+    # 1) Cell types: reference name -> "reference" (vectorized)
+    ref_ct = getattr(scmpra, "reference_cell_type", None)
+    if ref_ct is not None:
+        # mask is a DataFrame of booleans with same shape as df[ct_cols]
+        m = df[ct_cols].eq(ref_ct)
+        if m.values.any():
+            df[ct_cols] = df[ct_cols].mask(m, "reference")
+
+    # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
+    #    We only need the set of originals that ended up as 'reference'
+    if "cre_id_original" in getattr(scmpra, "data", pd.DataFrame()).columns:
+        collapsed = scmpra.data.loc[
+            scmpra.data["cre_id"] == "reference", "cre_id_original"
+        ].astype(str).unique()
+        if len(collapsed) > 0:
+            collapsed_set = set(collapsed)
+            m = df[cre_cols].isin(collapsed_set)
+            if m.values.any():
+                df[cre_cols] = df[cre_cols].mask(m, "reference")
+
+    # keep dtype consistent
+    for col in ct_cols + cre_cols:
+        df[col] = df[col].astype("string")
+
+    return hs if inplace else HypothesisSet.from_dataframe(df)
+
+def _to_plain(obj):
+    # resolve dask Futures to plain objects
+    from dask.distributed import Future
+    return obj.result() if isinstance(obj, Future) else obj
+
+
+
+def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+    # expects an ortho object with make_wald_eval_bundle()
+    return models_or_counts.make_wald_eval_bundle()
+
+
+# ---- Wald Test -------------------------------------
 def _zinb_loglik_tf(params, exog, exog_infl, endog):
     """
     TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
@@ -2500,6 +2546,17 @@ def _setup_params_from_fit(zinb_model_fit):
                              np.asarray(log_theta).ravel()])
     params_tensor = tf.Variable(params, dtype=tf.float32)
     return params, params_tensor
+
+def _pack_model_block(model_dict, entry):
+    # model_dict['weights']['x_mu'] is a Series with names
+    w = model_dict['weights']['x_mu']
+    return {
+        "xmu_names": list(w.index),
+        "xmu":      np.asarray(w).ravel(),     # betas
+        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
+        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
+        "k_nb":     int(entry.k_nb),
+    }
 
 def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     """
@@ -2626,7 +2683,7 @@ def _wald_by_cre_row(row: dict, bundle: dict):
     p = 1.0 - chi2.cdf(z*z, 1)
     return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
 
-def _dispatch_wald_row(row: dict, bundle: dict):
+def _wald_row_fn(row: dict, bundle: dict):
     # We assume hypotheses were canonicalized already (labels normalized).
     ref_ct  = row.get("reference_cell_type")
     ref_cre = row.get("reference_CRE")
@@ -2642,57 +2699,85 @@ def _dispatch_wald_row(row: dict, bundle: dict):
     # crossed case not supported here
     return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: bool = False) -> HypothesisSet:
-    df = hs.df if inplace else hs.df.copy()
+def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+    # expects an ortho object with make_wald_eval_bundle()
+    return models_or_counts.make_wald_eval_bundle()
+# ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
-    ct_cols  = ["comparison_cell_type", "reference_cell_type"]
-    cre_cols = ["comparison_CRE", "reference_CRE"]
+def _mwu_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+    # expects scMPRA_data (UMI-wise) so we can sample the raw counts
+    if not hasattr(models_or_counts, "data"):
+        raise TypeError("MWU requires a scMPRA_data object (UMI-wise).")
+    df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+    df["cell_type"] = df["cell_type"].astype(str)
+    df["cre_id"] = df["cre_id"].astype(str)
+    return {"counts": df}
 
-    # 1) Cell types: reference name -> "reference" (vectorized)
-    ref_ct = getattr(scmpra, "reference_cell_type", None)
-    if ref_ct is not None:
-        # mask is a DataFrame of booleans with same shape as df[ct_cols]
-        m = df[ct_cols].eq(ref_ct)
-        if m.values.any():
-            df[ct_cols] = df[ct_cols].mask(m, "reference")
+def _mwu_row_fn(
+    row,
+    bundle,
+    *,
+    alternative="two-sided",
+    pseudocount=0.01,
+):
+    """
+    Compute Mann–Whitney U p-value for the appropriate within-cell / within-CRE
+    comparison, and a descriptive fold change based on the chosen summary stat
+    (median by default) with a small pseudocount to handle zeros.
+    """
+    df = bundle["counts"]
 
-    # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
-    #    We only need the set of originals that ended up as 'reference'
-    if "cre_id_original" in getattr(scmpra, "data", pd.DataFrame()).columns:
-        collapsed = scmpra.data.loc[
-            scmpra.data["cre_id"] == "reference", "cre_id_original"
-        ].astype(str).unique()
-        if len(collapsed) > 0:
-            collapsed_set = set(collapsed)
-            m = df[cre_cols].isin(collapsed_set)
-            if m.values.any():
-                df[cre_cols] = df[cre_cols].mask(m, "reference")
+    comp_ct  = row["comparison_cell_type"]
+    comp_cre = row["comparison_CRE"]
+    ref_ct   = row.get("reference_cell_type")
+    ref_cre  = row.get("reference_CRE")
 
-    # keep dtype consistent
-    for col in ct_cols + cre_cols:
-        df[col] = df[col].astype("string")
+    # Decide comparison axis: mirror the Wald dispatcher’s rules
+    # by-cell-type => compare CREs within the same cell type
+    if pd.isna(ref_ct) or (ref_ct == comp_ct):
+        base_cre = "reference" if pd.isna(ref_cre) else ref_cre
+        g1 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == comp_cre)]["umis_mpra_bc"].to_numpy()
+        g0 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == base_cre)]["umis_mpra_bc"].to_numpy()
 
-    return hs if inplace else HypothesisSet.from_dataframe(df)
+    # by-CRE => compare cell types within the same CRE
+    elif pd.isna(ref_cre) or (ref_cre == comp_cre):
+        base_ct = "reference" if pd.isna(ref_ct) else ref_ct
+        g1 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == comp_ct)]["umis_mpra_bc"].to_numpy()
+        g0 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == base_ct)]["umis_mpra_bc"].to_numpy()
 
-def _to_plain(obj):
-    # resolve dask Futures to plain objects
-    from dask.distributed import Future
-    return obj.result() if isinstance(obj, Future) else obj
-
-def _pack_model_block(model_dict, entry):
-    # model_dict['weights']['x_mu'] is a Series with names
-    w = model_dict['weights']['x_mu']
-    return {
-        "xmu_names": list(w.index),
-        "xmu":      np.asarray(w).ravel(),     # betas
-        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
-        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
-        "k_nb":     int(entry.k_nb),
-    }
+    else:
+        # crossed case not supported in this simple MWU
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
 
+    # Mann–Whitney U (SciPy >=1.7 supports method="auto")
+    try:
+        stat, p = mannwhitneyu(g1, g0, alternative=alternative, method="auto")
+    except TypeError:
+        # for older SciPy, fall back without 'method'
+        stat, p = mannwhitneyu(g1, g0, alternative=alternative)
+
+    # Descriptive FC: ratio of chosen summaries (median by default), with pseudocount
+
+    s1 = float(np.exp(np.mean(np.log1p(g1))) - 1.0)
+    s0 = float(np.exp(np.mean(np.log1p(g0))) - 1.0)
+
+
+    fc = (s1 + pseudocount) / (s0 + pseudocount)
+
+   
+
+    return {"test_statistic": float(stat), "p_value": float(p), "fold_change": float(fc), "flattened": False, 'ref_mean': s0,'comp_mean':s1}
+
+# ---- The tiny switchboard ----------------------------------------------------
+#switchboard to hole types of hypothesis tests that have been implemented so far
+TESTS = {
+    "wald": {"make_bundle": _wald_make_bundle, "row_fn": _wald_row_fn, "defaults": {}},
+    "mwu":  {"make_bundle": _mwu_make_bundle,  "row_fn": _mwu_row_fn,  "defaults": {"method": "auto", "alternative": "two-sided"}},
+}
 
 class HypothesisTester:
+
     """
     Orchestrates running a test function on each hypothesis row.
     You supply `test_fn` that implements a single-row comparison and returns:
@@ -2700,49 +2785,43 @@ class HypothesisTester:
     The runner adds BH (`bh_p`) and merges back with the hypothesis columns to return a ResultSet.
     """
 
-    def __init__(self, test_type_name: str):
-        """
-        # test_fn(row: pd.Series) -> dict with keys:
-        #     - test_statistic (float)
-        #     - p_value (float)
-        #     - fold_change (float)
-        #     - flattened (bool)
-        and optionally 'test_type' (overrides test_type_name).
-        # """
-        # self.test_fn = test_fn
-        self.test_type_name = test_type_name
+    def __init__(self, test_type: str, **overrides):
+        if test_type not in TESTS:
+            raise ValueError(f"Unknown test_type '{test_type}'. Choose one of {sorted(TESTS)}.")
+        self.test_type = test_type
+        self._make_bundle = TESTS[test_type]["make_bundle"]
+        self._row_fn      = TESTS[test_type]["row_fn"]
+        self.kw = dict(TESTS[test_type].get("defaults", {}))
+        self.kw.update(overrides or {})
 
-    def run(self, hypotheses: HypothesisSet, ortho_obj: ortho, client: Client) -> ResultSet:
+    def run(self, hypotheses: HypothesisSet, models_or_counts: "scMPRA_data | ortho", client=None) -> ResultSet:
+        # canonicalize if we can see the counts
         df_h = hypotheses.to_dataframe().copy()
+        scmpra = getattr(models_or_counts, "training_data", None) or getattr(models_or_counts, "data", None)
+        if scmpra is not None and hasattr(scmpra, "data"):
+            df_h = canonicalize_hypotheses(HypothesisSet.from_dataframe(df_h),
+                                           scmpra if hasattr(scmpra, "data") else models_or_counts).to_dataframe()
 
-                # -------- parallel path --------
-        # IMPORTANT: canonicalize once on driver (no label logic on workers)
-        print("canonicalize")
-        df_h = canonicalize_hypotheses(HypothesisSet.from_dataframe(df_h), scmpra=ortho_obj.training_data).to_dataframe()  # if you have counts_obj in scope
-        # Or do this before calling run() and pass in the canonicalized HypothesisSet.
+        # build the bundle once
+        bundle = self._make_bundle(hypotheses=HypothesisSet.from_dataframe(df_h),
+                                   models_or_counts=models_or_counts,
+                                   client=client, **self.kw)
 
-        # Build & scatter compact bundle once
-        print("bundle")
-        bundle = ortho_obj.make_wald_eval_bundle()   # must be plain python/numpy
-        bundle_f = client.scatter(bundle, broadcast=True)
-
-        # Map over plain dict rows
-        print("map")
         recs = df_h.to_dict(orient="records")
-        print("client submit dispatch wald")
-        futures = [client.submit(_dispatch_wald_row, r, bundle_f) for r in recs]
-        results = client.gather(futures)
+        if client is not None:
+            bundle_f = client.scatter(bundle, broadcast=True)
+            # futures = client.map(self._row_fn, recs, repeat(bundle_f), pure=True)
+            futures = [client.submit(self._row_fn, r, bundle_f) for r in recs]
+            results = client.gather(futures)
+        else:
+            results = [self._row_fn(r, bundle, **self.kw) for r in recs]
 
-        print("stitch and out")
-        # Stitch back
-        df_out = pd.concat(
-            [df_h.reset_index(drop=True), pd.DataFrame(results)],
-            axis=1
-        )
-        df_out["test_type"] = self.test_type_name
-        df_out["bh_p"] = _bh_adjust(df_out["p_value"])
-        df_out["flattened"] = df_out["flattened"].astype(bool)
-        return ResultSet.from_dataframe(df_out)
+        out = pd.concat([df_h.reset_index(drop=True), pd.DataFrame(results)], axis=1)
+        out["test_type"] = self.test_type
+        out["bh_p"] = _bh_adjust(out["p_value"])
+        if "flattened" in out:
+            out["flattened"] = out["flattened"].astype(bool)
+        return ResultSet.from_dataframe(out)
 
 def load_hypothesis_set(filepath):
     """
