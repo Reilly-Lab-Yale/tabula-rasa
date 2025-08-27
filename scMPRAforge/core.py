@@ -2862,9 +2862,67 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     return runner.run(hypotheses)
 
     
-@unimplemented
-def volcano(results:experiment_model):
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
     """
-    Volcano plot of p value versus log fold change
+    Volcano plot using BH-corrected p-values (bh_p) versus log2 fold change.
+
+    Parameters
+    ----------
+    results : ResultSet
+        Must contain columns: 'fold_change', 'bh_p'.
+    bh_thresh : float
+        FDR threshold for significance (default 0.05).
+    fc_thresh : float
+        Absolute log2 fold change threshold for vertical lines.
     """
-    pass
+    df = results.to_dataframe().copy()
+
+    # Calculate log2 fold change and -log10(BH p-value)
+    df["log2FC"] = np.log2(df["fold_change"].replace(0, np.nan))
+    df["neg_log10_bh"] = -np.log10(df["bh_p"])
+
+    # Define significance mask
+    sig_mask = (df["bh_p"] < bh_thresh) & (df["log2FC"].abs() > fc_thresh)
+
+    # Map significance to descriptive labels
+    sig_labels = {
+        True: f"Significant (BH p<{bh_thresh}, |log2FC|>{fc_thresh})",
+        False: "Not significant"
+    }
+    df["sig_label"] = sig_mask.map(sig_labels)
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(
+        data=df,
+        x="log2FC",
+        y="neg_log10_bh",
+        hue="sig_label",
+        palette={
+            f"Significant (BH p<{bh_thresh}, |log2FC|>{fc_thresh})": "red",
+            "Not significant": "grey"
+        },
+        alpha=0.7,
+        edgecolor=None
+    )
+
+    # Threshold lines
+    plt.axhline(-np.log10(bh_thresh), color="black", linestyle="--", lw=1)
+    plt.axvline(fc_thresh, color="black", linestyle="--", lw=1)
+    plt.axvline(-fc_thresh, color="black", linestyle="--", lw=1)
+
+    plt.xlabel("log2 Fold Change")
+    plt.ylabel("-log10(BH-adjusted p-value)")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
