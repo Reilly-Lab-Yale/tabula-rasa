@@ -243,6 +243,24 @@ def simulate_library(CREs,library_model):
 
     return ret
 
+def sample_from_library(library,size):
+    """
+    Takes an MPRA library in standard form and samples "size" rows. 
+    Uses abundance to sample using inverse transform sampling. 
+    TODO: add table type check. 
+    """
+    assert sum(library["abundance"])-1.0<0.0001; "Abundance must sum to 1."
+    
+    library=library.reset_index(drop=True)
+    library["cum_abundance"]=library["abundance"].cumsum()
+
+    random_vector=np.random.rand(size)
+    indices = np.searchsorted(library["cum_abundance"].values, random_vector)
+    sample = library.iloc[indices].reset_index(drop=True)
+    sample=sample.drop(columns=["cum_abundance"])
+
+    return sample
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():
