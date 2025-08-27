@@ -146,6 +146,16 @@ These tables store made-up ground truth, for the purposes of simulation.
 | cre_id      | str   | CRE id or name                        |
 | true_mean   | float | Ground-truth # MPRA barcode UMIs/cell |
 
+# MPRA library table
+
+| Column name | Type                | Description                       | Mandatory? |
+|-------------|---------------------|-----------------------------------|------------|
+| cre_id      | string              | CRE id or name                    | T          |
+| mpra_bc     | string (nucleotide) | MPRA reporter barcode             | T          |
+| abundance   | float               | Relative abundance in DNA library | T          |
+
+Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
+
 # Model formatting
 
 (If we change our mind and instead desire a per-CRE model approach, we could replace this with a pandas dataframe). 
