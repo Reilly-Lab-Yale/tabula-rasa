@@ -203,7 +203,6 @@ def load_hypothesis_set(filepath):
     #return table
     pass
 
-
 class simple_count:
     """
     This class stores information pertaining to a simple negative binomial model.
@@ -372,10 +371,6 @@ class Bounds:
     datasets.
     """
 
-    def plot_transfection(self):
-        self.update_transfection_params()
-        pass
-
     metadata:dict=None
 
     preferred:str=None
@@ -393,17 +388,14 @@ class Bounds:
     transfection_model:simple_count=None
     library_model:simple_count=None
 
-
-
     def get_effective_moi(self):
         pass
 
     def set_effective_moi(self,moi):
         pass
 
-
     def copy(self, **kwargs):
-        return replace(self, **kwargs)
+        return replace(copy.deepcopy(self), **kwargs)
 
     def to_tgz(self, out_file):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -531,6 +523,7 @@ class Bounds:
             assert False, "Unrecognized direction."
 
         return ret
+
 from pathlib import Path
 working_dir = Path(__file__).resolve().parent
 SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
