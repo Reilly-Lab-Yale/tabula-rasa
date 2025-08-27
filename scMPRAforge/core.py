@@ -250,6 +250,13 @@ class simple_count:
         self.r = 1.0 / self.alpha_nb
         self.p = self.r / (self.r + self.mu_nb)
     
+    def draw_nb(self,size):
+        """
+        returns a 1d numpy vector of draws from the nb
+        model of the object. 
+        """
+        return scipy.stats.nbinom.rvs(self.r,self.p,size=size)
+    
     def plot(self, max_bins: int = 25, binwidth: int | None = None):
         """
         Plot a histogram of the data with *integer-aligned coarse bins* and overlay
@@ -389,10 +396,15 @@ class Bounds:
     library_model:simple_count=None
 
     def get_effective_moi(self):
-        pass
+        self.transfection_model.update_alt_nb_param()
+        return self.transfection_model.mu_nb
 
     def set_effective_moi(self,moi):
-        pass
+        self.transfection_model.mu_nb=moi
+        self.transfection_model.update_alt_nb_param()
+    
+    def plot_transfection(self,*args,**kwargs):
+        self.transfection_model.plot(*args,**kwargs)
 
     def copy(self, **kwargs):
         return replace(copy.deepcopy(self), **kwargs)
@@ -439,6 +451,10 @@ class Bounds:
         #re-initalize 
         ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
         ret.library_model=simple_count.from_dataframe(ret.library_model)
+
+        ret.transfection_model.update_alt_nb_param()
+        ret.library_model.update_alt_nb_param()
+
         return ret
     
     @classmethod
