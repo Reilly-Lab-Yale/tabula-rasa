@@ -198,6 +198,47 @@ def dict_unwrap(dic):
         ret[key]=dic[key].result()
     return ret
 
+
+def generate_barcodes(length, count):
+    if 4**length < count:
+        raise ValueError("Not enough unique barcodes of given length.")
+
+    digit_to_base = ['A', 'C', 'G', 'T']
+    barcodes = []
+
+    for i in range(count):
+        barcode = []
+        n = i
+        for _ in range(length):
+            barcode.append(digit_to_base[n % 4])
+            n //= 4
+        # If length not fully filled, pad with 'A's
+        while len(barcode) < length:
+            barcode.append('A')
+        barcodes.append(''.join(reversed(barcode)))
+
+    return barcodes
+
+def simulate_library(CREs,library_model):
+    """
+    In the event that you do not already have an MPRA library cloned,
+    This function takes a np string array of CRE names and a library model from a bounds object
+    and produces a table mapping each CRE to a set of random 20-mer MPRA barcodes. 
+    """
+    CREs=CREs.unique()
+    mpra_barcodes_per_CRE=library_model.draw_nb(len(CREs))
+
+    
+    ret=pd.DataFrame({'cre_id':CREs,'n_barcodes':mpra_barcodes_per_CRE})
+
+    #repeat each row the number of times equal to the number of barcodes
+    ret=ret.loc[ret.index.repeat(ret["n_barcodes"])].reset_index(drop=True)
+    #no longer need barcode per cre count, drop it
+    ret=ret.drop(columns=["n_barcodes"])
+    #add barcodes
+    ret["mpra_barcode"]=scm.generate_barcodes(length=20,count=len(ret))
+    return ret
+
 ## tools for easy generation of hypotheses
 @unimplemented
 def one_versus_all():
@@ -207,3 +248,4 @@ def one_versus_all():
     Useful for a quick "which elements are expressed". 
     """
     pass
+
