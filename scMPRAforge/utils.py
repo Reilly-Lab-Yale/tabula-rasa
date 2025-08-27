@@ -5,6 +5,7 @@ import functools
 import logging
 import umi_tools
 import re
+import numpy as np
 import pandas as pd
 from dask.distributed import Future
 
@@ -236,7 +237,10 @@ def simulate_library(CREs,library_model):
     #no longer need barcode per cre count, drop it
     ret=ret.drop(columns=["n_barcodes"])
     #add barcodes
-    ret["mpra_barcode"]=scm.generate_barcodes(length=20,count=len(ret))
+    ret["mpra_bc"]=generate_barcodes(length=20,count=len(ret))
+    ret["abundance"] = np.abs(np.random.randn(len(ret)))
+    ret["abundance"]=ret["abundance"]/sum(ret["abundance"])
+
     return ret
 
 ## tools for easy generation of hypotheses
