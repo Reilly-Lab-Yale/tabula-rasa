@@ -445,8 +445,8 @@ class Bounds:
                         val = df
                     setattr(ret, name, val)
         #re-initalize 
-        ret.transfection_model=scm.simple_count.from_dataframe(ret.transfection_model)
-        ret.library_model=scm.simple_count.from_dataframe(ret.library_model)
+        ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
+        ret.library_model=simple_count.from_dataframe(ret.library_model)
         return ret
     
     @classmethod
@@ -531,6 +531,9 @@ class Bounds:
             assert False, "Unrecognized direction."
 
         return ret
+from pathlib import Path
+working_dir = Path(__file__).resolve().parent
+SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
 
 class scMPRA_data:
     """
