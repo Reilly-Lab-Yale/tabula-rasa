@@ -199,6 +199,25 @@ def dict_unwrap(dic):
         ret[key]=dic[key].result()
     return ret
 
+def find_treatment_column(xmu_names: list[str], factor: str, level: str) -> str | None:
+    """
+    Find the design column name for a treatment-coded factor/level, being tolerant to
+    the presence/absence of 'contr.treatment(...)' in the name.
+
+    Returns the matching column name or None if not found.
+    """
+    # simplest form
+    simple = f"C({factor})[T.{level}]"
+    if simple in xmu_names:
+        return simple
+
+    # tolerant scan, e.g. "C(cell_type, contr.treatment(base='reference'))[T.Level]"
+    suffix = f"))[T.{level}]"
+    prefix = f"C({factor},"
+    for nm in xmu_names:
+        if nm.startswith(prefix) and nm.endswith(suffix):
+            return nm
+    return None
 
 def generate_barcodes(length, count):
     if 4**length < count:
@@ -262,12 +281,80 @@ def sample_from_library(library,size):
     return sample
 
 ## tools for easy generation of hypotheses
-@unimplemented
-def one_versus_all():
+
+
+def one_versus_all(
+    comparisons,
+    *,
+    comparison_on: str,
+    reference_CRE: str | None = None,
+    reference_cell_type: str | None = None,
+    meta: str | None = None
+) -> pd.DataFrame:
     """
     Provide one negative control, and a list of others to compare against, and 
     this function will generate a hypothesis list comparing all vs it...
     Useful for a quick "which elements are expressed". 
+
+    Generate a hypothesis table comparing each member of `comparisons` against a shared reference.
+
+    Parameters
+    ----------
+    comparisons : iterable of str
+        The values to place in the *comparison* column specified by `comparison_on`.
+        If `comparison_on == "cre"`, you must pass corresponding `comparison_cell_type` via tuples.
+        If `comparison_on == "cell_type"`, you must pass corresponding `comparison_CRE` via tuples.
+        To keep API simple, we accept:
+            - comparison_on == "cre":  comparisons = [(cre_id, cell_type), ...]
+            - comparison_on == "cell_type": comparisons = [(cell_type, cre_id), ...]
+
+    reference_CRE : str or None
+    reference_cell_type : str or None
+        If both None -> implicit zero comparison (activity vs 0).
+        If exactly one provided -> ValueError (malformed by spec).
+
+    meta : str or None
+        Optional label for 'meta' column.
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        comparison_CRE, comparison_cell_type, reference_CRE, reference_cell_type, meta
     """
-    pass
+    rows = []
+    if (reference_CRE is None) ^ (reference_cell_type is None):
+        raise ValueError("Provide both reference_CRE and reference_cell_type, or neither (zero reference).")
+
+    if comparison_on not in {"cre", "cell_type"}:
+        raise ValueError("comparison_on must be 'cre' or 'cell_type'.")
+
+    for pair in comparisons:
+        if comparison_on == "cre":
+            try:
+                cre, ct = pair
+            except Exception:
+                raise ValueError("For comparison_on='cre', pass comparisons as iterable of (cre_id, cell_type).")
+            rows.append({
+                "comparison_CRE": cre,
+                "comparison_cell_type": ct,
+                "reference_CRE": reference_CRE,
+                "reference_cell_type": reference_cell_type,
+                "meta": meta
+            })
+        else:
+            try:
+                ct, cre = pair
+            except Exception:
+                raise ValueError("For comparison_on='cell_type', pass comparisons as iterable of (cell_type, cre_id).")
+            rows.append({
+                "comparison_CRE": cre,
+                "comparison_cell_type": ct,
+                "reference_CRE": reference_CRE,
+                "reference_cell_type": reference_cell_type,
+                "meta": meta
+            })
+
+    return pd.DataFrame.from_records(rows, columns=[
+        "comparison_CRE","comparison_cell_type","reference_CRE","reference_cell_type","meta"
+    ])
 
