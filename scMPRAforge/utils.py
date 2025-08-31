@@ -5,6 +5,7 @@ import functools
 import logging
 import umi_tools
 import re
+import numpy as np
 import pandas as pd
 from dask.distributed import Future
 
@@ -217,6 +218,68 @@ def find_treatment_column(xmu_names: list[str], factor: str, level: str) -> str 
         if nm.startswith(prefix) and nm.endswith(suffix):
             return nm
     return None
+
+def generate_barcodes(length, count):
+    if 4**length < count:
+        raise ValueError("Not enough unique barcodes of given length.")
+
+    digit_to_base = ['A', 'C', 'G', 'T']
+    barcodes = []
+
+    for i in range(count):
+        barcode = []
+        n = i
+        for _ in range(length):
+            barcode.append(digit_to_base[n % 4])
+            n //= 4
+        # If length not fully filled, pad with 'A's
+        while len(barcode) < length:
+            barcode.append('A')
+        barcodes.append(''.join(reversed(barcode)))
+
+    return barcodes
+
+def simulate_library(CREs,library_model):
+    """
+    In the event that you do not already have an MPRA library cloned,
+    This function takes a np string array of CRE names and a library model from a bounds object
+    and produces a table mapping each CRE to a set of random 20-mer MPRA barcodes. 
+    """
+    CREs=CREs.unique()
+    mpra_barcodes_per_CRE=library_model.draw_nb(len(CREs))
+
+    
+    ret=pd.DataFrame({'cre_id':CREs,'n_barcodes':mpra_barcodes_per_CRE})
+
+    #repeat each row the number of times equal to the number of barcodes
+    ret=ret.loc[ret.index.repeat(ret["n_barcodes"])].reset_index(drop=True)
+    #no longer need barcode per cre count, drop it
+    ret=ret.drop(columns=["n_barcodes"])
+    #add barcodes
+    ret["mpra_bc"]=generate_barcodes(length=20,count=len(ret))
+    ret["abundance"] = np.abs(np.random.randn(len(ret)))
+    ret["abundance"]=ret["abundance"]/sum(ret["abundance"])
+
+    return ret
+
+def sample_from_library(library,size):
+    """
+    Takes an MPRA library in standard form and samples "size" rows. 
+    Uses abundance to sample using inverse transform sampling. 
+    TODO: add table type check. 
+    """
+    assert sum(library["abundance"])-1.0<0.0001; "Abundance must sum to 1."
+    
+    library=library.reset_index(drop=True)
+    library["cum_abundance"]=library["abundance"].cumsum()
+
+    random_vector=np.random.rand(size)
+    indices = np.searchsorted(library["cum_abundance"].values, random_vector)
+    sample = library.iloc[indices].reset_index(drop=True)
+    sample=sample.drop(columns=["cum_abundance"])
+
+    return sample
+
 ## tools for easy generation of hypotheses
 
 
@@ -294,3 +357,4 @@ def one_versus_all(
     return pd.DataFrame.from_records(rows, columns=[
         "comparison_CRE","comparison_cell_type","reference_CRE","reference_cell_type","meta"
     ])
+

@@ -20,8 +20,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import json
 
+
+import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
-#import statsmodels.discrete.count_model as smdc
+
+
+import statsmodels.api as sm
+import statsmodels.discrete.discrete_model as smd
+
+
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
 from statsmodels.stats.multitest import fdrcorrection
@@ -33,7 +40,15 @@ from dask.distributed import Future
 import dask.dataframe as dd
 import dask.array as da
 
+import os
+
 from enum import Enum
+from typing import List
+
+from dataclasses import dataclass, replace
+import json
+import tarfile
+import tempfile
 
 import warnings
 
@@ -74,7 +89,6 @@ def always_unfinished():
 
 def helloworld():
     print("hello world!")
-    pass
 
 def _require_tensorflow():
     if tf is None:
@@ -100,8 +114,6 @@ def table_type(column_names):
     Is kind with respect to extra columns & optional columns. 
     
     (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
-
-    TODO: move to the inside of the scMPRA object
     """
     ### UPDATE: ENG refactored slightly to incorporate hypothesis table and simplify some lines
     #Performs subset checking so that extra columns are allowed.
@@ -131,6 +143,440 @@ def table_type(column_names):
 
     return ret if matches == 1 else 'malformed'
 
+
+
+def simple_spread(cell_types:List[str],min:int,max:int,fineness:int=10):
+    """
+    Create a ground truth dataframe tiling all cell-types.
+    with synthetic CREs at a variety of strengths.
+
+    Returns a tuple of (,None) 
+    (none will be replaced by hypothesis object)
+
+    Useful for simulation and power calculations.
+    (see readme for ground truth dataframe specification)
+
+    min, max are the min & max MPRA UMI / cell values.
+
+    
+    
+    Also returns a hypothesis object (UNIMPLEMENTED)
+    This has the cartesian product of CREs.
+    In general, same CRE name 
+    """
+  
+    
+    #to generally tile the space
+    even_tiling=np.linspace(start=min, stop=max, num=fineness)
+    
+    even_names=["reference"]+[f"CRE_even_{i}" for i in range(1,len(even_tiling))]
+    even_df=pd.DataFrame({"cre_id":even_names,"true_mean":even_tiling})
+    #duplicate df for each cell-type
+    even_df=pd.concat([even_df]*len(cell_types))
+    even_df["cell_type"]=np.repeat(cell_types,len(even_tiling))
+    
+    #to create a large number of low-expression CREs
+    fractional_tiling=1/(2**np.linspace(start=1,stop=fineness,num=fineness))*(max-min)+min
+    fractional_tiling_names=[f"CRE_fractional_{i}" for i in range(0,len(fractional_tiling))]
+    fractional_tiling_df=pd.DataFrame({"cre_id":fractional_tiling_names,"true_mean":fractional_tiling})
+    #duplicate df for each cell-type
+    fractional_tiling_df=pd.concat([fractional_tiling_df]*len(cell_types))
+    fractional_tiling_df["cell_type"]=np.repeat(cell_types,len(fractional_tiling))
+    
+
+    #Then we create some "cell-type-specific CREs". 
+    #these are simply "high in one cell-type and low in every other".
+    #where "high" is a value from even tiling+1. 
+    #and "low" =ln(high)
+
+    #cell-type specific
+    ct_specific=even_df
+    ct_specific=ct_specific.rename({"true_mean":"high","cell_type":"expressed_cell_type"},axis=1)
+    ct_specific["high"]=ct_specific["high"]+1
+    ct_specific["low"]=np.log(ct_specific["high"])
+
+    #ok, so we've created a high and low value for each CRE. 
+    #"expressed_cell_type" will be highest cell-type
+    #so let's rename accordingly
+    ct_specific["cre_id"]=\
+        ct_specific["cre_id"].astype(str)+\
+        "_high_in_"+\
+        ct_specific["expressed_cell_type"].astype(str)
+    
+    #let's repeat the DF across all cell-types
+    #every CRE in every cell-type, after all...
+    ct_specific=pd.concat([ct_specific]*len(cell_types))
+    ct_specific["cell_type"]=np.repeat(cell_types,int(len(ct_specific)/len(cell_types)))
+    #now let's assign values...
+    ct_specific=ct_specific.assign(
+        true_mean=np.where(ct_specific["cell_type"]==ct_specific["expressed_cell_type"],
+                           ct_specific["high"],
+                           ct_specific["low"])
+    )
+    #drop extranious columns
+    ct_specific=ct_specific[["cre_id","cell_type","true_mean"]]
+
+    final_ground_truth=pd.concat([even_df,fractional_tiling_df,ct_specific])
+    
+    hypothesis_set=None
+    return (final_ground_truth,hypothesis_set)
+
+@unimplemented
+def load_hypothesis_set(filepath):
+    """
+    Arguments
+        filepath <str>
+    Returns
+        <pd.DataFrame>
+
+    Loads a hypothesis or hypothesis+results set from disc.
+    """
+    #load table...
+    #assert table_type(table.columns)=="hypothesis" or table_type(table.columns)=="results"
+    #return table
+    pass
+
+class simple_count:
+    """
+    This class stores information pertaining to a simple negative binomial model.
+    It is low performance and NOT used for primary modeling of RNA-sequencing data.
+    Instead, it us used for small, discrete modeling tasks whch need flexibility but not 
+    performance. 
+    """
+    def __init__(self,data=None):
+        if not data is None:
+            self.from_data(data)
+
+    def from_data(self,data):
+        """
+        Initializes the object from count (not frequency) data.
+        Computes poisson and nb using statsmodels.
+        """
+        if type(data) != list:
+            data=data.tolist()
+
+        self.data=data
+        
+        # intercept-only design
+        X = np.ones((len(data), 1))
+
+        #poisson
+        pois = smd.Poisson(data, X).fit(disp=False)
+        if not pois.converged:
+            logger.warning("Poisson model of transfection failed to converge.")
+        self.mu_pois = np.exp(pois.params[0])      # intercept-only mean
+
+        # NB2
+        # Var = mu + alpha*mu^2, alpha is estimated
+        nb = smd.NegativeBinomial(data, X).fit(disp=False)
+        self.mu_nb = np.exp(nb.params[0])          # intercept-only mean
+        self.alpha_nb = nb.params[-1]              # dispersion (NB2 alpha)
+
+        if not nb.converged:
+            logger.error("Negative binomial model of transfection failed to converge.")
+            raise(RuntimeError)
+        
+        self.update_alt_nb_param()
+        self.original_fit=True
+
+    def update_alt_nb_param(self):
+        self.r = 1.0 / self.alpha_nb
+        self.p = self.r / (self.r + self.mu_nb)
+    
+    def draw_nb(self,size):
+        """
+        returns a 1d numpy vector of draws from the nb
+        model of the object. 
+        """
+        return scipy.stats.nbinom.rvs(self.r,self.p,size=size)
+    
+    def plot(self, max_bins: int = 25, binwidth: int | None = None):
+        """
+        Plot a histogram of the data with *integer-aligned coarse bins* and overlay
+        NB and Poisson fits aggregated to the same bins.
+
+        Parameters
+        ----------
+        max_bins : int
+            Target maximum number of bars shown (used only if `binwidth` is None).
+            The method will choose an integer bin width w >= 1 so that the span of
+            the data is displayed in ~max_bins bars.
+        binwidth : int | None
+            If provided, forces that integer bin width (w). If None, a width is
+            computed from `max_bins`.
+        """
+        # Prepare data and model PMFs over integer support
+        data = np.asarray(self.data, dtype=int)
+        dmin = int(data.min())
+        dmax = int(data.max())
+
+        k = np.arange(dmin, dmax + 1, dtype=int)
+        pmf_nb = scipy.stats.nbinom.pmf(k, self.r, self.p)
+        pmf_pois = scipy.stats.poisson.pmf(k, self.mu_pois)
+
+        # Choose integer-aligned coarse bins
+        span = dmax - dmin + 1
+        if binwidth is None:
+            w = max(1, int(np.ceil(span / max_bins)))
+        else:
+            w = max(1, int(binwidth))
+
+        # Half-integer edges so each integer falls cleanly into one bin
+        edges = np.arange(dmin - 0.5, dmax + 0.5 + w, w)
+        nbins = len(edges) - 1
+
+        # Aggregate model PMFs to the same coarse bins 
+        def _bin_sums_for_pmf(k_arr, pmf_arr, dmin_val, width, n_bins):
+            xs = []
+            ys = []
+            for i in range(n_bins):
+                a = dmin_val + i * width
+                b = a + width - 1
+                mask = (k_arr >= a) & (k_arr <= b)
+                ys.append(pmf_arr[mask].sum())
+                xs.append((a + b) / 2.0)  # plot at bin center
+            return np.asarray(xs), np.asarray(ys)
+
+        x_nb, y_nb = _bin_sums_for_pmf(k, pmf_nb, dmin, w, nbins)
+        x_pois, y_pois = _bin_sums_for_pmf(k, pmf_pois, dmin, w, nbins)
+
+        # Plot
+        fig, ax = plt.subplots()
+        sns.histplot(
+            data,
+            bins=edges,
+            stat="probability",   # bar height is probability mass in bin
+            # Use discrete binning only for unit-width bins; otherwise seaborn forces 1 bar per integer.
+            discrete=(w == 1),
+            alpha=0.3,
+            shrink=0.9,
+            ax=ax,
+        )
+        ax.plot(x_nb, y_nb, marker='o', linestyle='-', label=f'NB fit (μ={self.mu_nb:.2f}, α={self.alpha_nb:.3f})')
+        ax.plot(x_pois, y_pois, linestyle='--', label=f'Poisson fit (μ={self.mu_pois:.2f})')
+
+        ax.set_xlabel('Count')
+        ax.set_ylabel('Probability')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def adjust_nb(self,new_nb):
+        self.original_fit=False
+        self.nb=new_nb
+        self.update_alt_nb_param()
+    
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        Represent the object as a single-row DataFrame.
+        All non-hidden attributes are included.
+        """
+        d = {
+            k: v
+            for k, v in self.__dict__.items()
+            if not k.startswith("_")
+        }
+        return pd.DataFrame([d])
+    
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "simple_count":
+        """
+        Recreate an object from a single-row DataFrame.
+        """
+        if len(df) != 1:
+            raise ValueError("Expected DataFrame with exactly one row.")
+        row = df.iloc[0].to_dict()
+
+        obj = cls.__new__(cls)  # bypass __init__
+        for k, v in row.items():
+            setattr(obj, k, v)
+
+        return obj
+
+@dataclass()
+class Bounds:
+    """
+    Describes the boundaries of an experiment.
+    Specifically the UMI portion.
+
+    Bounds objects just average zero inflation parameters, as there
+    is no reason to complicate simulations with multiple values.
+    (If multiple ZI are expected for some reason, just adjust geometrically
+    or run multiple simulation batches.)
+
+    by_cell_type_theta and by_cell_type_zi are probably 
+    more accurate for downstream simulation than their 
+    by_cre counterparts, assuming that there are more 
+    cres than cell types, which should be the case for most
+    datasets.
+    """
+
+    metadata:dict=None
+
+    preferred:str=None
+    
+    min_mpra_umi:float=None
+    max_mpra_umi:float=None
+    by_cre_theta:float=None
+    by_cell_type_theta:float=None
+    zi:float=None
+    by_cre_zi:float=None
+    by_cell_type_zi:float=None
+
+    cells_per_cell_type:dict=None
+
+    transfection_model:simple_count=None
+    library_model:simple_count=None
+
+    def get_effective_moi(self):
+        self.transfection_model.update_alt_nb_param()
+        return self.transfection_model.mu_nb
+
+    def set_effective_moi(self,moi):
+        self.transfection_model.mu_nb=moi
+        self.transfection_model.update_alt_nb_param()
+    
+    def plot_transfection(self,*args,**kwargs):
+        self.transfection_model.plot(*args,**kwargs)
+
+    def copy(self, **kwargs):
+        return replace(copy.deepcopy(self), **kwargs)
+
+    def to_tgz(self, out_file):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # dump members as parquet files
+            for name, value in self.__dict__.items():
+                path = os.path.join(tmpdir, f"{name}.parquet")
+                if isinstance(value, pd.DataFrame):
+                    value.to_parquet(path, engine="pyarrow", index=True)
+                if isinstance(value,simple_count):
+                    value.to_dataframe().to_parquet(path, engine="pyarrow", index=True)
+                elif isinstance(value, pd.Series):
+                    value.to_frame(name).to_parquet(path, engine="pyarrow", index=True)
+                else:
+                    pd.DataFrame({name: [value]}).to_parquet(path, engine="pyarrow", index=False)
+
+            # pack into a tgz
+            with tarfile.open(out_file, "w:gz") as tar:
+                tar.add(tmpdir, arcname="")
+
+    @classmethod
+    def from_tgz(cls, in_file):
+        ret=Bounds()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # extract archive
+            with tarfile.open(in_file, "r:gz") as tar:
+                tar.extractall(tmpdir)
+
+            # load parquet members back
+            for fname in os.listdir(tmpdir):
+                if fname.endswith(".parquet"):
+                    name = fname[:-8]
+                    path = os.path.join(tmpdir, fname)
+                    df = pd.read_parquet(path, engine="pyarrow")
+                    if df.shape == (1, 1):
+                        val = df.iloc[0, 0]
+                    elif df.shape[1] == 1:
+                        val = df.iloc[:, 0]
+                    else:
+                        val = df
+                    setattr(ret, name, val)
+        #re-initalize 
+        ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
+        ret.library_model=simple_count.from_dataframe(ret.library_model)
+
+        ret.transfection_model.update_alt_nb_param()
+        ret.library_model.update_alt_nb_param()
+
+        return ret
+    
+    @classmethod
+    def from_ortho(cls,inp,preferred="by_cell_type"):
+        """
+        Takes an ortho object and abstracts out its bounds.
+
+        This is an aggregation function and will hang if ortho is not done fitting yet. 
+        
+        This function requires that the ortho still have its training data 
+        so we can extract things like "number of cells per cell-type" and 
+        "number of MPRA barcodes per cell".
+
+        Note that this function is totally replicate-agnostic. It averages estimated zero 
+        inflation across replicates. 
+        """
+        
+        ret=cls()
+
+        #get the min & max nb parameters across all models
+        mins=[]
+        maxes=[]
+        
+        #for each model class
+        for var in ["by_cell_type_parameters","by_cre_parameters"]:
+            ## nb min & max ##
+            for key in getattr(inp,var).nb:
+                current=getattr(inp,var).nb[key].result()
+                maxes.append(float(current.max()))
+                mins.append(float(current.min()))
+            
+            thetas=[]
+            for key in getattr(inp,var).theta:
+                current=getattr(inp,var).theta[key].result()
+                thetas.append(current)
+            
+            ## theta means ##
+            #we could munge the strings & use setattr but i think this is more readable
+            if var=="by_cell_type_parameters":
+                ret.by_cell_type_theta=np.mean(thetas)
+            elif var=="by_cre_parameters":
+                ret.by_cre_theta=np.mean(thetas)
+            
+            
+            ## zero inflation ##
+            zis=[]
+            for key in getattr(inp,var).zi:
+                current=getattr(inp,var).zi[key].result()
+                current=current.rename({'zi':key},axis=1)
+                zis.append(current)
+            zis=pd.concat(zis,axis=1)
+            if var=="by_cell_type_parameters":
+                ret.by_cell_type_zi=zis.mean(axis=1).mean()
+            elif var=="by_cre_parameters":
+                ret.by_cre_zi=zis.mean(axis=1).mean()
+
+        
+        #min & max nb and add to the return object
+        ret.min_mpra_umi=min(mins)
+        ret.max_mpra_umi=max(maxes)
+
+        ret.theta=np.mean([ret.by_cell_type_theta,ret.by_cre_theta])
+
+        ## Parameters from training data ##
+        # transfection, as proxied by number of MPRA barcodes detected per cell
+        ret.transfection_model=inp.training_data.describe_transfection()
+
+        # library model
+        ret.library_model=inp.training_data.describe_library()
+        
+
+        #cells per cell type
+        ret.cells_per_cell_type=inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
+        
+        ret.preferred=preferred
+        
+        if preferred=="by_cell_type":
+            ret.zi=ret.by_cell_type_zi
+        elif preferred=="by_cre":
+            ret.zi=ret.by_cre_zi
+        else:
+            assert False, "Unrecognized direction."
+
+        return ret
+
+from pathlib import Path
+working_dir = Path(__file__).resolve().parent
+SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
+
 class scMPRA_data:
     """
     Wrapper around a pandas dataframe of MPRA data. 
@@ -155,6 +601,29 @@ class scMPRA_data:
     
     def flag_emperical(self):
         self.metadata["synthetic"]=False
+    
+    def describe_transfection(self):
+        """
+        Returns a simple_count object describing the number of transfections per cell, 
+        as proxied by number of unique MPRA barcodes per cell.
+
+        Returns a simple_count object
+        Drawing from one of the distributions (or a similar distribution shifted to a different MOI) 
+        can be used to simulate transfection.
+        """
+        assert self.table_type=="mpra_umiwise"
+
+        unique_mpra_barcodes_per_cell=self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        return simple_count(data=unique_mpra_barcodes_per_cell)
+        
+    def describe_library(self):
+        """
+        Returns a simple_count object describing the number of unique MPRA
+        barcodes for each 
+        """
+        y=self.data.groupby("cre_id")["mpra_bc"].nunique()
+        return simple_count(data=y)
+
     
     def set_negative_controls(self,negative_controls:list[str]):
         """

@@ -27,21 +27,25 @@ python -m pip install tensorflow-macos==2.9.2
 python -m pip install tensorflow-metal==0.5.1
 ```
 
-Temporary (still included as dep for speed-testing)
+
 ```
-conda install statsmodels
+conda install statsmodels 
 ```
 
 Additional required packages
 ```
-conda install matplotlib seaborn bioconda::umi_tools formulaic dask
+conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueue
 ```
+
+may need to install `tensorflow keras` if you didn't above
 
 At this point, it may work fine. However some environments (such as mccleary gpu nodes) may require some more fnagling to get GPU accel working. Perform the following:
 ```
 conda install cudatoolkit=11.2 cudnn=8.1.0
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 ```
+
+latter not necessary on bouchet
 
 then deactivate, activate, and test with
 ```
@@ -131,6 +135,24 @@ A result table is the same as a hypothesis table with the following additional c
 | fold_change    | float | between ref and comparison                             | T          |
 | bh_p           | float | benjamini hochberg corrected p-value                   | T          |
 | flattened      | bool  | whether the CRE was flattened due to insufficient UMIs | T          |
+
+# Ground-truth formatting
+These tables store made-up ground truth, for the purposes of simulation. 
+| Column name | Type  | Description                           |
+|-------------|-------|---------------------------------------|
+| cell_type   | str   | cell-type                             |
+| cre_id      | str   | CRE id or name                        |
+| true_mean   | float | Ground-truth # MPRA barcode UMIs/cell |
+
+# MPRA library table
+
+| Column name | Type                | Description                       | Mandatory? |
+|-------------|---------------------|-----------------------------------|------------|
+| cre_id      | string              | CRE id or name                    | T          |
+| mpra_bc     | string (nucleotide) | MPRA reporter barcode             | T          |
+| abundance   | float               | Relative abundance in DNA library | T          |
+
+Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
 
 # Model formatting
 
