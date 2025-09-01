@@ -566,8 +566,10 @@ class Bounds:
         
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
+            ret.theta=ret.by_cell_type_theta
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
+            ret.theta=ret.by_cre_theta
         else:
             assert False, "Unrecognized direction."
 
