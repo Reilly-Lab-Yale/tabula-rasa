@@ -3346,9 +3346,12 @@ class de_novo_simulation:
                  simulation_replicates:int,
                  experiment_bounds:Bounds,
                  ground_truth:pd.DataFrame,
-                 library:pd.DataFrame):
+                 library:pd.DataFrame,
+                 transfection_reporter:bool=False):
         """
-        See readme for formatting of ground_truth & library dataframes 
+        See readme for formatting of ground_truth & library dataframes
+        see the _simulate_transfection docstring for more information 
+        on the transfection_reporter boolean.
         """
         
         self.experiment_bounds=experiment_bounds
@@ -3361,17 +3364,28 @@ class de_novo_simulation:
             transfected=client.submit(_simulate_transfection,
                                       experiment_bounds=experiment_bounds,
                                       ground_truth=ground_truth,
-                                      library=library)
+                                      library=library,
+                                      transfection_reporter=transfection_reporter)
             self.descriptions.append(transfected)
+
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
-                        library:pd.DataFrame):
+                        library:pd.DataFrame,
+                        transfection_reporter:bool):
     """ 
     Simulates transfection step, producing a description dataframe
     from which transcription can be simulated...
 
     See README spec for details on ground truth dataframe.
     You can easially create one with the helper function `simple_spread`. 
+
+    transfection_reporter is a boolean that changes how cell numbers are counted
+    TRUE suggests that the assay can distinguish two transfection events of the 
+    same MPRA barcode, due to different transfection reporter barcodes or, if
+    its the exact same construct, by the number of transfection reporter barcode UMIs.
+    FALSE suggests such a distinction cannot be made, which may lead to some minor
+    overcounting if the library complexity is low enough or the cell number is high enough
+    to get repeat transfections.
     """
 
     #known before you start : "to be optimized":
@@ -3397,8 +3411,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
         #drop num transfected, since it is no longer required
         cells_df=cells_df.drop(columns=["num_transfected"])
-
-
 
         #for each transfection event, sample an MPRA barcode
         drawn_library=sample_from_library(library=library,
@@ -3450,9 +3462,15 @@ def _simulate_transfection(experiment_bounds:Bounds,
     cols.remove('mpra_bc')
 
     
+    
+    if transfection_reporter:
+        count_type="size"
+    else:
+        count_type="nunique"
+    
     aggregated = (
         all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":"nunique",
+            "cell_bc":count_type,
             "mpra_bc":lambda x: list(pd.unique(x))
         }).reset_index()
     )
@@ -3474,20 +3492,14 @@ def _simulate_transfection(experiment_bounds:Bounds,
     ret=ret.rename({"cell_bc":"cells"},axis=1)
 
     #compute alternate parametrization
-
-    
     #redundant code with `def describe_parameters()`
     ret["r"]=ret["theta"]
     ret["sigmasquare"]=ret["mu"]**2/ret["r"]+ret["mu"]
     ret["p"]=ret["mu"]/ret["sigmasquare"]
 
-    #finally, we convert to a dask dataframe. 
+    #finally, we convert to a dask dataframe & return 
     
     return dd.from_pandas(ret)
-
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import numpy as np
 import matplotlib.pyplot as plt
