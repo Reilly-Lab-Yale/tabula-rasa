@@ -417,8 +417,11 @@ class Bounds:
     
     min_mpra_umi:float=None
     max_mpra_umi:float=None
+
     by_cre_theta:float=None
     by_cell_type_theta:float=None
+    theta:float=None
+
     zi:float=None
     by_cre_zi:float=None
     by_cell_type_zi:float=None
