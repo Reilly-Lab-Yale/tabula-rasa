@@ -1974,7 +1974,7 @@ class simulation_batch:
         def flatten_results(working,split:str,var:str):
             """Internal, temporary function"""
             if split not in splits or var not in vars:
-                raise ValueError("invalid chocie")
+                raise ValueError("invalid choice")
             #add check for valid working split var
             
             if var=="theta":
