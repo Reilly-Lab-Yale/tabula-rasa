@@ -64,6 +64,7 @@ from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
+from .utils import generate_barcodes, sample_from_library
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -3356,133 +3357,133 @@ class de_novo_simulation:
 
         self.descriptions=[]
         
-        for i in range(0,replicates):
-            self.descriptions.append(transfected)
+        for i in range(0,simulation_replicates):
             transfected=client.submit(_simulate_transfection,
                                       experiment_bounds=experiment_bounds,
                                       ground_truth=ground_truth,
                                       library=library)
-    def _simulate_transfection(experiment_bounds:Bounds,
-                            ground_truth:pd.DataFrame,
-                            library:pd.DataFrame):
-        """ 
-        Simulates transfection step, producing a description dataframe
-        from which transcription can be simulated...
+            self.descriptions.append(transfected)
+def _simulate_transfection(experiment_bounds:Bounds,
+                        ground_truth:pd.DataFrame,
+                        library:pd.DataFrame):
+    """ 
+    Simulates transfection step, producing a description dataframe
+    from which transcription can be simulated...
 
-        See README spec for details on ground truth dataframe.
-        You can easially create one with the helper function `simple_spread`. 
-        """
+    See README spec for details on ground truth dataframe.
+    You can easially create one with the helper function `simple_spread`. 
+    """
 
-        #known before you start : "to be optimized":
-        #  cells per cell-type is a fixed parameter
-        #  barcodes per CRE is a fixed parameter (library)
+    #known before you start : "to be optimized":
+    #  cells per cell-type is a fixed parameter
+    #  barcodes per CRE is a fixed parameter (library)
 
-        def _simulate_single_replicate_transfection():
-            #get cells_per_cell_type
-            cells_per_cell_type=experiment_bounds.cells_per_cell_type
-            cells_per_cell_type.name= 'cells_per_cell_type'
-            cells_per_cell_type.index.name= 'cell_type'    
-            #copy cells df out
-            cells_df=pd.DataFrame(cells_per_cell_type).reset_index()
-            #repeat to create multiple cells for each cell type
-            cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
-            #drop number of cells
-            cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
-            #add cell barcodes
-            cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
-            #now get "how many MPRA constructs transfected into each cell"
-            cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
-            #duplicate so we have one row for each transfection event
-            cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
-            #drop num transfected, since it is no longer required
-            cells_df=cells_df.drop(columns=["num_transfected"])
+    def _simulate_single_replicate_transfection():
+        #get cells_per_cell_type
+        cells_per_cell_type=experiment_bounds.cells_per_cell_type
+        cells_per_cell_type.name= 'cells_per_cell_type'
+        cells_per_cell_type.index.name= 'cell_type'    
+        #copy cells df out
+        cells_df=pd.DataFrame(cells_per_cell_type).reset_index()
+        #repeat to create multiple cells for each cell type
+        cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
+        #drop number of cells
+        cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
+        #add cell barcodes
+        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        #now get "how many MPRA constructs transfected into each cell"
+        cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
+        #duplicate so we have one row for each transfection event
+        cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
+        #drop num transfected, since it is no longer required
+        cells_df=cells_df.drop(columns=["num_transfected"])
 
 
 
-            #for each transfection event, sample an MPRA barcode
-            drawn_library=sample_from_library(library=library,
-                                    size=len(cells_df))
-            
-            #merge dataframes
-            cells_df=cells_df.merge(drawn_library,
-                                    left_index=True,
-                                    right_index=True,
-                                    validate="one_to_one")
-            
-            
-            #drop library abundance, we don't care anymore.
-            cells_df=cells_df.drop(columns=["abundance"])
-            
-            # merge in ground truth
-            cells_df=cells_df.merge(ground_truth,
-                                    on=["cell_type","cre_id"],
-                                    validate="many_to_one",
-                                    how="outer")
-            
-
-            #check to make sure there were no NAs introduced
-            assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
-            
-            return cells_df
-
-        #loop & generate one round of transfection per replicate
-        #I think _simulate_single_replicate_transfection is too small to be profitably parallelized
-        #that is, the overhead will probably be more expensive than gains from parallelization
-        #so we won't bother.
-        all_rep_cells_df=[]
-        for rep_id in artificial_bounds.zi.index:
-            working=_simulate_single_replicate_transfection()
-            working["rep_id"]=rep_id
-            working["zi"]=artificial_bounds.zi.at[rep_id]
-            all_rep_cells_df.append(working)
+        #for each transfection event, sample an MPRA barcode
+        drawn_library=sample_from_library(library=library,
+                                size=len(cells_df))
         
-        all_rep_cells_df=pd.concat(all_rep_cells_df)
-        all_rep_cells_df["theta"]=experiment_bounds.theta
-        all_rep_cells_df=all_rep_cells_df.rename({"true_mean":"mu"},axis=1)
+        #merge dataframes
+        cells_df=cells_df.merge(drawn_library,
+                                left_index=True,
+                                right_index=True,
+                                validate="one_to_one")
         
-        #now we want to convert from "one row per cell"
-        #to "one row per cell_type,cre_id,rep_id" combo
-
-        #get a list of all columns except which we mean to aggregate.
-        cols=all_rep_cells_df.columns.tolist()
-        cols.remove('cell_bc')
-        cols.remove('mpra_bc')
-
         
-        aggregated = (
-            all_rep_cells_df.groupby(cols).agg({
-                "cell_bc":"nunique",
-                "mpra_bc":lambda x: list(pd.unique(x))
-            }).reset_index()
-        )
+        #drop library abundance, we don't care anymore.
+        cells_df=cells_df.drop(columns=["abundance"])
+        
+        # merge in ground truth
+        cells_df=cells_df.merge(ground_truth,
+                                on=["cell_type","cre_id"],
+                                validate="many_to_one",
+                                how="outer")
         
 
-        assert (
-            len(aggregated) == 
-            len(all_rep_cells_df[['cell_type','cre_id','rep_id']].drop_duplicates())),(
-            "\
-            Failed sanity check. Number of rows in result \
-            should be the number of unique `cell_type`, `cre_id`, `rep_id` combinations\
-            if not, then one of the other columns has different values where it shouldn't\
-            e.g. two different `mu` values for the same `cell_type`, `cre_id`, `rep_id` triple.\
-            "
-        )
-
-        ret=aggregated
-
-        ret=ret.rename({"cell_bc":"cells"},axis=1)
-
-        #compute alternate parametrization
-
+        #check to make sure there were no NAs introduced
+        assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
         
-        #redundant code with `def describe_parameters()`
-        ret["r"]=ret["theta"]
-        ret["sigmasquare"]=ret["mu"]**2/ret["r"]+ret["mu"]
-        ret["p"]=ret["mu"]/ret["sigmasquare"]
+        return cells_df
 
-        #finally, we convert to a dask dataframe. 
-        
-        return dd.from_pandas(ret)
+    #loop & generate one round of transfection per replicate
+    #I think _simulate_single_replicate_transfection is too small to be profitably parallelized
+    #that is, the overhead will probably be more expensive than gains from parallelization
+    #so we won't bother.
+    all_rep_cells_df=[]
+    for rep_id in experiment_bounds.zi.index:
+        working=_simulate_single_replicate_transfection()
+        working["rep_id"]=rep_id
+        working["zi"]=experiment_bounds.zi.at[rep_id]
+        all_rep_cells_df.append(working)
+    
+    all_rep_cells_df=pd.concat(all_rep_cells_df)
+    all_rep_cells_df["theta"]=experiment_bounds.theta
+    all_rep_cells_df=all_rep_cells_df.rename({"true_mean":"mu"},axis=1)
+    
+    #now we want to convert from "one row per cell"
+    #to "one row per cell_type,cre_id,rep_id" combo
+
+    #get a list of all columns except which we mean to aggregate.
+    cols=all_rep_cells_df.columns.tolist()
+    cols.remove('cell_bc')
+    cols.remove('mpra_bc')
+
+    
+    aggregated = (
+        all_rep_cells_df.groupby(cols).agg({
+            "cell_bc":"nunique",
+            "mpra_bc":lambda x: list(pd.unique(x))
+        }).reset_index()
+    )
+    
+
+    assert (
+        len(aggregated) == 
+        len(all_rep_cells_df[['cell_type','cre_id','rep_id']].drop_duplicates())),(
+        "\
+        Failed sanity check. Number of rows in result \
+        should be the number of unique `cell_type`, `cre_id`, `rep_id` combinations\
+        if not, then one of the other columns has different values where it shouldn't\
+        e.g. two different `mu` values for the same `cell_type`, `cre_id`, `rep_id` triple.\
+        "
+    )
+
+    ret=aggregated
+
+    ret=ret.rename({"cell_bc":"cells"},axis=1)
+
+    #compute alternate parametrization
+
+    
+    #redundant code with `def describe_parameters()`
+    ret["r"]=ret["theta"]
+    ret["sigmasquare"]=ret["mu"]**2/ret["r"]+ret["mu"]
+    ret["p"]=ret["mu"]/ret["sigmasquare"]
+
+    #finally, we convert to a dask dataframe. 
+    
+    return dd.from_pandas(ret)
 
 import numpy as np
 import matplotlib.pyplot as plt
