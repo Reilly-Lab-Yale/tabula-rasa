@@ -3343,7 +3343,7 @@ class de_novo_simulation:
     def __init__(self,
                  client:Client,
                  simulation_replicates:int,
-                 experiment_bounds:scm.Bounds,
+                 experiment_bounds:Bounds,
                  ground_truth:pd.DataFrame,
                  library:pd.DataFrame):
         """
@@ -3362,7 +3362,7 @@ class de_novo_simulation:
                                       experiment_bounds=experiment_bounds,
                                       ground_truth=ground_truth,
                                       library=library)
-    def _simulate_transfection(experiment_bounds:scm.Bounds,
+    def _simulate_transfection(experiment_bounds:Bounds,
                             ground_truth:pd.DataFrame,
                             library:pd.DataFrame):
         """ 
@@ -3389,7 +3389,7 @@ class de_novo_simulation:
             #drop number of cells
             cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
             #add cell barcodes
-            cells_df["cell_bc"]=scm.generate_barcodes(length=20,count=len(cells_df))
+            cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
             #now get "how many MPRA constructs transfected into each cell"
             cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
             #duplicate so we have one row for each transfection event
@@ -3400,7 +3400,7 @@ class de_novo_simulation:
 
 
             #for each transfection event, sample an MPRA barcode
-            drawn_library=scm.sample_from_library(library=library,
+            drawn_library=sample_from_library(library=library,
                                     size=len(cells_df))
             
             #merge dataframes
