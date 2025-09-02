@@ -3404,21 +3404,96 @@ class de_novo_simulation:
                 )
             )
     
-    @unimplemented
-    def save(path,name):
+    _normal_vars=["simulation_replicates","transfection_reporter"]
+    _df_vars=["ground_truth","library"]
+    
+    def save(self,path,name):
         """
         Note that this function saves self.simulated_scMPRA
         but not self.simulated, since the latter is intermediate.
         """
-        pass
+        path=Path(path)/name
 
-    @unimplemented
-    def load(path,name):
-        pass
+        path.mkdir(parents=True)
+        
+        # normal vars
+        normal_dump={}
+        for var in self._normal_vars:
+            normal_dump[var]=getattr(self,var)
+        
+        with open(path / "vars.json","w") as f:
+            json.dump(normal_dump,f,indent=4)
+        
+        #dataframes
+        for var in self._df_vars:
+            getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
+
+        # descriptions
+        (path/"descriptions").mkdir()
+        for i, ddf in enumerate(self.descriptions):
+            target = path/"descriptions" / f"{i}.tsv.gz"
+            # Compute to pandas and then write
+            pdf = ddf.compute()
+            pdf.to_csv(
+                target,
+                sep="\t",
+                index=False,
+                compression="gzip"
+            )
+
+        #data
+        scMPRA_data_root=path/"scMPRA"
+        scMPRA_data_root.mkdir()
+        for i, dat in enumerate(self.simulated_scMPRA):
+            dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
+
+
+    @classmethod
+    def load(cls, client, path, name):
+        path = Path(path) / name
+        
+        # Create an instance
+        obj = cls.__new__(cls)  # bypass __init__
+        
+        #normal members
+        with open(path / "vars.json", "r") as f:
+            normal_dump = json.load(f)
+        
+        
+        for var, value in normal_dump.items():
+            setattr(obj, var, value)
+        
+        #dfs
+        for var in obj._df_vars:
+            df=pd.read_csv(path/f"{var}.tsv.gz",
+                sep="\t",
+                compression="gzip",
+                index_col=0)
+            
+            setattr(obj,var,df)
+            
+        #descriptions
+        obj.descriptions=[]
+        desc_path=path/"descriptions"
+        for file in sorted(desc_path.glob("*.tsv.gz"),
+            key=lambda p: int(p.with_suffix("").stem)):
+            ddf = dd.read_csv(file, sep="\t", compression="gzip")
+            obj.descriptions.append(ddf)
+        
+        #scMPRA
+        obj.simulated_scMPRA=[]
+        scMPRA_data_root=path/"scMPRA"
+        for i, file in enumerate(scMPRA_data_root.glob("*.scmpra")):
+            working=scMPRA_data.from_parquet(scMPRA_data_root/f"{i}.scmpra")
+            working=client.submit(lambda x: x, working)
+            obj.simulated_scMPRA.append(working)
+        
+        return obj
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
     """
-    Helper function for class de_novo_simulation which converts a simulated DF to an scMPRA object.
+    Helper function for class de_novo_simulation.
+    Converts a simulated DF to an scMPRA object.
     """
     ret=scMPRA_data()
     
