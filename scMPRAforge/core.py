@@ -130,7 +130,7 @@ def table_type(column_names):
         ret = 'mpra_readwise'; matches += 1
 
     # UMI-wise MPRA
-    if {'cell_bc','rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
+    if {'rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
         ret = 'mpra_umiwise'; matches += 1
 
     # Hypotheses (must have required; optional ok)
@@ -3379,7 +3379,9 @@ class de_novo_simulation:
     
     def _simulate_transcription(self):
         for description in self.descriptions:
-            self.simulated.append(simulate_from_description(description))
+            working=simulate_from_description(description)
+            working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
+            self.simulated.append(working)
 
 
     def _realize_simulations(self,client):
