@@ -3339,6 +3339,7 @@ class de_novo_simulation:
         on the `transfection_reporter` boolean.
         """
         
+        self.simulation_replicates=simulation_replicates
         self.experiment_bounds=experiment_bounds
         self.ground_truth=ground_truth
         self.library=library
@@ -3347,8 +3348,9 @@ class de_novo_simulation:
         self.transfection_reporter=transfection_reporter
 
         #init vars which will be computed but are not taken from input.
-        #Not necessary, just makes it easier to track what we need to save/load...
         self.descriptions=[]
+        self.simulated=[]
+        self.simulated_scMPRA=[]
     
     def gamut(self, client):
         """
@@ -3356,7 +3358,9 @@ class de_novo_simulation:
         
         Probably the only method you will ever need to call on de_novo_simulation
         """
-        pass
+        self._simulate_transfection()
+        self._simulate_transcription()
+        self._realize_simulations(client)
     
     def _simulate_transfection(self):
         """
@@ -3364,7 +3368,7 @@ class de_novo_simulation:
         offloaded to `_simulate_transfection`, a non-method
         for reusability. 
         """
-        for i in range(0,simulation_replicates):
+        for i in range(0,self.simulation_replicates):
             transfected=_simulate_transfection(
                     experiment_bounds=self.experiment_bounds,
                     ground_truth=self.ground_truth,
@@ -3372,6 +3376,31 @@ class de_novo_simulation:
                     transfection_reporter=self.transfection_reporter)
             
             self.descriptions.append(transfected)
+    
+    def _simulate_transcription(self):
+        for description in self.descriptions:
+            self.simulated.append(simulate_from_description(description))
+
+
+    def _realize_simulations(self,client):
+        """
+        Populates `self.simulated_scMPRA` with future-wrapped `scMPRA_data` object 
+        versions of the contents of `self.simulated`.
+        """
+        self.simulated_scMPRA=[]
+
+        for simulated in self.simulated:
+            
+            simulated=client.compute(simulated)
+            
+            self.simulated_scMPRA.append(
+                client.submit(
+                    _wrap_helper,
+                    simulated,
+                    self.negative_controls,
+                    self.reference_cell_type
+                )
+            )
     
     @unimplemented
     def save(path,name):
@@ -3384,6 +3413,19 @@ class de_novo_simulation:
     @unimplemented
     def load(path,name):
         pass
+
+def _wrap_helper(df,negative_controls,reference_cell_type):
+    """
+    Helper function for class de_novo_simulation which converts a simulated DF to an scMPRA object.
+    """
+    ret=scMPRA_data()
+    
+    ret.data=df
+    
+    ret.set_negative_controls(negative_controls)
+    ret.set_reference_cell(reference_cell_type)
+    ret.flag_synthetic()
+    return ret
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
@@ -3476,7 +3518,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     #get a list of all columns except which we mean to aggregate.
     cols=all_rep_cells_df.columns.tolist()
     cols.remove('cell_bc')
-    cols.remove('mpra_bc')
 
     
     
@@ -3487,20 +3528,10 @@ def _simulate_transfection(experiment_bounds:Bounds,
     
     aggregated = (
         all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":count_type,
-            "mpra_bc":lambda x: list(pd.unique(x))
+            "cell_bc":count_type
         }).reset_index()
     )
-    
-    assert len(aggregated) == len(all_rep_cells_df[['cell_type','cre_id','rep_id']].drop_duplicates()),(
-        "\
-        Failed sanity check. Number of rows in result \
-        should be the number of unique `cell_type`, `cre_id`, `rep_id` combinations\
-        if not, then one of the other columns has different values where it shouldn't\
-        e.g. two different `mu` values for the same `cell_type`, `cre_id`, `rep_id` triple.\
-        "
-    )
-    
+
 
     ret=aggregated
 
