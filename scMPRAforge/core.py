@@ -3326,34 +3326,71 @@ class de_novo_simulation:
                  experiment_bounds:Bounds,
                  ground_truth:pd.DataFrame,
                  library:pd.DataFrame,
-                 transfection_reporter:bool=False):
+                 negative_controls:list[str]=["reference"],
+                 reference_cell_type:str="reference",
+                 transfection_reporter:bool=True):
         """
+        TODO: change transfection_reporter to "dups distingushable" or similar
+        transfection reporter is a tad misleading a name
+        
         See readme for formatting of ground_truth & library dataframes
-        see the _simulate_transfection docstring for more information 
-        on the transfection_reporter boolean.
+        
+        See the `_simulate_transfection` docstring for more information 
+        on the `transfection_reporter` boolean.
         """
         
         self.experiment_bounds=experiment_bounds
         self.ground_truth=ground_truth
         self.library=library
+        self.negative_controls=negative_controls
+        self.reference_cell_type=reference_cell_type
+        self.transfection_reporter=transfection_reporter
 
+        #init vars which will be computed but are not taken from input.
+        #Not necessary, just makes it easier to track what we need to save/load...
         self.descriptions=[]
+    
+    def gamut(self, client):
+        """
+        Run the full simulation: transfection->transcription->realization
         
+        Probably the only method you will ever need to call on de_novo_simulation
+        """
+        pass
+    
+    def _simulate_transfection(self):
+        """
+        Simulates transfection. Most of the heavy-lifing is 
+        offloaded to `_simulate_transfection`, a non-method
+        for reusability. 
+        """
         for i in range(0,simulation_replicates):
             transfected=_simulate_transfection(
-                    experiment_bounds=experiment_bounds,
-                    ground_truth=ground_truth,
-                    library=library,
-                    transfection_reporter=transfection_reporter)
+                    experiment_bounds=self.experiment_bounds,
+                    ground_truth=self.ground_truth,
+                    library=self.library,
+                    transfection_reporter=self.transfection_reporter)
             
             self.descriptions.append(transfected)
+    
+    @unimplemented
+    def save(path,name):
+        """
+        Note that this function saves self.simulated_scMPRA
+        but not self.simulated, since the latter is intermediate.
+        """
+        pass
+
+    @unimplemented
+    def load(path,name):
+        pass
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
                         library:pd.DataFrame,
                         transfection_reporter:bool):
     """ 
-    Simulates transfection step, producing a description dataframe
+    Simulates transfection, producing a description dataframe
     from which transcription can be simulated...
 
     See README spec for details on ground truth dataframe.
