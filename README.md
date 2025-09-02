@@ -1,7 +1,7 @@
 
 
 Assumptions:
-1. Barcode flattening is mandatory. Though ideally we would model each barcode (like the approach in MPRAmodel) for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. Not that the barcodes are retained, just not modeled separaately. 
+1. Though ideally we would model each barcode (like the approach in MPRAmodel) for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. Not that the barcodes are retained, just not modeled separaately. 
 2. Removal of "false zeroes" through clonotype analysis and transfection reporters is part of pre-processing. 
 3. We are interested in changes in CRE activity within and between cell-types
 
