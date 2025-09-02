@@ -90,7 +90,7 @@ UMI = unique molecular identifier
 **Umi-wise**
 | Column name           | Type             | Description                                                      | Mandatory? |
 | --------------------- | ---------------- | ---------------------------------------------------------------- | ---------- |
-| cell_bc               | str (nucleotide) | cell barcode                                                     | T          |
+| cell_bc               | str (nucleotide) | cell barcode                                                     | ~T          |
 | rep_id                | str              | replicate id                                                     | T          |
 | cre_id                | str              | CRE id or name                                                   | T          |
 | cell_type             | str              | cell-type                                                        | T          |
@@ -103,6 +103,8 @@ UMI = unique molecular identifier
 | reads_DNA             | int              | DNA library reads (for MPRA barcode)                             | F          |
 
 (Though MPRA barcodes cannot be modeled individually, its undersierable to sum across to remove them : since this would inflate strength estimates of CREs with more MPRA barcodes)
+
+Simulated UMI-wise data doesn't currently require cell barcode. 
 
 Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
 This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
