@@ -64,6 +64,7 @@ from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
+from .utils import generate_barcodes, sample_from_library
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -129,7 +130,7 @@ def table_type(column_names):
         ret = 'mpra_readwise'; matches += 1
 
     # UMI-wise MPRA
-    if {'cell_bc','rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
+    if {'rep_id','cre_id','cell_type','umis_mpra_bc'} <= cols:
         ret = 'mpra_umiwise'; matches += 1
 
     # Hypotheses (must have required; optional ok)
@@ -417,8 +418,11 @@ class Bounds:
     
     min_mpra_umi:float=None
     max_mpra_umi:float=None
+
     by_cre_theta:float=None
     by_cell_type_theta:float=None
+    theta:float=None
+
     zi:float=None
     by_cre_zi:float=None
     by_cell_type_zi:float=None
@@ -540,9 +544,9 @@ class Bounds:
                 zis.append(current)
             zis=pd.concat(zis,axis=1)
             if var=="by_cell_type_parameters":
-                ret.by_cell_type_zi=zis.mean(axis=1).mean()
+                ret.by_cell_type_zi=zis.mean(axis=1)#.mean()
             elif var=="by_cre_parameters":
-                ret.by_cre_zi=zis.mean(axis=1).mean()
+                ret.by_cre_zi=zis.mean(axis=1)#.mean()
 
         
         #min & max nb and add to the return object
@@ -566,8 +570,10 @@ class Bounds:
         
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
+            ret.theta=ret.by_cell_type_theta
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
+            ret.theta=ret.by_cre_theta
         else:
             assert False, "Unrecognized direction."
 
@@ -1806,26 +1812,6 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
 
-def _simulate_from_description(description):
-    """
-    Simulate from a description dask dataframe
-    """
-    # Repeat rows by 'cells' count, exploding to one row per cell
-    df=description
-    repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
-    #repeated_df = description.loc[description.index.repeat(description['cells'])].reset_index(drop=True)
-
-    # Simulate NB and ZI in numpy
-    r = repeated_df['r'].to_numpy()
-    p = repeated_df['p'].to_numpy()
-    zi = repeated_df['zi'].to_numpy()
-
-    nb = np.random.negative_binomial(n=r, p=p)
-    keep_mask = np.random.binomial(n=1, p=1 - zi)
-    zinb = nb * keep_mask
-
-    repeated_df['zinb_sample'] = zinb
-    return repeated_df
 
 def simulate_from_description(description):
     """
@@ -1969,7 +1955,7 @@ class simulation_batch:
         def flatten_results(working,split:str,var:str):
             """Internal, temporary function"""
             if split not in splits or var not in vars:
-                raise ValueError("invalid chocie")
+                raise ValueError("invalid choice")
             #add check for valid working split var
             
             if var=="theta":
@@ -3331,11 +3317,312 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     return runner.run(hypotheses)
 
     
+class de_novo_simulation:
+    """
+    Class for simulating datasets anew.
+    """
+    def __init__(self,
+                 simulation_replicates:int,
+                 experiment_bounds:Bounds,
+                 ground_truth:pd.DataFrame,
+                 library:pd.DataFrame,
+                 negative_controls:list[str]=["reference"],
+                 reference_cell_type:str="reference",
+                 transfection_reporter:bool=True):
+        """
+        TODO: change transfection_reporter to "dups distingushable" or similar
+        transfection reporter is a tad misleading a name
+        
+        See readme for formatting of ground_truth & library dataframes
+        
+        See the `_simulate_transfection` docstring for more information 
+        on the `transfection_reporter` boolean.
+        """
+        
+        self.simulation_replicates=simulation_replicates
+        self.experiment_bounds=experiment_bounds
+        self.ground_truth=ground_truth
+        self.library=library
+        self.negative_controls=negative_controls
+        self.reference_cell_type=reference_cell_type
+        self.transfection_reporter=transfection_reporter
+
+        #init vars which will be computed but are not taken from input.
+        self.descriptions=[]
+        self.simulated=[]
+        self.simulated_scMPRA=[]
+    
+    def gamut(self, client):
+        """
+        Run the full simulation: transfection->transcription->realization
+        
+        Probably the only method you will ever need to call on de_novo_simulation
+        """
+        self._simulate_transfection()
+        self._simulate_transcription()
+        self._realize_simulations(client)
+    
+    def _simulate_transfection(self):
+        """
+        Simulates transfection. Most of the heavy-lifing is 
+        offloaded to `_simulate_transfection`, a non-method
+        for reusability. 
+        """
+        for i in range(0,self.simulation_replicates):
+            transfected=_simulate_transfection(
+                    experiment_bounds=self.experiment_bounds,
+                    ground_truth=self.ground_truth,
+                    library=self.library,
+                    transfection_reporter=self.transfection_reporter)
+            
+            self.descriptions.append(transfected)
+    
+    def _simulate_transcription(self):
+        for description in self.descriptions:
+            working=simulate_from_description(description)
+            working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
+            self.simulated.append(working)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+    def _realize_simulations(self,client):
+        """
+        Populates `self.simulated_scMPRA` with future-wrapped `scMPRA_data` object 
+        versions of the contents of `self.simulated`.
+        """
+        self.simulated_scMPRA=[]
+
+        for simulated in self.simulated:
+            
+            simulated=client.compute(simulated)
+            
+            self.simulated_scMPRA.append(
+                client.submit(
+                    _wrap_helper,
+                    simulated,
+                    self.negative_controls,
+                    self.reference_cell_type
+                )
+            )
+    
+    _normal_vars=["simulation_replicates","transfection_reporter"]
+    _df_vars=["ground_truth","library"]
+    
+    def save(self,path,name):
+        """
+        Note that this function saves self.simulated_scMPRA
+        but not self.simulated, since the latter is intermediate.
+        """
+        path=Path(path)/name
+
+        path.mkdir(parents=True)
+        
+        # normal vars
+        normal_dump={}
+        for var in self._normal_vars:
+            normal_dump[var]=getattr(self,var)
+        
+        with open(path / "vars.json","w") as f:
+            json.dump(normal_dump,f,indent=4)
+        
+        #dataframes
+        for var in self._df_vars:
+            getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
+
+        # descriptions
+        (path/"descriptions").mkdir()
+        for i, ddf in enumerate(self.descriptions):
+            target = path/"descriptions" / f"{i}.tsv.gz"
+            # Compute to pandas and then write
+            pdf = ddf.compute()
+            pdf.to_csv(
+                target,
+                sep="\t",
+                index=False,
+                compression="gzip"
+            )
+
+        #data
+        scMPRA_data_root=path/"scMPRA"
+        scMPRA_data_root.mkdir()
+        for i, dat in enumerate(self.simulated_scMPRA):
+            dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
+
+
+    @classmethod
+    def load(cls, client, path, name):
+        path = Path(path) / name
+        
+        # Create an instance
+        obj = cls.__new__(cls)  # bypass __init__
+        
+        #normal members
+        with open(path / "vars.json", "r") as f:
+            normal_dump = json.load(f)
+        
+        
+        for var, value in normal_dump.items():
+            setattr(obj, var, value)
+        
+        #dfs
+        for var in obj._df_vars:
+            df=pd.read_csv(path/f"{var}.tsv.gz",
+                sep="\t",
+                compression="gzip",
+                index_col=0)
+            
+            setattr(obj,var,df)
+            
+        #descriptions
+        obj.descriptions=[]
+        desc_path=path/"descriptions"
+        for file in sorted(desc_path.glob("*.tsv.gz"),
+            key=lambda p: int(p.with_suffix("").stem)):
+            ddf = dd.read_csv(file, sep="\t", compression="gzip")
+            obj.descriptions.append(ddf)
+        
+        #scMPRA
+        obj.simulated_scMPRA=[]
+        scMPRA_data_root=path/"scMPRA"
+        for i, file in enumerate(scMPRA_data_root.glob("*.scmpra")):
+            working=scMPRA_data.from_parquet(scMPRA_data_root/f"{i}.scmpra")
+            working=client.submit(lambda x: x, working)
+            obj.simulated_scMPRA.append(working)
+        
+        return obj
+
+def _wrap_helper(df,negative_controls,reference_cell_type):
+    """
+    Helper function for class de_novo_simulation.
+    Converts a simulated DF to an scMPRA object.
+    """
+    ret=scMPRA_data()
+    
+    ret.data=df
+    
+    ret.set_negative_controls(negative_controls)
+    ret.set_reference_cell(reference_cell_type)
+    ret.flag_synthetic()
+    return ret
+
+def _simulate_transfection(experiment_bounds:Bounds,
+                        ground_truth:pd.DataFrame,
+                        library:pd.DataFrame,
+                        transfection_reporter:bool):
+    """ 
+    Simulates transfection, producing a description dataframe
+    from which transcription can be simulated...
+
+    See README spec for details on ground truth dataframe.
+    You can easially create one with the helper function `simple_spread`. 
+
+    transfection_reporter is a boolean that changes how cell numbers are counted
+    TRUE suggests that the assay can distinguish two transfection events of the 
+    same MPRA barcode, due to different transfection reporter barcodes or, if
+    its the exact same construct, by the number of transfection reporter barcode UMIs.
+    FALSE suggests such a distinction cannot be made, which may lead to some minor
+    overcounting if the library complexity is low enough or the cell number is high enough
+    to get repeat transfections.
+    """
+
+    #known before you start : "to be optimized":
+    #  cells per cell-type is a fixed parameter
+    #  barcodes per CRE is a fixed parameter (library)
+
+    def _simulate_single_replicate_transfection():
+        #get cells_per_cell_type
+        cells_per_cell_type=experiment_bounds.cells_per_cell_type
+        cells_per_cell_type.name= 'cells_per_cell_type'
+        cells_per_cell_type.index.name= 'cell_type'    
+        #copy cells df out
+        cells_df=pd.DataFrame(cells_per_cell_type).reset_index()
+        #repeat to create multiple cells for each cell type
+        cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
+        #drop number of cells
+        cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
+        #add cell barcodes
+        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        #now get "how many MPRA constructs transfected into each cell"
+        cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
+        #duplicate so we have one row for each transfection event
+        cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
+        #drop num transfected, since it is no longer required
+        cells_df=cells_df.drop(columns=["num_transfected"])
+
+        #for each transfection event, sample an MPRA barcode
+        drawn_library=sample_from_library(library=library,
+                                size=len(cells_df))
+        
+        #merge dataframes
+        cells_df=cells_df.merge(drawn_library,
+                                left_index=True,
+                                right_index=True,
+                                validate="one_to_one")
+        
+        
+        #drop library abundance, we don't care anymore.
+        cells_df=cells_df.drop(columns=["abundance"])
+        
+        # merge in ground truth
+        cells_df=cells_df.merge(ground_truth,
+                                on=["cell_type","cre_id"],
+                                validate="many_to_one",
+                                how="outer")
+        
+
+        #check to make sure there were no NAs introduced
+        assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+        
+        return cells_df
+
+    #loop & generate one round of transfection per replicate
+    #I think _simulate_single_replicate_transfection is too small to be profitably parallelized
+    #that is, the overhead will probably be more expensive than gains from parallelization
+    #so we won't bother.
+    all_rep_cells_df=[]
+    for rep_id in experiment_bounds.zi.index:
+        working=_simulate_single_replicate_transfection()
+        working["rep_id"]=rep_id
+        working["zi"]=experiment_bounds.zi.at[rep_id]
+        all_rep_cells_df.append(working)
+    
+    all_rep_cells_df=pd.concat(all_rep_cells_df)
+    all_rep_cells_df["theta"]=experiment_bounds.theta
+    all_rep_cells_df=all_rep_cells_df.rename({"true_mean":"mu"},axis=1)
+    
+    #now we want to convert from "one row per cell"
+    #to "one row per cell_type,cre_id,rep_id" combo
+
+    #get a list of all columns except which we mean to aggregate.
+    cols=all_rep_cells_df.columns.tolist()
+    cols.remove('cell_bc')
+
+    
+    
+    if transfection_reporter:
+        count_type="size"
+    else:
+        count_type="nunique"
+    
+    aggregated = (
+        all_rep_cells_df.groupby(cols).agg({
+            "cell_bc":count_type
+        }).reset_index()
+    )
+
+
+    ret=aggregated
+
+    ret=ret.rename({"cell_bc":"cells"},axis=1)
+
+    #compute alternate parametrization
+    #redundant code with `def describe_parameters()`
+    ret["r"]=ret["theta"]
+    ret["sigmasquare"]=ret["mu"]**2/ret["r"]+ret["mu"]
+    ret["p"]=ret["mu"]/ret["sigmasquare"]
+
+    #finally, we convert to a dask dataframe & return 
+    
+    return dd.from_pandas(ret)
 
 import numpy as np
 import matplotlib.pyplot as plt
