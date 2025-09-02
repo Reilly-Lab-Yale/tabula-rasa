@@ -1812,26 +1812,6 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
     npartitions = max(2, int(np.ceil(est_bytes / target_bytes)))
     return dd.from_pandas(pdf, npartitions=npartitions)
 
-def _simulate_from_description(description):
-    """
-    Simulate from a description dask dataframe
-    """
-    # Repeat rows by 'cells' count, exploding to one row per cell
-    df=description
-    repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
-    #repeated_df = description.loc[description.index.repeat(description['cells'])].reset_index(drop=True)
-
-    # Simulate NB and ZI in numpy
-    r = repeated_df['r'].to_numpy()
-    p = repeated_df['p'].to_numpy()
-    zi = repeated_df['zi'].to_numpy()
-
-    nb = np.random.negative_binomial(n=r, p=p)
-    keep_mask = np.random.binomial(n=1, p=1 - zi)
-    zinb = nb * keep_mask
-
-    repeated_df['zinb_sample'] = zinb
-    return repeated_df
 
 def simulate_from_description(description):
     """
@@ -3342,7 +3322,6 @@ class de_novo_simulation:
     Class for simulating datasets anew.
     """
     def __init__(self,
-                 client:Client,
                  simulation_replicates:int,
                  experiment_bounds:Bounds,
                  ground_truth:pd.DataFrame,
@@ -3361,11 +3340,12 @@ class de_novo_simulation:
         self.descriptions=[]
         
         for i in range(0,simulation_replicates):
-            transfected=client.submit(_simulate_transfection,
-                                      experiment_bounds=experiment_bounds,
-                                      ground_truth=ground_truth,
-                                      library=library,
-                                      transfection_reporter=transfection_reporter)
+            transfected=_simulate_transfection(
+                    experiment_bounds=experiment_bounds,
+                    ground_truth=ground_truth,
+                    library=library,
+                    transfection_reporter=transfection_reporter)
+            
             self.descriptions.append(transfected)
 
 def _simulate_transfection(experiment_bounds:Bounds,
@@ -3475,10 +3455,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         }).reset_index()
     )
     
-
-    assert (
-        len(aggregated) == 
-        len(all_rep_cells_df[['cell_type','cre_id','rep_id']].drop_duplicates())),(
+    assert len(aggregated) == len(all_rep_cells_df[['cell_type','cre_id','rep_id']].drop_duplicates()),(
         "\
         Failed sanity check. Number of rows in result \
         should be the number of unique `cell_type`, `cre_id`, `rep_id` combinations\
@@ -3486,6 +3463,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         e.g. two different `mu` values for the same `cell_type`, `cre_id`, `rep_id` triple.\
         "
     )
+    
 
     ret=aggregated
 
