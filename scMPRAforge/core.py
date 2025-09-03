@@ -20,6 +20,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import json
 
+import itertools
 
 import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
@@ -146,24 +147,23 @@ def table_type(column_names):
 
 
 
-def simple_spread(cell_types:List[str],min:int,max:int,fineness:int=10):
+def simple_spread(cell_types:List[str],
+    min:int,
+    max:int,
+    fineness:int=10,
+    hypothesis_type:str="cartesian"):
     """
     Create a ground truth dataframe tiling all cell-types.
     with synthetic CREs at a variety of strengths.
 
-    Returns a tuple of (,None) 
+    Returns a tuple of (ground truth, hypothesis object) 
     (none will be replaced by hypothesis object)
 
     Useful for simulation and power calculations.
     (see readme for ground truth dataframe specification)
 
     min, max are the min & max MPRA UMI / cell values.
-
     
-    
-    Also returns a hypothesis object (UNIMPLEMENTED)
-    This has the cartesian product of CREs.
-    In general, same CRE name 
     """
   
     
@@ -220,6 +220,36 @@ def simple_spread(cell_types:List[str],min:int,max:int,fineness:int=10):
     final_ground_truth=pd.concat([even_df,fractional_tiling_df,ct_specific])
     
     hypothesis_set=None
+    if hypothesis_type=="cartesian":
+        #get all combinations of cell type & CRE
+        product=itertools.product(final_ground_truth["cre_id"].unique(), final_ground_truth["cell_type"].unique())
+        all_combo = pd.DataFrame(product, columns=["CRE", "cell_type"])
+
+        #copy into reference & comparison dfs
+        comparison = all_combo.copy()
+        comparison=comparison.rename({"CRE":"comparison_CRE","cell_type":"comparison_cell_type"},axis=1)
+        reference = all_combo.copy()
+        reference=reference.rename({"CRE":"reference_CRE","cell_type":"reference_cell_type"},axis=1)
+
+        #now we want to match reference to comparison. We want every 
+        #combination of the two that does not create duplicates
+        #No self comparisons, and a ref,comaprison is the same as comparison,ref
+
+        def combos(df1,df2):
+            assert len(df1)==len(df2)
+            #all pairs of indicies w/o dups
+            idx_pairs=list(itertools.combinations(range(len(df1)),2))
+            #subset each to just those indicies in the 
+            #tuples, then reset index in prep for mege
+            df1  = df1.iloc[[i for i, j in idx_pairs]].reset_index(drop=True)
+            df2  = df2.iloc[[j for i, j in idx_pairs]].reset_index(drop=True)
+            return pd.concat([df1, df2], axis=1)
+
+        hypothesis_set=HypothesisSet.from_dataframe(combos(comparison, reference))
+    else:
+        assert 1==2,"Unrecognized hypothesis set type!"
+
+    
     return (final_ground_truth,hypothesis_set)
 
 @unimplemented
