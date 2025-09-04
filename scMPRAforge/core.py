@@ -221,31 +221,31 @@ def simple_spread(cell_types:List[str],
     
     hypothesis_set=None
     if hypothesis_type=="cartesian":
-        #get all combinations of cell type & CRE
-        product=itertools.product(final_ground_truth["cre_id"].unique(), final_ground_truth["cell_type"].unique())
-        all_combo = pd.DataFrame(product, columns=["CRE", "cell_type"])
+        unique_CREs=final_ground_truth["cre_id"].unique()
+        unique_cell_types=final_ground_truth["cell_type"].unique()
 
-        #copy into reference & comparison dfs
-        comparison = all_combo.copy()
-        comparison=comparison.rename({"CRE":"comparison_CRE","cell_type":"comparison_cell_type"},axis=1)
-        reference = all_combo.copy()
-        reference=reference.rename({"CRE":"reference_CRE","cell_type":"reference_cell_type"},axis=1)
+        def recombinator(primary,secondary):
+            """
+            All pairs of (All pairs of primary), secondary.
+            two duplicate `secondary` entries in each element.
+            """
+            combos=itertools.combinations(primary,2)
+            return [(i,j,k,k) for (i,j) in combos for k in secondary]
 
-        #now we want to match reference to comparison. We want every 
-        #combination of the two that does not create duplicates
-        #No self comparisons, and a ref,comaprison is the same as comparison,ref
 
-        def combos(df1,df2):
-            assert len(df1)==len(df2)
-            #all pairs of indicies w/o dups
-            idx_pairs=list(itertools.combinations(range(len(df1)),2))
-            #subset each to just those indicies in the 
-            #tuples, then reset index in prep for mege
-            df1  = df1.iloc[[i for i, j in idx_pairs]].reset_index(drop=True)
-            df2  = df2.iloc[[j for i, j in idx_pairs]].reset_index(drop=True)
-            return pd.concat([df1, df2], axis=1)
+        cre_comparisons=pd.DataFrame(
+            recombinator(primary=unique_CREs,
+                secondary=unique_cell_types),
+            columns=["comparison_CRE","reference_CRE","comparison_cell_type","reference_cell_type"])
 
-        hypothesis_set=HypothesisSet.from_dataframe(combos(comparison, reference))
+        cell_type_comparisons=pd.DataFrame(
+            recombinator(primary=unique_cell_types,
+                secondary=unique_CREs),
+            columns=["comparison_cell_type","reference_cell_type","comparison_CRE","reference_CRE"])
+
+        hypothesis_set=HypothesisSet.from_dataframe(
+            pd.concat([cre_comparisons,cell_type_comparisons])
+        )
     else:
         assert 1==2,"Unrecognized hypothesis set type!"
 
