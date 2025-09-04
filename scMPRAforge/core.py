@@ -2907,7 +2907,7 @@ class ResultSet(HypothesisSet):
             self.df[c] = pd.to_numeric(self.df[c], errors="coerce")
         # flattened must be boolean-ish
         if self.df["flattened"].dtype != bool:
-            self.df["flattened"] = self.df["flattened"].astype("boolean")
+            self.df["flattened"] = self.df["flattened"].astype("bool")
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
@@ -3499,7 +3499,7 @@ class de_novo_simulation:
             hypo_test_path.mkdir()
             #for each replicate's results object
             for idx,result_obj in enumerate(self.results[key]):
-                result_obj.to_tsv(hypo_test_path/f"{idx}.tsv")
+                result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
 
     @classmethod
     def load(cls, client, path, name):
@@ -3541,10 +3541,28 @@ class de_novo_simulation:
             working=client.submit(lambda x: x, working)
             obj.simulated_scMPRA.append(working)
         
-        #results
+        #load hypothesis testing results
         obj.results={}
         
         results_root=path/"results"
+        for hypo_test_path in results_root.iterdir():
+            if not hypo_test_path.is_dir():
+                continue
+            #found a directory containing results objects. 
+            test=hypo_test_path.name
+            #get all results & sort
+            results_names=sorted([i for i in hypo_test_path.iterdir()])
+            
+            working=[]
+            for rep_results_path in results_names:
+                print(rep_results_path)
+                working.append(
+                        client.submit(
+                            lambda x: x,
+                            ResultSet.from_tsv(rep_results_path)
+                    )
+                )
+            obj.results[test]=working
         
         return obj
 
