@@ -35,8 +35,7 @@ from tensorzinb.tensorzinb import TensorZINB
 from statsmodels.stats.multitest import fdrcorrection
 from formulaic import Formula
 
-from dask.distributed import Client
-from dask.distributed import Future
+from dask.distributed import Client, Future, get_client
 
 import dask.dataframe as dd
 import dask.array as da
@@ -3381,6 +3380,7 @@ class de_novo_simulation:
         self.descriptions=[]
         self.simulated=[]
         self.simulated_scMPRA=[]
+        self.results={}
     
     def gamut(self, client):
         """
@@ -3434,6 +3434,19 @@ class de_novo_simulation:
                 )
             )
     
+    def _test_all_replicates(self,client,hypothesis_set,test):
+        """
+        Performs desired test with provided hypothesis set
+        saves to self.results dict, keyed on test type. 
+        """
+        
+        rep_results=[]
+        for test_data in self.simulated_scMPRA:
+            result=client.submit(_test_helper,test_data,test,hypothesis_set)
+            rep_results.append(result)
+        
+        self.results[test]=rep_results
+    
     _normal_vars=["simulation_replicates","transfection_reporter"]
     _df_vars=["ground_truth","library"]
     
@@ -3477,6 +3490,7 @@ class de_novo_simulation:
         for i, dat in enumerate(self.simulated_scMPRA):
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
+        #save results
 
     @classmethod
     def load(cls, client, path, name):
@@ -3518,6 +3532,9 @@ class de_novo_simulation:
             working=client.submit(lambda x: x, working)
             obj.simulated_scMPRA.append(working)
         
+        #results
+        obj.results={}#TEMPORARY
+        
         return obj
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
@@ -3533,6 +3550,22 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.set_reference_cell(reference_cell_type)
     ret.flag_synthetic()
     return ret
+
+def _test_helper(test_data,test,hypothesis_set):
+    """
+    Helper function for de_novo_simulation._test_all_replicates
+    """
+    client=get_client()
+    test_data.ortho_filter()
+    primordial=ortho()
+    primordial.criss_cross(client=client,
+                            dat=test_data)
+    primordial.extract_params(client)
+    primordial.precompute_wald(client)
+
+    tester = HypothesisTester(test)
+    results  = tester.run(hypothesis_set, primordial, client)
+    return results
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
