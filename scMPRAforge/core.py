@@ -3491,6 +3491,15 @@ class de_novo_simulation:
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
         #save results
+        results_root=path/"results"
+        results_root.mkdir()
+        #for each kypothesis test
+        for key in self.results.keys():
+            hypo_test_path=results_root/key
+            hypo_test_path.mkdir()
+            #for each replicate's results object
+            for idx,result_obj in enumerate(self.results[key]):
+                result_obj.to_tsv(hypo_test_path/f"{idx}.tsv")
 
     @classmethod
     def load(cls, client, path, name):
@@ -3533,7 +3542,9 @@ class de_novo_simulation:
             obj.simulated_scMPRA.append(working)
         
         #results
-        obj.results={}#TEMPORARY
+        obj.results={}
+        
+        results_root=path/"results"
         
         return obj
 
