@@ -44,7 +44,7 @@ import dask.array as da
 import os
 
 from enum import Enum
-from typing import List
+from typing import List, Dict, Sequence, Tuple, Optional
 
 from dataclasses import dataclass, replace
 import json
@@ -2882,6 +2882,102 @@ def make_all_by_cre_hypotheses(
     big = pd.concat(frames, ignore_index=True)
     return HypothesisSet.from_dataframe(big)
 
+def make_bootstrap_activity_hypotheses(
+    *,
+    counts: "scMPRA_data",
+    comparison_cres: "list[str] | str" = "all",
+    controls: "list[str] | str | None" = None,
+    meta: str | None = "bootstrap_activity",
+) -> "HypothesisSet":
+    """
+    Build a hypothesis set for the bootstrap activity test:
+      - ONE ROW PER CRE (not per cell type)
+      - comparison_cell_type = "ALL" (sentinel; ignored by the test)
+      - reference_cell_type = "ALL" (to satisfy the 'both present or both NA' rule)
+      - reference_CRE carries the control label(s); the test will union all unique controls
+        present in the HS when building its bundle.
+
+    Params
+    ------
+    counts : scMPRA_data
+        Your dataset.
+    comparison_cres : list[str] | "all"
+        Which CREs to test. "all" = every CRE in counts (we’ll drop any that are also controls).
+    controls : list[str] | str | None
+        Control CRE label(s). If None, we try to infer "reference" if present.
+    meta : str | None
+        Optional meta label.
+
+    Returns
+    -------
+    HypothesisSet
+    """
+    if not hasattr(counts, "data"):
+        raise TypeError("counts must be an scMPRA_data object with a `.data` DataFrame.")
+
+    df = counts.data
+    all_cres = sorted(map(str, df["cre_id"].unique().tolist()))
+
+    # Controls: explicit -> as provided; else try 'reference'
+    if controls is None:
+        controls_list = ["reference"] if "reference" in all_cres else []
+        if not controls_list:
+            raise ValueError("controls not provided and 'reference' not present in counts.")
+    elif isinstance(controls, str):
+        controls_list = [controls]
+    else:
+        controls_list = list(map(str, controls))
+
+    # Comparison CREs
+    if comparison_cres == "all":
+        comp = [c for c in all_cres if c not in set(controls_list)]
+    else:
+        comp = [str(c) for c in comparison_cres if str(c) in all_cres and str(c) not in set(controls_list)]
+    if not comp:
+        raise ValueError("No comparison CREs remain after excluding controls.")
+
+    # Build rows: one row per CRE; put the controls into reference_CRE.
+    # It's okay if multiple distinct control labels appear across rows; the bundle
+    # will union the unique set from reference_CRE.
+    rows = []
+    for cre in comp:
+        for ctrl in controls_list:
+            rows.append(
+                {
+                    "comparison_CRE": cre,
+                    "comparison_cell_type": "MAX",
+                    "reference_CRE": ctrl,
+                    "reference_cell_type": "MAX",
+                    "meta": meta,
+                }
+            )
+
+    return HypothesisSet.from_dataframe(pd.DataFrame(rows))
+
+
+def coerce_bootstrap_activity_from_hs(hs: "HypothesisSet") -> "HypothesisSet":
+    """
+    If you already have a hypothesis set (e.g., from make_all_by_cre_hypotheses),
+    collapse it to the bootstrap-activity shape:
+      - de-duplicate to one row per comparison_CRE
+      - set comparison_cell_type = reference_cell_type = "ALL"
+      - keep reference_CRE as-is (we’ll union controls later)
+    """
+    df = hs.to_dataframe().copy()
+
+    # prefer rows that already have a reference_CRE
+    df = df.dropna(subset=["comparison_CRE"])
+    # de-duplicate by CRE, keeping first
+    df = df.sort_index().drop_duplicates(subset=["comparison_CRE"], keep="first")
+
+    df["comparison_cell_type"] = "MAX"
+    df["reference_cell_type"] = "MAX"
+
+    # If reference_CRE is entirely NA here, raise (we need it to infer controls)
+    if df["reference_CRE"].isna().all():
+        raise ValueError("Cannot infer controls: 'reference_CRE' is NA for all rows in the provided HS.")
+
+    return HypothesisSet.from_dataframe(df[["comparison_CRE", "comparison_cell_type", "reference_CRE", "reference_cell_type", "meta"]])
 class ResultSet(HypothesisSet):
     """
     Extends HypothesisSet with result columns:
@@ -3253,11 +3349,453 @@ def _mwu_row_fn(
 
     return {"test_statistic": float(stat), "p_value": float(p), "fold_change": float(fc), "flattened": False, 'ref_mean': s0,'comp_mean':s1}
 
+# ---- Bootstrap activity measurement ------------------------------------------
+# ---- BOOTSTRAP ACTIVITY (empirical p vs controls) ----------------------------
+# ==============================
+# Bootstrap flavor (activity)
+# ==============================
+# --- bootstrap support structs ---
+
+@dataclass
+class _BootRepGroupCT:
+    # one biological replicate worth of data
+    cell_type:  np.ndarray              # per-row cell_type (string)
+    norm_umis:  np.ndarray              # per-row normalized_umis_mpra_bc (float)
+    idx_by_cre_ct: dict[tuple[str,str], np.ndarray]   # (cre, ct) -> row indices
+    idx_ctrl_by_ct: dict[str, np.ndarray]             # ct -> union of control rows
+    n_int_by_cre_ct: dict[tuple[str,str], int]        # observed #integrations
+    median_int_nonctrl: int | None
+
+@dataclass
+class _BootBundleCT:
+    by_rep: dict[str, _BootRepGroupCT]
+    control_cres: tuple[str, ...]
+    n_int_strategy: str                 # "as_observed" | "median_non_reference"
+# ---- worker-side helpers ----
+def _bootstrap_build_bundle(
+    hypotheses: "HypothesisSet",
+    models_or_counts,
+    client=None,
+    *,
+    n_bootstraps: int = 10_000,
+    n_int_strategy: str = "match_cre",           # {"match_cre", "median_controls"}
+    pseudocount: float = 1e-8,
+    rng_seed: int | None = None,
+    rep_to_biol: "dict[str,str] | None" = None,  # optional mapping if you want to elevate rep_id -> biol_rep
+    **kw,
+):
+    """
+    Build a compact bundle with per-integration values we can ship once to workers.
+
+    Safeguards:
+      - Infers control CREs from hypotheses.reference_CRE (non-null uniques).
+      - Falls back to 'rep_id' when 'biol_rep' is absent (or allows a mapping).
+      - Chooses metric column automatically.
+      - Drops any controls absent from the counts (warns).
+      - Filters to only CREs referenced by the hypothesis set (comparison + control).
+    """
+    # ---- Validate counts object ----
+    counts = models_or_counts
+    if not hasattr(counts, "data"):
+        raise TypeError("bootstrap_activity expects a scMPRA_data-like object with a `.data` DataFrame.")
+
+    df = counts.data
+    needed = {"cell_type", "cre_id", "rep_id", "cell_bc", "transfection_bc"}
+    missing = sorted(needed - set(df.columns))
+    if missing:
+        raise ValueError(f"Counts table is missing required columns: {missing}")
+
+    # ---- Choose metric column ----
+    if "normalized_umis_mpra_bc" in df.columns:
+        metric_col = "normalized_umis_mpra_bc"
+    elif "umis_mpra_bc" in df.columns:
+        metric_col = "umis_mpra_bc"
+        warnings.warn(
+            "[bootstrap_activity] Using raw 'umis_mpra_bc' because "
+            "'normalized_umis_mpra_bc' was not found."
+        )
+    else:
+        raise ValueError("Neither 'normalized_umis_mpra_bc' nor 'umis_mpra_bc' present in counts table.")
+
+    # ---- Derive/ensure biol_rep ----
+    if "biol_rep" in df.columns:
+        biol = df["biol_rep"].astype(str)
+    elif rep_to_biol is not None:
+        # Mapping provided
+        biol = df["rep_id"].astype(str).map(rep_to_biol).fillna(df["rep_id"].astype(str))
+    else:
+        # Fall back: treat rep_id as biological replicate
+        biol = df["rep_id"].astype(str)
+    df = df.assign(biol_rep=biol)
+
+    # ---- Controls from hypotheses ----
+    hdf = hypotheses.to_dataframe()
+    controls_from_hs = sorted(set(hdf["reference_CRE"].dropna().astype(str).unique()))
+    if not controls_from_hs:
+        raise ValueError("No control CREs found in hypothesis set (column 'reference_CRE').")
+
+    # ---- Comparison CREs present in HS ----
+    compare_cres = sorted(set(hdf["comparison_CRE"].dropna().astype(str).unique()))
+    all_wanted_cres = set(controls_from_hs).union(compare_cres)
+
+    # ---- Filter counts to only needed CREs (comp + controls) ----
+    df = df[df["cre_id"].astype(str).isin(all_wanted_cres)].copy()
+    if df.empty:
+        raise ValueError("After filtering to hypothesis CREs + controls, no rows remain in counts.")
+
+    # ---- Validate controls presence ----
+    present_controls = sorted(set(df.loc[df["cre_id"].astype(str).isin(controls_from_hs), "cre_id"].astype(str).unique()))
+    missing_controls = sorted(set(controls_from_hs) - set(present_controls))
+    if missing_controls:
+        warnings.warn(
+            f"[bootstrap_activity] The following control CREs are not present in counts and will be ignored: {missing_controls}"
+        )
+    if not present_controls:
+        raise ValueError("[bootstrap_activity] No control CREs from the hypothesis set are present in counts.")
+
+    # ---- Build compact per-integration table ----
+    # Integration unit = unique (cell_bc, transfection_bc) within (biol_rep, cell_type, cre_id)
+    # Value for each integration = mean(metric_col) across those rows (normally 1:1, but defensively aggregate)
+    keys = ["biol_rep", "cell_type", "cre_id", "cell_bc", "transfection_bc"]
+    g = (
+        df.assign(_val=df[metric_col].astype(float))
+          .groupby(keys, as_index=False)["_val"].mean()
+          .rename(columns={"_val": "value"})
+    )
+    # We only keep the minimal table needed for worker-side bootstraps
+    integrations = g  # columns: biol_rep, cell_type, cre_id, cell_bc, transfection_bc, value
+
+    # ---- Bundle ----
+    bundle = {
+        "integrations": integrations,
+        "metric_col": metric_col,
+        "controls": present_controls,         # control labels (strings)
+        "n_bootstraps": int(n_bootstraps),
+        "n_int_strategy": str(n_int_strategy),
+        "pseudocount": float(pseudocount),
+        "rng_seed": None if rng_seed is None else int(rng_seed),
+    }
+    return bundle
+
+def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
+    """
+    Bootstrap activity test.
+    If max_over_celltypes=True (default), reproduces the old pipeline behavior:
+      - for each biological replicate, resample integrations for the CRE-of-interest
+        and for controls across ALL cell types,
+      - within each bootstrap draw, compute per-CT means and take the MAX across CTs,
+      - compare the CRE bootstrap distribution of MAX(CT mean) to the controls'.
+    Returns:
+      test_statistic = median of CRE bootstrap MAX(CT mean)
+      p_value        = empirical two-sided p (|null| >= |obs|)
+      fold_change    = median(CRE bootstrap MAX) / median(Control bootstrap MAX) (+ε)
+    """
+
+
+    # options / defaults
+    B        = int(bundle["n_bootstraps"])
+    strategy = bundle["n_int_strategy"]          # "match_cre" or "median_controls" (kept for compat)
+    pc       = float(bundle["pseudocount"])
+    seed     = bundle.get("rng_seed", None)
+    max_over_ct = kw.get("max_over_celltypes", True)
+
+    comp_cre = str(row["comparison_CRE"])
+
+    # Early neutral return for control-vs-control
+    if comp_cre.lower() == "reference":
+        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+
+    integ    = bundle["integrations"]             # columns: biol_rep, cell_type, cre_id, cell_bc, transfection_bc, value
+    controls = set(bundle["controls"])
+
+    # We ignore comparison_cell_type when max_over_celltypes=True (match old behavior)
+    # If user explicitly disabled max_over_celltypes, we fall back to your previous per-CT logic.
+    if not max_over_ct:
+        # fall back to your prior per-CT implementation (the version you posted last)
+        return _bootstrap_row_fn_per_ct(row, bundle, **kw)  # you can keep your previous function under this name
+
+    # Prepare RNG stable per CRE
+    rng = np.random.default_rng(None if seed is None else (hash(("BOOTMAX", seed, comp_cre)) % (2**32 - 1)))
+
+    # Biological replicates present for this CRE or controls
+    biols = sorted(integ["biol_rep"].astype(str).unique().tolist())
+    if not biols:
+        warnings.warn("[bootstrap_activity] No biological replicates present.")
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # Collect bootstrap MAX(CT mean) across reps (we’ll average across reps per draw)
+    A_boot_max_per_rep = []   # list of arrays, each shape (B,)
+    C_boot_max_per_rep = []   # list of arrays, each shape (B,)
+    NULL_boot_diffs_per_rep = []
+
+    have_any = False
+
+    for bi in biols:
+        sub = integ.loc[integ["biol_rep"] == bi]
+        A_df = sub.loc[sub["cre_id"] == comp_cre, ["cell_type", "value"]]
+        C_df = sub.loc[sub["cre_id"].isin(controls), ["cell_type", "value"]]
+
+        if A_df.empty or C_df.empty:
+            continue
+
+        have_any = True
+
+        # encode CTs as codes for fast grouping
+        ct_levels = pd.Categorical(pd.concat([A_df["cell_type"], C_df["cell_type"]]).astype(str))
+        # We must re-map separately to keep consistent codes for both A and C
+        # Create a code map on the union levels
+        ct_union = ct_levels.categories
+        ct_map = {ct: i for i, ct in enumerate(ct_union)}
+
+        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        A_v  = A_df["value"].to_numpy(dtype=float)
+        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        C_v  = C_df["value"].to_numpy(dtype=float)
+
+        nA = A_v.size
+        nC_all = C_v.size
+        if nA == 0 or nC_all == 0:
+            continue
+
+        # choose nC per strategy
+        if strategy in ("match_cre", "observed"):
+            nC = nA
+        elif strategy in ("median_controls", "median_non_reference"):
+            nC = int(max(1, np.median([nC_all])))
+        else:
+            warnings.warn(f"[bootstrap_activity] Unknown n_int_strategy '{strategy}', using 'match_cre'.")
+            nC = nA
+
+        # helper to compute MAX over CT means for a bootstrap sample
+        def max_ct_mean(values, ct_codes, idx):
+            # values[idx] are the resampled per-integration values
+            vv  = values[idx]
+            cc  = ct_codes[idx]
+            # accumulate sum and count per CT
+            k   = len(ct_union)
+            sums   = np.bincount(cc, weights=vv, minlength=k)
+            counts = np.bincount(cc, minlength=k)
+            # avoid div0: set means only where count>0
+            means = np.zeros(k, dtype=float)
+            nz = counts > 0
+            means[nz] = sums[nz] / counts[nz]
+            return means.max() if nz.any() else 0.0
+
+        # Pre-sample indices: (B, nA) and (B, nC)
+        A_idx = rng.integers(0, nA, size=(B, nA), endpoint=False)
+        C_idx = rng.integers(0, nC_all, size=(B, nC), endpoint=False)
+
+        # Compute bootstrap MAX(CT mean) for CRE and Controls
+        A_max = np.empty(B, dtype=float)
+        C_max = np.empty(B, dtype=float)
+        for b in range(B):
+            A_max[b] = max_ct_mean(A_v, A_ct, A_idx[b])
+            C_max[b] = max_ct_mean(C_v, C_ct, C_idx[b])
+
+        A_boot_max_per_rep.append(A_max)
+        C_boot_max_per_rep.append(C_max)
+
+                # NEW ⬇︎ Null bootstrap: pool A and C, resample two groups of sizes (nA, nC)
+        P_v  = np.concatenate([A_v, C_v])
+        P_ct = np.concatenate([A_ct, C_ct])
+        P_n  = P_v.size
+        P_idx_A = rng.integers(0, P_n, size=(B, nA), endpoint=False)
+        P_idx_C = rng.integers(0, P_n, size=(B, nC), endpoint=False)
+
+        null_diffs = np.empty(B, dtype=float)
+        for b in range(B):
+            maxA = max_ct_mean(P_v, P_ct, P_idx_A[b])
+            maxC = max_ct_mean(P_v, P_ct, P_idx_C[b])
+            null_diffs[b] = maxA - maxC
+        NULL_boot_diffs_per_rep.append(null_diffs)
+
+    if not have_any:
+        warnings.warn(f"[bootstrap_activity] No usable integrations for CRE='{comp_cre}' across biological replicates.")
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # Combine across reps: average the MAX(CT mean) across reps per bootstrap draw
+    A_mat = np.vstack(A_boot_max_per_rep)      # (R, B)
+    C_mat = np.vstack(C_boot_max_per_rep)      # (R, B)
+    A_bar = A_mat.mean(axis=0)                 # (B,)
+    C_bar = C_mat.mean(axis=0)                 # (B,)
+
+    # Observed difference = medians of CRE and Control boot max (matches your summary centering)
+    obs_diff = float(np.median(A_bar) - np.median(C_bar))
+    
+    # NEW ⬇︎ Build combined NULL distribution (average per-rep null diffs across reps)
+    NULL_mat = np.vstack(NULL_boot_diffs_per_rep)  # (R, B)
+    NULL_bar = NULL_mat.mean(axis=0)               # (B,)
+
+    # NEW ⬇︎ Two-sided empirical p-value against null
+    p = float((np.sum(np.abs(NULL_bar) >= np.abs(obs_diff)) + 1) / (NULL_bar.size + 1))
+
+    # Reportables (matching your old summaries)
+    test_statistic = float(np.median(A_bar))                       # q50 of CRE bootstrap max across CTs
+    fold_change    = float((np.median(A_bar) + pc) / (np.median(C_bar) + pc))
+
+    return {
+        "test_statistic": test_statistic,
+        "p_value": p,
+        "fold_change": fold_change,
+        "flattened": False,
+    }
+
+def _bootstrap_row_fn_per_ct(row: dict, bundle: dict, **kw):
+    """
+    Evaluate one hypothesis row via bootstrap resampling.
+
+    Interpretation:
+      - We assume the hypothesis fixes a (comparison_cell_type, comparison_CRE),
+        and its `reference_CRE` in the hypotheses are the controls (already folded
+        into the bundle).
+      - For each biological replicate present, we:
+          * determine the # of integrations for the CRE-of-interest (N_A)
+          * determine the control sample size (N_C), either N_A ("match_cre") or
+            median(#integrations) among control integrations for that replicate
+          * draw with replacement N_A from CRE-of-interest integrations and N_C
+            from pooled controls (both within the same cell_type & biol_rep)
+          * compute mean difference (CRE - Control)
+        We average the mean differences across replicates to obtain a combined
+        statistic. Repeating this B times yields a bootstrap distribution; the
+        empirical two-sided p-value is based on |diff| >= |obs_diff|.
+      - Fold change is computed on the replicate-averaged means
+        with a small pseudocount.
+
+    Safeguards return NaNs with clear conditions:
+      - missing cell_type or CRE rows
+      - CRE is literally the control label (returns neutral stats)
+      - no control integrations present for that cell_type
+      - zero integration counts in either group
+    """
+    try:
+        comp_ct  = str(row["comparison_cell_type"])
+        comp_cre = str(row["comparison_CRE"])
+
+        # Early neutral return if user asked for the control vs control
+        if comp_cre.lower() == "reference":
+            return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+
+        integ = bundle["integrations"]
+        controls = set(bundle["controls"])
+        B = int(bundle["n_bootstraps"])
+        strategy = bundle["n_int_strategy"]
+        pc = float(bundle["pseudocount"])
+        seed = bundle.get("rng_seed", None)
+
+        # Subset to this cell type once
+        sub_ct = integ.loc[integ["cell_type"] == comp_ct]
+        if sub_ct.empty:
+            warnings.warn(f"[bootstrap_activity] No integrations for cell_type='{comp_ct}'.")
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        # Identify biological replicates present for this CT and CRE/control
+        biols = sorted(sub_ct["biol_rep"].astype(str).unique().tolist())
+        if not biols:
+            warnings.warn(f"[bootstrap_activity] No biological replicates found after subsetting to cell_type='{comp_ct}'.")
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        # Make RNG (per-row) stable but different if seed provided
+        rng = np.random.default_rng(None if seed is None else (hash((seed, comp_ct, comp_cre)) % (2**32 - 1)))
+
+        # For each biol_rep, prepare arrays for bootstrapping
+        per_rep_obs_diff = []
+        per_rep_boot_diffs = []
+        per_rep_A_means    = []   # NEW: store bootstrap CRE means per rep (shape: (B,))
+        per_rep_C_means    = []   # NEW: store bootstrap Control means per rep (shape: (B,))
+
+        have_any = False
+
+        for bi in biols:
+            sub = sub_ct.loc[sub_ct["biol_rep"] == bi]
+            A = sub.loc[sub["cre_id"] == comp_cre, "value"].to_numpy(dtype=float)
+            C = sub.loc[sub["cre_id"].isin(controls), "value"].to_numpy(dtype=float)
+           
+            if A.size == 0 or C.size == 0:
+                            continue
+            have_any = True
+
+            # choose N for CRE and Controls
+            nA = A.size
+            if strategy in ("match_cre", "observed"):
+                nC = nA
+            elif strategy in ("median_controls", "median_non_reference"):
+                nC = int(max(1, np.median([C.size])))
+            else:
+                warnings.warn(f"[bootstrap_activity] Unknown n_int_strategy '{strategy}', using 'match_cre'.")
+                nC = nA
+            
+            # Observed per-rep mean difference
+            obs_diff_rep = (A.mean() - C.mean())
+            per_rep_obs_diff.append(obs_diff_rep)
+
+            # Bootstrap: sample means for each group and difference
+            # Pre-sample indices for speed
+            # A_boot: shape (B, nA), C_boot: shape (B, nC)
+            A_idx = rng.integers(0, nA, size=(B, nA), endpoint=False)
+            C_idx = rng.integers(0, C.size, size=(B, nC), endpoint=False)
+            A_means = A[A_idx].mean(axis=1)
+            C_means = C[C_idx].mean(axis=1)
+            diffs = A_means - C_means   # shape (B,)
+            per_rep_boot_diffs.append(diffs)
+            per_rep_A_means.append(A_means)  # NEW
+            per_rep_C_means.append(C_means) 
+        if not have_any:
+            # nothing to compare for this row
+            warnings.warn(
+                f"[bootstrap_activity] No usable integrations for CRE='{comp_cre}' at cell_type='{comp_ct}' "
+                "(missing CRE or control integrations across biological replicates)."
+            )
+            return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+        # Combine across biological reps
+        # Observed = mean of per-rep observed differences
+        obs_diff = float(np.mean(per_rep_obs_diff))
+
+        # Combined bootstrap distribution = average per bootstrap across reps
+        # (stack to array (R, B) then take mean over axis=0 -> (B,))
+        boot_mat = np.vstack(per_rep_boot_diffs)   # (R, B)
+        boot_combined = boot_mat.mean(axis=0)      # (B,)
+
+        # Empirical two-sided p-value
+        p = float((np.sum(np.abs(boot_combined) >= np.abs(obs_diff)) + 1) / (boot_combined.size + 1))
+
+        # NEW: combine bootstrap CRE/Control means across reps (average per draw),
+        # then take medians for the summary stat and FC.
+        A_boot_mat = np.vstack(per_rep_A_means)         # (R, B)
+        C_boot_mat = np.vstack(per_rep_C_means)         # (R, B)
+        A_bar_boot = A_boot_mat.mean(axis=0)            # (B,)
+        C_bar_boot = C_boot_mat.mean(axis=0)            # (B,)
+
+        test_statistic = float(np.median(A_bar_boot)) if A_bar_boot.size else np.nan
+        if A_bar_boot.size and C_bar_boot.size:
+            fold_change = float((np.median(A_bar_boot) + pc) / (np.median(C_bar_boot) + pc))
+        else:
+            fold_change = np.nan
+
+        return {
+            "test_statistic": test_statistic,
+            "p_value": p,
+            "fold_change": fold_change,
+            "flattened": False,
+        }
+
+    except Exception as e:
+        warnings.warn(f"[bootstrap_activity] row failed with error: {e}")
+        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+
 # ---- The tiny switchboard ----------------------------------------------------
 #switchboard to hole types of hypothesis tests that have been implemented so far
 TESTS = {
     "wald": {"make_bundle": _wald_make_bundle, "row_fn": _wald_row_fn, "defaults": {}},
     "mwu":  {"make_bundle": _mwu_make_bundle,  "row_fn": _mwu_row_fn,  "defaults": {"method": "auto", "alternative": "two-sided"}},
+    "bootstrap_activity": {"make_bundle": _bootstrap_build_bundle, "row_fn": _bootstrap_row_fn, "defaults": {
+            "n_int_strategy": "median_non_reference",   # or "observed"
+            "n_bootstraps": 10_000,
+            "rng_seed": 42,
+            "max_over_celltypes": True,
+        }
+        },
 }
 
 class HypothesisTester:
@@ -3654,9 +4192,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     
     return dd.from_pandas(ret)
 
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
     """
