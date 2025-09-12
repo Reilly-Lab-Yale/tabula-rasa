@@ -3555,7 +3555,6 @@ class de_novo_simulation:
             
             working=[]
             for rep_results_path in results_names:
-                print(rep_results_path)
                 working.append(
                         client.submit(
                             lambda x: x,
