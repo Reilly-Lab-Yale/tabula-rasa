@@ -358,3 +358,37 @@ def one_versus_all(
         "comparison_CRE","comparison_cell_type","reference_CRE","reference_cell_type","meta"
     ])
 
+import math
+def alpha_for_expected_groups(n, K_target):
+    """
+    Helper for sample_crp_groups
+    Choose alpha so E[K_n] ~= K_target using H_n ≈ log n + gamma.
+    Technically only valid for large n, but good enough for our purposes
+    """
+    gamma = 0.5772156649015329
+    return max(1e-12, K_target / (math.log(n) + gamma))
+
+def sample_crp_groups(n, alpha, rng=None):
+    """
+    Chinese Restaurant Process partition of n items.
+    Returns: np.array of length n with group ids in 0..K-1.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    groups = np.full(n, -1, dtype=int)
+    # Track current group sizes
+    sizes = []  # list of counts per existing group
+    for i in range(n):
+        # Prob of joining existing group k is sizes[k] / (alpha + i)
+        # Prob of creating new group is alpha / (alpha + i)
+        total = alpha + i
+        if len(sizes) == 0 or rng.random() < alpha / total:
+            # new group
+            sizes.append(1)
+            groups[i] = len(sizes) - 1
+        else:
+            # join existing: pick proportional to sizes
+            k = rng.choice(len(sizes), p=np.array(sizes) / (total - alpha))
+            sizes[k] += 1
+            groups[i] = k
+    return groups

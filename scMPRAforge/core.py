@@ -65,6 +65,7 @@ from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
+from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
@@ -154,6 +155,115 @@ def skew_spread():
     """
     pass
 
+def recombinator(primary,secondary):
+    """
+    All pairs of (All pairs of primary), secondary.
+    two duplicate `secondary` entries in each element.
+    """
+    combos=itertools.combinations(primary,2)
+    return [(i,j,k,k) for (i,j) in combos for k in secondary]
+
+def activity_spread(cell_types:List[str],
+    minimum:float,
+    maximum:float,
+    minp_value:float,
+    total:int,
+    frac_active:int,
+    ct_specificity:float):
+    """
+    Creates a ground-truth dataframe of an scMPRA experiment
+    with a controllable number of active CREs.
+    (see readme for ground truth dataframe specification)
+    Assumes experiment is interested in activity vs a known negative control,
+    not skew. 
+    
+    This is useful to create datasets with a balance 
+    of active and inactive CREs which roughly
+    approx. real libraries. 
+
+    `total` is the total number of CREs to create.
+    `frac_active` is the fraction of the library that is active elements
+    `ct_specificity` is how much cell-type specificity there is. Its 
+    how many different values a given CRE will take across different cell-types. So 
+    specificity=2 implies that, on average, there will be two different 
+    means for each CRE across cell-types. 
+    """
+    ### first, we create the reference minP control ###
+    reference=pd.DataFrame({"cell_type":cell_types})
+    reference["true_mean"]=minp_value
+    reference["cre_id"]="reference"
+
+    ### second, we create a DF of all the inactive CREs. ###
+    total_inactive =int(total*(1-frac_active))
+    inactive_names=[f"inactive_{i}"for i in range(0,total_inactive)]
+    inactive_tuples=[i for i in itertools.product(inactive_names,cell_types)]
+    inactive=pd.DataFrame(inactive_tuples,columns=["cre_id","cell_type"])
+    inactive["true_mean"]=minp_value
+    
+    ### third, we create a df of active elements. ###
+    total_active=int(total*frac_active)
+    active_names=[f"active_{i}"for i in range(0,total_active)]
+    active=pd.DataFrame(active_names,columns=["cre_id"])
+    active["cell_types"]=[cell_types for _ in range(len(active))]
+    #we have a list of all cell types in each.
+    #now we want to randomly decide which cell_types are the same
+    #and which are different. 
+    alpha = alpha_for_expected_groups(n=len(cell_types), K_target=ct_specificity)
+    def _apply_crp(row):
+        groups = sample_crp_groups(n=len(cell_types), alpha=alpha)
+        return groups
+
+    active["groups"]=active.apply(_apply_crp,axis=1)
+
+    #calculate and print the percent of active CREs with any cell-type specificity
+    def _different_groups(row):
+        return len(set(row["groups"]))==1
+    is_cell_type_specific=active.apply(_different_groups,axis=1)
+    logger.info(f"{sum(is_cell_type_specific)/len(is_cell_type_specific)*100}% of active elements are not cell-type specific.")
+    
+    #generate the actual means for each group for each CRE. 
+    def _generate_means(row):
+        uniq_groups=list(set(row["groups"]))
+        means=np.random.uniform(low=minimum,
+            high=maximum,
+            size=len(uniq_groups)
+        )
+        means=means.tolist()
+        means_dict=dict(zip(uniq_groups,means))
+        means_rep=[means_dict[i] for i in row["groups"]]
+        return means_rep
+
+    active["means"]=active.apply(_generate_means,axis=1)
+
+    #dont need group ID anymore
+    active=active.drop(columns="groups")
+
+    #explode out means
+    active=active.explode(["cell_types","means"])
+    #rename to singular
+    active=active.rename({"cell_types":"cell_type","means":"true_mean"},axis=1)
+    
+    # create final df!
+    final_gt=pd.concat([reference,inactive,active])
+
+    ### create hypothesis set ###
+    #first, we want every CRE vs reference
+    unique_CREs=final_gt["cre_id"].unique()
+    idx=np.where(unique_CREs=="reference")
+    unique_CREs=np.delete(unique_CREs,idx)
+    all_cre_vs_ref=pd.DataFrame([(i,"reference",c,c) for i in unique_CREs for c in cell_types],
+    columns=["comparison_CRE","reference_CRE","comparison_cell_type","reference_cell_type"])
+
+
+    #now we want every cell type vs all other cell-types
+    ct_tests=pd.DataFrame(recombinator(cell_types,unique_CREs),
+    columns=["reference_cell_type","comparison_cell_type","comparison_CRE","reference_CRE"])
+
+    hypothesis_set=HypothesisSet.from_dataframe(pd.concat([all_cre_vs_ref,ct_tests]))
+    
+
+    return (final_gt, hypothesis_set)
+
 def simple_spread(cell_types:List[str],
     min:float,
     max:float,
@@ -230,14 +340,6 @@ def simple_spread(cell_types:List[str],
     if hypothesis_type=="cartesian":
         unique_CREs=final_ground_truth["cre_id"].unique()
         unique_cell_types=final_ground_truth["cell_type"].unique()
-
-        def recombinator(primary,secondary):
-            """
-            All pairs of (All pairs of primary), secondary.
-            two duplicate `secondary` entries in each element.
-            """
-            combos=itertools.combinations(primary,2)
-            return [(i,j,k,k) for (i,j) in combos for k in secondary]
 
 
         cre_comparisons=pd.DataFrame(
