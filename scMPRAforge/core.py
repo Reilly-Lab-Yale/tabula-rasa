@@ -145,24 +145,32 @@ def table_type(column_names):
     return ret if matches == 1 else 'malformed'
 
 
+@unimplemented
+def skew_spread():
+    """
+    Creates a ground-truth dataframe of an scMPRA experiment
+    that is meant to test skew
+    (see readme for ground truth dataframe specification)
+    """
+    pass
 
 def simple_spread(cell_types:List[str],
-    min:int,
-    max:int,
+    min:float,
+    max:float,
     fineness:int=10,
     hypothesis_type:str="cartesian"):
     """
+    TODO: remove hypothesis_type & make obligate cartesian.
+    TODO: extract cartesian code to its own function.
     Create a ground truth dataframe tiling all cell-types.
     with synthetic CREs at a variety of strengths.
 
     Returns a tuple of (ground truth, hypothesis object) 
-    (none will be replaced by hypothesis object)
 
     Useful for simulation and power calculations.
     (see readme for ground truth dataframe specification)
 
     min, max are the min & max MPRA UMI / cell values.
-    
     """
   
     
