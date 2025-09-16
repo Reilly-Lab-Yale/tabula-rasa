@@ -68,7 +68,7 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
 
-MIN_PTS=3
+MIN_PTS=6
 PARTITION_SIZE_MB=50
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
@@ -3551,9 +3551,13 @@ class de_novo_simulation:
         """
         
         rep_results=[]
-        for test_data in self.simulated_scMPRA:
-            result=client.submit(_test_helper,test_data,test,hypothesis_set)
-            rep_results.append(result)
+        
+        #breaking to only test 1x 
+        result=client.submit(_test_helper,self.simulated_scMPRA[0],test,hypothesis_set)
+        rep_results.append(result)
+        #for test_data in self.simulated_scMPRA:
+        #    result=client.submit(_test_helper,test_data,test,hypothesis_set)
+        #    rep_results.append(result)
         
         self.results[test]=rep_results
     
