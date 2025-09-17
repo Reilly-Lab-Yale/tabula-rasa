@@ -138,7 +138,7 @@ A result table is the same as a hypothesis table with the following additional c
 | bh_p           | float | benjamini hochberg corrected p-value                   | T          |
 | flattened      | bool  | whether the CRE was flattened due to insufficient UMIs | T          |
 
-- NOTE: for tiny pvalues where floating point sizes require rounding p:
+- NOTE: for tiny pvalues where floating point sizes require rounding p, the exact value of this epsilon will depend on the computer hardware/architecture that you are operating on. 
   ```
    eps = np.finfo(float).tiny  # ~1e-308
    p = max(1.0 - chi2.cdf(z*z, 1), eps)
