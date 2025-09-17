@@ -138,6 +138,12 @@ A result table is the same as a hypothesis table with the following additional c
 | bh_p           | float | benjamini hochberg corrected p-value                   | T          |
 | flattened      | bool  | whether the CRE was flattened due to insufficient UMIs | T          |
 
+- NOTE: for tiny pvalues where floating point sizes require rounding p:
+  ```
+   eps = np.finfo(float).tiny  # ~1e-308
+   p = max(1.0 - chi2.cdf(z*z, 1), eps)
+  ```
+
 # Ground-truth formatting
 These tables store made-up ground truth, for the purposes of simulation. 
 | Column name | Type  | Description                           |
