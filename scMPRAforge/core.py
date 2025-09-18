@@ -4087,22 +4087,21 @@ class de_novo_simulation:
                 )
             )
     
+    def _test_replicate(self,client,hypothesis_set,test,index):
+        result=client.submit(_test_helper,self.simulated_scMPRA[index],test,hypothesis_set)
+        lst = self.results.setdefault(test, [])
+        if index >= len(lst):
+            lst.extend([None] * (index + 1 - len(lst)))
+        lst[index] = result
+    
     def _test_all_replicates(self,client,hypothesis_set,test):
         """
         Performs desired test with provided hypothesis set
         saves to self.results dict, keyed on test type. 
         """
-        
-        rep_results=[]
-        
-        #breaking to only test 1x 
-        result=client.submit(_test_helper,self.simulated_scMPRA[0],test,hypothesis_set)
-        rep_results.append(result)
-        #for test_data in self.simulated_scMPRA:
-        #    result=client.submit(_test_helper,test_data,test,hypothesis_set)
-        #    rep_results.append(result)
-        
-        self.results[test]=rep_results
+        for i in range(self.simulated_scMPRA):
+            self._test_replicate(client,hypothesis_set,test,index=i)        
+
     
     _normal_vars=["simulation_replicates","transfection_reporter"]
     _df_vars=["ground_truth","library"]
@@ -4241,16 +4240,23 @@ def _test_helper(test_data,test,hypothesis_set):
     Helper function for de_novo_simulation._test_all_replicates
     """
     client=get_client()
-    test_data.ortho_filter()
-    primordial=ortho()
-    primordial.criss_cross(client=client,
-                            dat=test_data)
-    primordial.extract_params(client)
-    primordial.precompute_wald(client)
+    if test=="wald":
+        test_data.ortho_filter()
+        primordial=ortho()
+        primordial.criss_cross(client=client,
+                                dat=test_data)
+        primordial.extract_params(client)
+        primordial.precompute_wald(client)
 
-    tester = HypothesisTester(test)
-    results  = tester.run(hypothesis_set, primordial, client)
-    return results
+        tester = HypothesisTester(test)
+        results  = tester.run(hypothesis_set, primordial, client)
+        return results
+    elif test=="mwu":
+        tester = HypothesisTester(test)
+        results  = tester.run(hypothesis_set, test_data, client)
+        return results
+    else:
+        assert 1==2; "Test not yet implemented yet in this context."
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
