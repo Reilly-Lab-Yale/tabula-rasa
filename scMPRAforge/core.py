@@ -1164,8 +1164,13 @@ def _smart_matrix(data,split):
 
     zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    
     y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
     Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
+
+    X = X.astype(pd.SparseDtype("int", fill_value=0))
+
+    
     return {
         'nb_regressors':X,
         'regressand':y,
