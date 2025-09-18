@@ -91,7 +91,8 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     return ret
 
 def undo_one_hot_encoding(df, reference_label="reference"):
-    """Should work for Dask and pandas DataFrames. Converts one-hot back to categorical.
+    """
+    Should work for Dask and pandas DataFrames, sparse & dense. Converts one-hot back to categorical.
     Rows with all zeros (intercept-only rows) are labeled with `reference_label`.
     """
     df = df.copy()
@@ -110,23 +111,26 @@ def undo_one_hot_encoding(df, reference_label="reference"):
         cols, levels = zip(*cols_levels)
         subdf = df[list(cols)]
 
+        # Sparse-friendly row sum
         row_sums = subdf.sum(axis=1)
 
-        # Check for multi-hot rows (invalid)
-        if (row_sums > 1).any():
+        # Check for multi-hot rows - convert to dense only for validation
+        row_sums_check = row_sums.values if hasattr(row_sums, 'sparse') else row_sums
+        if (row_sums_check > 1).any():
             raise ValueError(
                 f"Multi-hot encoding detected in variable '{var}'. Each row must have only one active level or be intercept-only."
             )
 
-        # Determine the level for each row
-        inferred = subdf.idxmax(axis=1)
-        level_map = {col: level for col, level in cols_levels}
-        result = inferred.map(level_map)
+        # Initialize result with reference label
+        result = pd.Series([reference_label] * len(subdf), index=subdf.index)
+        
+        # Iterate through columns and assign levels where active
+        # This avoids idxmax which can be expensive for sparse data
+        for col, level in cols_levels:
+            active_mask = subdf[col] > 0  # Works efficiently with sparse data
+            result[active_mask] = level
 
-        # Assign reference label to rows where all one-hot cols are zero
-        result[row_sums == 0] = reference_label
-
-        df[var] = result
+        df[var] = pd.Categorical(result)
         df = df.drop(columns=list(cols))
 
     return df
@@ -358,3 +362,37 @@ def one_versus_all(
         "comparison_CRE","comparison_cell_type","reference_CRE","reference_cell_type","meta"
     ])
 
+import math
+def alpha_for_expected_groups(n, K_target):
+    """
+    Helper for sample_crp_groups
+    Choose alpha so E[K_n] ~= K_target using H_n ≈ log n + gamma.
+    Technically only valid for large n, but good enough for our purposes
+    """
+    gamma = 0.5772156649015329
+    return max(1e-12, K_target / (math.log(n) + gamma))
+
+def sample_crp_groups(n, alpha, rng=None):
+    """
+    Chinese Restaurant Process partition of n items.
+    Returns: np.array of length n with group ids in 0..K-1.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    groups = np.full(n, -1, dtype=int)
+    # Track current group sizes
+    sizes = []  # list of counts per existing group
+    for i in range(n):
+        # Prob of joining existing group k is sizes[k] / (alpha + i)
+        # Prob of creating new group is alpha / (alpha + i)
+        total = alpha + i
+        if len(sizes) == 0 or rng.random() < alpha / total:
+            # new group
+            sizes.append(1)
+            groups[i] = len(sizes) - 1
+        else:
+            # join existing: pick proportional to sizes
+            k = rng.choice(len(sizes), p=np.array(sizes) / (total - alpha))
+            sizes[k] += 1
+            groups[i] = k
+    return groups

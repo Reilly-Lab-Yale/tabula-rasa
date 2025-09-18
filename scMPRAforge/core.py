@@ -35,8 +35,7 @@ from tensorzinb.tensorzinb import TensorZINB
 from statsmodels.stats.multitest import fdrcorrection
 from formulaic import Formula
 
-from dask.distributed import Client
-from dask.distributed import Future
+from dask.distributed import Client, Future, get_client
 
 import dask.dataframe as dd
 import dask.array as da
@@ -66,9 +65,10 @@ from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
+from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
 
-MIN_PTS=3
+MIN_PTS=6
 PARTITION_SIZE_MB=50
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
@@ -146,24 +146,141 @@ def table_type(column_names):
     return ret if matches == 1 else 'malformed'
 
 
+@unimplemented
+def skew_spread():
+    """
+    Creates a ground-truth dataframe of an scMPRA experiment
+    that is meant to test skew
+    (see readme for ground truth dataframe specification)
+    """
+    pass
+
+def recombinator(primary,secondary):
+    """
+    All pairs of (All pairs of primary), secondary.
+    two duplicate `secondary` entries in each element.
+    """
+    combos=itertools.combinations(primary,2)
+    return [(i,j,k,k) for (i,j) in combos for k in secondary]
+
+def activity_spread(cell_types:List[str],
+    minimum:float,
+    maximum:float,
+    minp_value:float,
+    total:int,
+    frac_active:int,
+    ct_specificity:float):
+    """
+    Creates a ground-truth dataframe of an scMPRA experiment
+    with a controllable number of active CREs.
+    (see readme for ground truth dataframe specification)
+    Assumes experiment is interested in activity vs a known negative control,
+    not skew. 
+    
+    This is useful to create datasets with a balance 
+    of active and inactive CREs which roughly
+    approx. real libraries. 
+
+    `total` is the total number of CREs to create.
+    `frac_active` is the fraction of the library that is active elements
+    `ct_specificity` is how much cell-type specificity there is. Its 
+    how many different values a given CRE will take across different cell-types. So 
+    specificity=2 implies that, on average, there will be two different 
+    means for each CRE across cell-types. 
+    """
+    ### first, we create the reference minP control ###
+    reference=pd.DataFrame({"cell_type":cell_types})
+    reference["true_mean"]=minp_value
+    reference["cre_id"]="reference"
+
+    ### second, we create a DF of all the inactive CREs. ###
+    total_inactive =int(total*(1-frac_active))
+    inactive_names=[f"inactive_{i}"for i in range(0,total_inactive)]
+    inactive_tuples=[i for i in itertools.product(inactive_names,cell_types)]
+    inactive=pd.DataFrame(inactive_tuples,columns=["cre_id","cell_type"])
+    inactive["true_mean"]=minp_value
+    
+    ### third, we create a df of active elements. ###
+    total_active=int(total*frac_active)
+    active_names=[f"active_{i}"for i in range(0,total_active)]
+    active=pd.DataFrame(active_names,columns=["cre_id"])
+    active["cell_types"]=[cell_types for _ in range(len(active))]
+    #we have a list of all cell types in each.
+    #now we want to randomly decide which cell_types are the same
+    #and which are different. 
+    alpha = alpha_for_expected_groups(n=len(cell_types), K_target=ct_specificity)
+    def _apply_crp(row):
+        groups = sample_crp_groups(n=len(cell_types), alpha=alpha)
+        return groups
+
+    active["groups"]=active.apply(_apply_crp,axis=1)
+
+    #calculate and print the percent of active CREs with any cell-type specificity
+    def _different_groups(row):
+        return len(set(row["groups"]))==1
+    is_cell_type_specific=active.apply(_different_groups,axis=1)
+    logger.info(f"{sum(is_cell_type_specific)/len(is_cell_type_specific)*100}% of active elements are not cell-type specific.")
+    
+    #generate the actual means for each group for each CRE. 
+    def _generate_means(row):
+        uniq_groups=list(set(row["groups"]))
+        means=np.random.uniform(low=minimum,
+            high=maximum,
+            size=len(uniq_groups)
+        )
+        means=means.tolist()
+        means_dict=dict(zip(uniq_groups,means))
+        means_rep=[means_dict[i] for i in row["groups"]]
+        return means_rep
+
+    active["means"]=active.apply(_generate_means,axis=1)
+
+    #dont need group ID anymore
+    active=active.drop(columns="groups")
+
+    #explode out means
+    active=active.explode(["cell_types","means"])
+    #rename to singular
+    active=active.rename({"cell_types":"cell_type","means":"true_mean"},axis=1)
+    
+    # create final df!
+    final_gt=pd.concat([reference,inactive,active])
+
+    ### create hypothesis set ###
+    #first, we want every CRE vs reference
+    unique_CREs=final_gt["cre_id"].unique()
+    idx=np.where(unique_CREs=="reference")
+    unique_CREs=np.delete(unique_CREs,idx)
+    all_cre_vs_ref=pd.DataFrame([(i,"reference",c,c) for i in unique_CREs for c in cell_types],
+    columns=["comparison_CRE","reference_CRE","comparison_cell_type","reference_cell_type"])
+
+
+    #now we want every cell type vs all other cell-types
+    ct_tests=pd.DataFrame(recombinator(cell_types,unique_CREs),
+    columns=["reference_cell_type","comparison_cell_type","comparison_CRE","reference_CRE"])
+
+    hypothesis_set=HypothesisSet.from_dataframe(pd.concat([all_cre_vs_ref,ct_tests]))
+    
+
+    return (final_gt, hypothesis_set)
 
 def simple_spread(cell_types:List[str],
-    min:int,
-    max:int,
+    min:float,
+    max:float,
     fineness:int=10,
     hypothesis_type:str="cartesian"):
     """
+    TODO: remove hypothesis_type & make obligate cartesian.
+    TODO: extract cartesian code to its own function.
     Create a ground truth dataframe tiling all cell-types.
     with synthetic CREs at a variety of strengths.
 
     Returns a tuple of (ground truth, hypothesis object) 
-    (none will be replaced by hypothesis object)
 
     Useful for simulation and power calculations.
     (see readme for ground truth dataframe specification)
 
     min, max are the min & max MPRA UMI / cell values.
-    
     """
   
     
@@ -221,31 +338,23 @@ def simple_spread(cell_types:List[str],
     
     hypothesis_set=None
     if hypothesis_type=="cartesian":
-        #get all combinations of cell type & CRE
-        product=itertools.product(final_ground_truth["cre_id"].unique(), final_ground_truth["cell_type"].unique())
-        all_combo = pd.DataFrame(product, columns=["CRE", "cell_type"])
+        unique_CREs=final_ground_truth["cre_id"].unique()
+        unique_cell_types=final_ground_truth["cell_type"].unique()
 
-        #copy into reference & comparison dfs
-        comparison = all_combo.copy()
-        comparison=comparison.rename({"CRE":"comparison_CRE","cell_type":"comparison_cell_type"},axis=1)
-        reference = all_combo.copy()
-        reference=reference.rename({"CRE":"reference_CRE","cell_type":"reference_cell_type"},axis=1)
 
-        #now we want to match reference to comparison. We want every 
-        #combination of the two that does not create duplicates
-        #No self comparisons, and a ref,comaprison is the same as comparison,ref
+        cre_comparisons=pd.DataFrame(
+            recombinator(primary=unique_CREs,
+                secondary=unique_cell_types),
+            columns=["comparison_CRE","reference_CRE","comparison_cell_type","reference_cell_type"])
 
-        def combos(df1,df2):
-            assert len(df1)==len(df2)
-            #all pairs of indicies w/o dups
-            idx_pairs=list(itertools.combinations(range(len(df1)),2))
-            #subset each to just those indicies in the 
-            #tuples, then reset index in prep for mege
-            df1  = df1.iloc[[i for i, j in idx_pairs]].reset_index(drop=True)
-            df2  = df2.iloc[[j for i, j in idx_pairs]].reset_index(drop=True)
-            return pd.concat([df1, df2], axis=1)
+        cell_type_comparisons=pd.DataFrame(
+            recombinator(primary=unique_cell_types,
+                secondary=unique_CREs),
+            columns=["comparison_cell_type","reference_cell_type","comparison_CRE","reference_CRE"])
 
-        hypothesis_set=HypothesisSet.from_dataframe(combos(comparison, reference))
+        hypothesis_set=HypothesisSet.from_dataframe(
+            pd.concat([cre_comparisons,cell_type_comparisons])
+        )
     else:
         assert 1==2,"Unrecognized hypothesis set type!"
 
@@ -1055,8 +1164,13 @@ def _smart_matrix(data,split):
 
     zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    
     y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
     Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
+
+    X = X.astype(pd.SparseDtype("int", fill_value=0))
+
+    
     return {
         'nb_regressors':X,
         'regressand':y,
@@ -3004,7 +3118,7 @@ class ResultSet(HypothesisSet):
             self.df[c] = pd.to_numeric(self.df[c], errors="coerce")
         # flattened must be boolean-ish
         if self.df["flattened"].dtype != bool:
-            self.df["flattened"] = self.df["flattened"].astype("boolean")
+            self.df["flattened"] = self.df["flattened"].astype("bool")
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame) -> "ResultSet":
@@ -3919,6 +4033,7 @@ class de_novo_simulation:
         self.descriptions=[]
         self.simulated=[]
         self.simulated_scMPRA=[]
+        self.results={}
     
     def gamut(self, client):
         """
@@ -3972,6 +4087,23 @@ class de_novo_simulation:
                 )
             )
     
+    def _test_all_replicates(self,client,hypothesis_set,test):
+        """
+        Performs desired test with provided hypothesis set
+        saves to self.results dict, keyed on test type. 
+        """
+        
+        rep_results=[]
+        
+        #breaking to only test 1x 
+        result=client.submit(_test_helper,self.simulated_scMPRA[0],test,hypothesis_set)
+        rep_results.append(result)
+        #for test_data in self.simulated_scMPRA:
+        #    result=client.submit(_test_helper,test_data,test,hypothesis_set)
+        #    rep_results.append(result)
+        
+        self.results[test]=rep_results
+    
     _normal_vars=["simulation_replicates","transfection_reporter"]
     _df_vars=["ground_truth","library"]
     
@@ -4015,6 +4147,16 @@ class de_novo_simulation:
         for i, dat in enumerate(self.simulated_scMPRA):
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
+        #save results
+        results_root=path/"results"
+        results_root.mkdir()
+        #for each kypothesis test
+        for key in self.results.keys():
+            hypo_test_path=results_root/key
+            hypo_test_path.mkdir()
+            #for each replicate's results object
+            for idx,result_obj in enumerate(self.results[key]):
+                result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
 
     @classmethod
     def load(cls, client, path, name):
@@ -4056,6 +4198,28 @@ class de_novo_simulation:
             working=client.submit(lambda x: x, working)
             obj.simulated_scMPRA.append(working)
         
+        #load hypothesis testing results
+        obj.results={}
+        
+        results_root=path/"results"
+        for hypo_test_path in results_root.iterdir():
+            if not hypo_test_path.is_dir():
+                continue
+            #found a directory containing results objects. 
+            test=hypo_test_path.name
+            #get all results & sort
+            results_names=sorted([i for i in hypo_test_path.iterdir()])
+            
+            working=[]
+            for rep_results_path in results_names:
+                working.append(
+                        client.submit(
+                            lambda x: x,
+                            ResultSet.from_tsv(rep_results_path)
+                    )
+                )
+            obj.results[test]=working
+        
         return obj
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
@@ -4071,6 +4235,22 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.set_reference_cell(reference_cell_type)
     ret.flag_synthetic()
     return ret
+
+def _test_helper(test_data,test,hypothesis_set):
+    """
+    Helper function for de_novo_simulation._test_all_replicates
+    """
+    client=get_client()
+    test_data.ortho_filter()
+    primordial=ortho()
+    primordial.criss_cross(client=client,
+                            dat=test_data)
+    primordial.extract_params(client)
+    primordial.precompute_wald(client)
+
+    tester = HypothesisTester(test)
+    results  = tester.run(hypothesis_set, primordial, client)
+    return results
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
