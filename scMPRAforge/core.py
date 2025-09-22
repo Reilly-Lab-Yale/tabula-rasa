@@ -4232,6 +4232,61 @@ class de_novo_simulation:
             obj.results[test]=working
         
         return obj
+    
+    def _validate_test(self,test,index):
+        """
+        Complains if test `test` of replicate `index` does not exist.
+        """
+        if not test in self.results:
+            raise ValueError(f"Test {test} not in object.")
+        if len(self.results[test])-1>index:
+            raise ValueError(f"Index {index} for test {test} is not in object.")
+    def _merge_in_ground_truth(self,test,index):
+        """
+        COLLECTOR FUNCTION
+        Returns a dataframe which a merge of the data of a results object
+        (of a test and particular index)
+        and the ground-truth. 
+        Used as part of test evaluations.
+        """
+        
+        self._validate_test(test=test,index=index)
+        
+        results=self.results[test][index].result().df
+        
+        merged=results.merge(self.ground_truth,
+            left_on=["comparison_CRE","comparison_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+
+        #merge in `reference` ground truth
+        merged=merged.merge(self.ground_truth,
+            left_on=["reference_CRE","reference_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+
+        #ground truth effect size
+        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
+        #ground truth null hypothesis that the CREs are the same : true or false?
+        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<1e-8
+
+        merged["reject_null"]=merged["bh_p"]<0.05
+
+        return merged
+    
+    def crosstab(self,test,index):
+        """
+        COLLECTOR FUNCTION
+        Evaluates the performance of a test as a classifier, using 
+        BH corrected p-value cutoff. 
+        """
+        df=self._merge_in_ground_truth(test=test,index=index)
+        return pd.crosstab(df["gt_null"],df["reject_null"])
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
     """
