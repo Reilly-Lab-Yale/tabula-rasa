@@ -50,6 +50,8 @@ import json
 import tarfile
 import tempfile
 
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score
+
 import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
@@ -67,6 +69,8 @@ from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
+
+
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
@@ -4241,6 +4245,7 @@ class de_novo_simulation:
             raise ValueError(f"Test {test} not in object.")
         if len(self.results[test])-1>index:
             raise ValueError(f"Index {index} for test {test} is not in object.")
+    
     def _merge_in_ground_truth(self,test,index):
         """
         COLLECTOR FUNCTION
@@ -4277,6 +4282,10 @@ class de_novo_simulation:
 
         merged["reject_null"]=merged["bh_p"]<0.05
 
+        #godawful hack
+        merged=merged.dropna(subset=["p_value"])
+        
+
         return merged
     
     def crosstab(self,test,index):
@@ -4287,6 +4296,58 @@ class de_novo_simulation:
         """
         df=self._merge_in_ground_truth(test=test,index=index)
         return pd.crosstab(df["gt_null"],df["reject_null"])
+    
+    def prc(self,test,index):
+        """
+        COLLECTOR
+        """
+        merged=self._merge_in_ground_truth(test,index)
+        y_true = (~merged["gt_null"]).astype(int).to_numpy()
+        p = merged["p_value"].to_numpy()
+        epsilon = np.finfo(float).tiny
+        scores = -np.log10(p + epsilon)
+
+        prec, rec, _ = precision_recall_curve(y_true, scores)
+        auprc = average_precision_score(y_true, scores)
+
+
+        # Plot PRC with baseline
+        pos_rate = y_true.mean()  # prevalence; PRC baseline
+        plt.figure(figsize=(5,4))
+        plt.plot(rec, prec, lw=2)
+        plt.hlines(pos_rate, 0, 1, linestyles="--", label=f"Baseline = {pos_rate:.3f}")
+        plt.xlim(0, 1); plt.ylim(0, 1)
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"PR Curve (AUPRC = {auprc:.3f})")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def roc(self,test,index):
+        """
+        COLLECTOR
+        """
+        merged=self._merge_in_ground_truth(test,index)
+        y_true = (~merged["gt_null"]).astype(int).to_numpy()
+        p = merged["p_value"].to_numpy()
+        epsilon = np.finfo(float).tiny
+        scores = -np.log10(p + epsilon)
+
+
+        fpr, tpr, _ = roc_curve(y_true, scores)
+        auroc = roc_auc_score(y_true, scores)
+
+        plt.figure(figsize=(5,4))
+        plt.plot(fpr, tpr, lw=2, label=f"AUROC = {auroc:.3f}")
+        plt.plot([0,1],[0,1], "--", color="gray")
+        plt.xlim(0,1); plt.ylim(0,1)
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title("ROC Curve")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
     """
