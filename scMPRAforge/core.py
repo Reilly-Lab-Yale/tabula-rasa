@@ -88,6 +88,11 @@ def always_unfinished():
     """tests unimplemented decorator."""
     pass
 
+def clobber_mkdir(dir):
+    try:
+        dir.mkdir()
+    except FileExistsError:
+        logger.warn(f"Directory {dir} already exists, continuing.")
 
 def helloworld():
     print("hello world!")
@@ -4111,9 +4116,11 @@ class de_novo_simulation:
         Note that this function saves self.simulated_scMPRA
         but not self.simulated, since the latter is intermediate.
         """
+        
+        
         path=Path(path)/name
-
-        path.mkdir(parents=True)
+        
+        clobber_mkdir(path)
         
         # normal vars
         normal_dump={}
@@ -4127,8 +4134,12 @@ class de_novo_simulation:
         for var in self._df_vars:
             getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
 
+        
+
+        
         # descriptions
-        (path/"descriptions").mkdir()
+        
+        clobber_mkdir(path/"descriptions")
         for i, ddf in enumerate(self.descriptions):
             target = path/"descriptions" / f"{i}.tsv.gz"
             # Compute to pandas and then write
@@ -4142,7 +4153,8 @@ class de_novo_simulation:
 
         #data
         scMPRA_data_root=path/"scMPRA"
-        scMPRA_data_root.mkdir()
+        clobber_mkdir(scMPRA_data_root)
+
         for i, dat in enumerate(self.simulated_scMPRA):
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
@@ -4152,7 +4164,7 @@ class de_novo_simulation:
         #for each kypothesis test
         for key in self.results.keys():
             hypo_test_path=results_root/key
-            hypo_test_path.mkdir()
+            clobber_mkdir(hypo_test_path)
             #for each replicate's results object
             for idx,result_obj in enumerate(self.results[key]):
                 result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
