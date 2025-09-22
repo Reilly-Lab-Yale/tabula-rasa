@@ -68,7 +68,7 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
 
-MIN_PTS=6
+MIN_PTS=3
 PARTITION_SIZE_MB=50
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
