@@ -4164,7 +4164,7 @@ class de_novo_simulation:
 
         #save results
         results_root=path/"results"
-        results_root.mkdir()
+        clobber_mkdir(results_root)
         #for each kypothesis test
         for key in self.results.keys():
             hypo_test_path=results_root/key
@@ -4243,7 +4243,7 @@ class de_novo_simulation:
         """
         if not test in self.results:
             raise ValueError(f"Test {test} not in object.")
-        if len(self.results[test])-1>index:
+        if len(self.results[test])-1<index:
             raise ValueError(f"Index {index} for test {test} is not in object.")
     
     def _merge_in_ground_truth(self,test,index):
