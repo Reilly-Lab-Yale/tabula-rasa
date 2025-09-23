@@ -4056,9 +4056,8 @@ class de_novo_simulation:
     
     def _simulate_transfection(self):
         """
-        Simulates transfection. Most of the heavy-lifing is 
-        offloaded to `_simulate_transfection`, a non-method
-        for reusability. 
+        Simulates transfection. Most of the heavy lifting is 
+        offloaded to `_simulate_transfection`
         """
         for i in range(0,self.simulation_replicates):
             transfected=_simulate_transfection(
@@ -4421,8 +4420,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
         #drop number of cells
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
-        #add cell barcodes
-        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        ###add cell barcodes REMOVE
+        ##cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
@@ -4473,26 +4472,40 @@ def _simulate_transfection(experiment_bounds:Bounds,
     
     #now we want to convert from "one row per cell"
     #to "one row per cell_type,cre_id,rep_id" combo
+    
 
     #get a list of all columns except which we mean to aggregate.
     cols=all_rep_cells_df.columns.tolist()
     cols.remove('cell_bc')
-
     
     
-    if transfection_reporter:
-        count_type="size"
-    else:
-        count_type="nunique"
+    # if "transfection_reporter" we assume we can distinguish multiple
+    #
     
-    aggregated = (
+    aggregated_size = (
         all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":count_type
+            "cell_bc":"size"
         }).reset_index()
     )
 
+    aggregated_nunique = (
+        all_rep_cells_df.groupby(cols).agg({
+            "cell_bc":"nunique"
+        }).reset_index()
+    )
 
-    ret=aggregated
+    percent_lost=(len(aggregated_size)-len(aggregated_nunique))/len(aggregated_size)*100
+    print(f"percent lost {percent_lost}")
+    if percent_lost>2:
+        logger.warning("Greater than 2\% collision in simulated transfection!")
+
+    if transfection_reporter:
+        ret=aggregated_size
+    else:
+        ret=aggregated_nunique
+
+    
+
 
     ret=ret.rename({"cell_bc":"cells"},axis=1)
 
