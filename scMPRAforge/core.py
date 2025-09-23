@@ -1456,37 +1456,38 @@ class ortho:
             QC[model_level]=ret
         return QC
 
-    def precompute_wald(self, client: Client):
+    def precompute_wald(self, client: Client, *, batch_rows=100_000, store_cov_nb=False, dtype="float32"):
         """
-        Compute and cache Wald precomputations (SEs, covariances, name maps) for
-        every by-cell-type model and every by-CRE model in this ortho.
-        Stores results in self.wald_precomp (as Futures); persists with save().
+        Compute and cache Wald precomputations (SEs, optional covariances) for
+        every by-cell-type and by-CRE model. Uses batched Hessian to avoid 2GB tensors.
         """
         if self.training_data is None:
             raise RuntimeError("precompute_wald requires self.training_data to subset matrices.")
-
         if (self.by_cell_type is None) or (self.by_cre is None):
             raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
 
         by_ct = {}
         for ct in self.by_cell_type.model.keys():
-            model_f = self.by_cell_type.model[ct]
+            model_f  = self.by_cell_type.model[ct]
             design_f = self.by_cell_type_design[ct]
-            # subset on the worker to avoid shipping big data repeatedly
-            df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+            df_ct    = self.training_data.data[self.training_data.data["cell_type"] == ct]
+
             by_ct[ct] = client.submit(
                 _build_wald_precomp_for_subset,
-                model_f, design_f, df_ct
+                model_f, design_f, df_ct,
+                batch_rows=batch_rows, store_cov_nb=store_cov_nb, dtype=dtype
             )
 
         by_cr = {}
         for cr in self.by_cre.model.keys():
-            model_f = self.by_cre.model[cr]
+            model_f  = self.by_cre.model[cr]
             design_f = self.by_cre_design[cr]
-            df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+            df_cr    = self.training_data.data[self.training_data.data["cre_id"] == cr]
+
             by_cr[cr] = client.submit(
                 _build_wald_precomp_for_subset,
-                model_f, design_f, df_cr
+                model_f, design_f, df_cr,
+                batch_rows=batch_rows, store_cov_nb=store_cov_nb, dtype=dtype
             )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
@@ -3124,8 +3125,8 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    params_tensor = tf.Variable(params, dtype=tf.float32)
-    return params, params_tensor
+    #params_tensor = tf.Variable(params, dtype=tf.float32)
+    return params#, params_tensor
 
 def _pack_model_block(model_dict, entry):
     # model_dict['weights']['x_mu'] is a Series with names
@@ -3149,36 +3150,76 @@ def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     exog = X.to_numpy()
     exog_infl = Z.to_numpy()
 
-    exog_tensor = tf.constant(exog, dtype=tf.float32)
-    endog_tensor = tf.constant(endog, dtype=tf.float32)
-    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
-    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+    # exog_tensor = tf.constant(exog, dtype=tf.float32)
+    # endog_tensor = tf.constant(endog, dtype=tf.float32)
+    # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
+    return (y, X, Z), (endog, exog, exog_infl) #, (endog_tensor, exog_tensor, exog_infl_tensor)
 
-def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+# def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+#     """
+#     Compute Hessian-based SEs of the ZINB parameters.
+#     Works in both TF2 eager and TF1 graph modes.
+#     """
+#     # Build Hessian with nested GradientTapes
+#     with tf.GradientTape() as tape2:
+#         with tf.GradientTape() as tape1:
+#             ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
+#         grad = tape1.gradient(ll, params_tensor)
+#     hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+
+#     # Evaluate to numpy depending on execution mode
+#     if tf.executing_eagerly():
+#         H = hess.numpy()
+#     else:
+#         # Graph mode
+#         sess = tf.compat.v1.Session()
+#         with sess.as_default():
+#             sess.run(tf.compat.v1.global_variables_initializer())
+#             H = sess.run(hess)
+
+#     # Wald covariance = inverse observed information = (-H)^{-1}
+#     cov = np.linalg.inv(-H)
+#     se = np.sqrt(np.diag(cov))
+#     return se, cov
+
+def _hessian_se_batched(params_vec, exog_np, infl_np, endog_np, *, batch_rows=100_000, dtype="float32"):
     """
-    Compute Hessian-based SEs of the ZINB parameters.
-    Works in both TF2 eager and TF1 graph modes.
+    Compute the Hessian by summing per-batch Hessians to avoid any single >2GB tensor.
+    params_vec: 1D numpy array (concat[x_mu, x_pi, log_theta]) at the fitted optimum.
+    exog_np:    (N, k_nb)   numpy array
+    infl_np:    (N, k_zi)   numpy array
+    endog_np:   (N, 1)      numpy array
+    Returns: se_all (1D), cov_all (2D) for all parameters.
     """
-    # Build Hessian with nested GradientTapes
-    with tf.GradientTape() as tape2:
-        with tf.GradientTape() as tape1:
-            ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
-        grad = tape1.gradient(ll, params_tensor)
-    hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+    import tensorflow as tf
+    tf_dtype = tf.float32 if dtype == "float32" else tf.float64
 
-    # Evaluate to numpy depending on execution mode
-    if tf.executing_eagerly():
-        H = hess.numpy()
-    else:
-        # Graph mode
-        sess = tf.compat.v1.Session()
-        with sess.as_default():
-            sess.run(tf.compat.v1.global_variables_initializer())
-            H = sess.run(hess)
+    # single TF variable (parameters)
+    params_t = tf.Variable(params_vec.astype(dtype), dtype=tf_dtype)
 
-    # Wald covariance = inverse observed information = (-H)^{-1}
-    cov = np.linalg.inv(-H)
-    se = np.sqrt(np.diag(cov))
+    P = params_vec.size
+    H_total = np.zeros((P, P), dtype=float)
+
+    N = exog_np.shape[0]
+    for start in range(0, N, batch_rows):
+        stop = min(N, start + batch_rows)
+        # small tensors per batch
+        exog_t  = tf.convert_to_tensor(exog_np[start:stop].astype(dtype),  dtype=tf_dtype)
+        infl_t  = tf.convert_to_tensor(infl_np[start:stop].astype(dtype),  dtype=tf_dtype)
+        endog_t = tf.convert_to_tensor(endog_np[start:stop].astype(dtype), dtype=tf_dtype)
+
+        with tf.GradientTape() as tape2:
+            with tf.GradientTape() as tape1:
+                ll = _zinb_loglik_tf(params_t, exog_t, infl_t, endog_t)  # log-likelihood of the *batch*
+            grad = tape1.gradient(ll, params_t)
+        H_batch = tape2.jacobian(grad, params_t)
+
+        H_batch_np = H_batch.numpy() if tf.executing_eagerly() else np.asarray(H_batch)
+        H_total += H_batch_np
+
+    # Observed information = -H_total ; covariance = inv(observed information)
+    cov = np.linalg.inv(-H_total)
+    se  = np.sqrt(np.diag(cov))
     return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
@@ -3192,24 +3233,26 @@ def _slice_se(standard_errors, exog_cols, infl_cols):
     se_theta = standard_errors[k_nb+k_zi:]
     return se_x_mu, se_x_pi, se_theta
 
-def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPrecompEntry:
+def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset,
+                                   *, batch_rows=100_000, store_cov_nb=False, dtype="float32") -> WaldPrecompEntry:
     """
     Worker-safe function: builds X/Z/y, computes Hessian, splits SE, returns WaldPrecompEntry.
+        `store_cov_nb=False` keeps only SEs (much smaller).
     """
     _require_tensorflow()
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
 
     # Params var
-    _, params_t = _setup_params_from_fit(model_dict)
+    params_v = _setup_params_from_fit(model_dict)
 
     # Hessian and covariance
-    se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+    se_all, cov = _hessian_se_batched(params_v, exog_np, infl_np, endog_np)
     se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
 
     k_nb  = len(X.columns)
-    cov_nb = cov[:k_nb, :k_nb]
+    cov_nb = cov[:k_nb, :k_nb] if store_cov_nb else np.empty((0, 0), dtype=float)
 
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
@@ -3236,7 +3279,8 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
         return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
     return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
 
 def _wald_by_cre_row(row: dict, bundle: dict):
@@ -3260,7 +3304,8 @@ def _wald_by_cre_row(row: dict, bundle: dict):
         return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.f(z*z, 1), eps)
     return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
 
 def _wald_row_fn(row: dict, bundle: dict):
@@ -3345,7 +3390,8 @@ def _mwu_row_fn(
 
     fc = (s1 + pseudocount) / (s0 + pseudocount)
 
-   
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(p, eps)
 
     return {"test_statistic": float(stat), "p_value": float(p), "fold_change": float(fc), "flattened": False, 'ref_mean': s0,'comp_mean':s1}
 
@@ -4247,3 +4293,130 @@ def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
     plt.title(title)
     plt.tight_layout()
     plt.show()
+
+
+def volcano_ctrl_cres(
+    results: "ResultSet",
+    title=None,
+    bh_thresh=0.05,
+    fc_thresh=1.0,
+    pos_ctrl_kw="posCtrl",   # substring to identify positive controls
+    neg_ctrl_kw="negCtrl",   # substring to identify negative controls
+    by_celltype: bool = False,
+    average_over_celltypes: bool = False,
+):
+    """
+    Volcano plot using BH-corrected p-values (bh_p) versus log2 fold change,
+    with optional coloring of positive/negative controls by keyword match.
+
+    Parameters
+    ----------
+    results : ResultSet
+        Must contain columns: 'fold_change', 'bh_p', 'comparison_CRE' (or 'cre_id'),
+        and 'comparison_cell_type' if by_celltype=True.
+    bh_thresh : float
+        FDR threshold for significance (default 0.05).
+    fc_thresh : float
+        Absolute log2 fold change threshold for vertical lines.
+    pos_ctrl_kw : str
+        Substring to identify positive controls in CRE IDs.
+    neg_ctrl_kw : str
+        Substring to identify negative controls in CRE IDs.
+    by_celltype : bool
+        If True, generate a separate volcano plot for each cell type.
+    average_over_celltypes : bool
+        If True, create an additional plot summarizing the average fold change
+        and p-value across all cell types.
+    """
+    df = results.to_dataframe().copy()
+
+    # Ensure CRE identifier column exists
+    if "comparison_CRE" in df.columns:
+        cre_col = "comparison_CRE"
+    elif "cre_id" in df.columns:
+        cre_col = "cre_id"
+    else:
+        raise ValueError("results must contain 'comparison_CRE' or 'cre_id' column")
+
+    # Calculate log2 fold change and -log10(BH p-value)
+    df["log2FC"] = np.log2(df["fold_change"].replace(0, np.nan))
+    df["neg_log10_bh"] = -np.log10(df["bh_p"])
+
+    # Define categories
+    sig_mask = (df["bh_p"] < bh_thresh) & (df["log2FC"].abs() > fc_thresh)
+
+    def label_row(row):
+        cre = str(row[cre_col])
+        if pos_ctrl_kw and pos_ctrl_kw in cre:
+            return "Positive control"
+        elif neg_ctrl_kw and neg_ctrl_kw in cre:
+            return "Negative control"
+        elif sig_mask.loc[row.name]:
+            return f"Significant (BH p<{bh_thresh}, |log2FC|>{fc_thresh})"
+        else:
+            return "Not significant"
+
+    df["label"] = df.apply(label_row, axis=1)
+
+    # Define palette
+    palette = {
+        f"Significant (BH p<{bh_thresh}, |log2FC|>{fc_thresh})": "red",
+        "Not significant": "grey",
+        "Positive control": "blue",
+        "Negative control": "green",
+    }
+
+    def _plot(subdf, subtitle):
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(
+            data=subdf,
+            x="log2FC",
+            y="neg_log10_bh",
+            hue="label",
+            palette=palette,
+            alpha=0.7,
+            edgecolor=None,
+        )
+        # Threshold lines
+        plt.axhline(-np.log10(bh_thresh), color="black", linestyle="--", lw=1)
+        plt.axvline(fc_thresh, color="black", linestyle="--", lw=1)
+        plt.axvline(-fc_thresh, color="black", linestyle="--", lw=1)
+
+        plt.xlabel("log2 Fold Change")
+        plt.ylabel("-log10(BH-adjusted p-value)")
+        plt.title(f"{title or 'Volcano'} — {subtitle}")
+        plt.tight_layout()
+        plt.show()
+
+    # Case 1: plot by cell type
+    if by_celltype:
+        if "comparison_cell_type" not in df.columns:
+            raise ValueError("results must contain 'comparison_cell_type' column when by_celltype=True")
+
+        for ct, subdf in df.groupby("comparison_cell_type"):
+            _plot(subdf, f"Cell type: {ct}")
+
+    # Case 2: plot average across cell types
+    if average_over_celltypes:
+        if "comparison_cell_type" not in df.columns:
+            raise ValueError("results must contain 'comparison_cell_type' column for averaging")
+
+        avg_df = (
+            df.groupby(cre_col)
+              .agg(
+                  fold_change=("fold_change", "mean"),
+                  bh_p=("bh_p", "mean")   # average p-values across cell types (simple heuristic)
+              )
+              .reset_index()
+        )
+        avg_df["log2FC"] = np.log2(avg_df["fold_change"].replace(0, np.nan))
+        avg_df["neg_log10_bh"] = -np.log10(avg_df["bh_p"])
+        avg_df["label"] = avg_df[cre_col].apply(
+            lambda cre: "Positive control" if pos_ctrl_kw in str(cre)
+            else ("Negative control" if neg_ctrl_kw in str(cre) else "Not significant")
+        )
+        _plot(avg_df, "Average across cell types")
+
+    # Case 3: pooled (default if neither option set)
+    if not by_celltype and not average_over_celltypes:
+        _plot(df, "All cell types pooled")
