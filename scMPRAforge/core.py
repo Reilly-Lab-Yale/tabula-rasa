@@ -50,6 +50,8 @@ import json
 import tarfile
 import tempfile
 
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score
+
 import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
@@ -68,7 +70,9 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups
 logger = logging.getLogger("scMPRAforge")
 
-MIN_PTS=6
+
+
+MIN_PTS=3
 PARTITION_SIZE_MB=50
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
@@ -88,6 +92,11 @@ def always_unfinished():
     """tests unimplemented decorator."""
     pass
 
+def clobber_mkdir(dir):
+    try:
+        dir.mkdir()
+    except FileExistsError:
+        logger.warn(f"Directory {dir} already exists, continuing.")
 
 def helloworld():
     print("hello world!")
@@ -4047,9 +4056,8 @@ class de_novo_simulation:
     
     def _simulate_transfection(self):
         """
-        Simulates transfection. Most of the heavy-lifing is 
-        offloaded to `_simulate_transfection`, a non-method
-        for reusability. 
+        Simulates transfection. Most of the heavy lifting is 
+        offloaded to `_simulate_transfection`
         """
         for i in range(0,self.simulation_replicates):
             transfected=_simulate_transfection(
@@ -4087,22 +4095,21 @@ class de_novo_simulation:
                 )
             )
     
+    def _test_replicate(self,client,hypothesis_set,test,index):
+        result=client.submit(_test_helper,self.simulated_scMPRA[index],test,hypothesis_set)
+        lst = self.results.setdefault(test, [])
+        if index >= len(lst):
+            lst.extend([None] * (index + 1 - len(lst)))
+        lst[index] = result
+    
     def _test_all_replicates(self,client,hypothesis_set,test):
         """
         Performs desired test with provided hypothesis set
         saves to self.results dict, keyed on test type. 
         """
-        
-        rep_results=[]
-        
-        #breaking to only test 1x 
-        result=client.submit(_test_helper,self.simulated_scMPRA[0],test,hypothesis_set)
-        rep_results.append(result)
-        #for test_data in self.simulated_scMPRA:
-        #    result=client.submit(_test_helper,test_data,test,hypothesis_set)
-        #    rep_results.append(result)
-        
-        self.results[test]=rep_results
+        for i in range(self.simulated_scMPRA):
+            self._test_replicate(client,hypothesis_set,test,index=i)        
+
     
     _normal_vars=["simulation_replicates","transfection_reporter"]
     _df_vars=["ground_truth","library"]
@@ -4112,9 +4119,11 @@ class de_novo_simulation:
         Note that this function saves self.simulated_scMPRA
         but not self.simulated, since the latter is intermediate.
         """
+        
+        
         path=Path(path)/name
-
-        path.mkdir(parents=True)
+        
+        clobber_mkdir(path)
         
         # normal vars
         normal_dump={}
@@ -4128,8 +4137,12 @@ class de_novo_simulation:
         for var in self._df_vars:
             getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
 
+        
+
+        
         # descriptions
-        (path/"descriptions").mkdir()
+        
+        clobber_mkdir(path/"descriptions")
         for i, ddf in enumerate(self.descriptions):
             target = path/"descriptions" / f"{i}.tsv.gz"
             # Compute to pandas and then write
@@ -4143,17 +4156,18 @@ class de_novo_simulation:
 
         #data
         scMPRA_data_root=path/"scMPRA"
-        scMPRA_data_root.mkdir()
+        clobber_mkdir(scMPRA_data_root)
+
         for i, dat in enumerate(self.simulated_scMPRA):
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
         #save results
         results_root=path/"results"
-        results_root.mkdir()
+        clobber_mkdir(results_root)
         #for each kypothesis test
         for key in self.results.keys():
             hypo_test_path=results_root/key
-            hypo_test_path.mkdir()
+            clobber_mkdir(hypo_test_path)
             #for each replicate's results object
             for idx,result_obj in enumerate(self.results[key]):
                 result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
@@ -4221,6 +4235,118 @@ class de_novo_simulation:
             obj.results[test]=working
         
         return obj
+    
+    def _validate_test(self,test,index):
+        """
+        Complains if test `test` of replicate `index` does not exist.
+        """
+        if not test in self.results:
+            raise ValueError(f"Test {test} not in object.")
+        if len(self.results[test])-1<index:
+            raise ValueError(f"Index {index} for test {test} is not in object.")
+    
+    def _merge_in_ground_truth(self,test,index):
+        """
+        COLLECTOR FUNCTION
+        Returns a dataframe which a merge of the data of a results object
+        (of a test and particular index)
+        and the ground-truth. 
+        Used as part of test evaluations.
+        """
+        
+        self._validate_test(test=test,index=index)
+        
+        results=self.results[test][index].result().df
+        
+        merged=results.merge(self.ground_truth,
+            left_on=["comparison_CRE","comparison_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+
+        #merge in `reference` ground truth
+        merged=merged.merge(self.ground_truth,
+            left_on=["reference_CRE","reference_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+
+        #ground truth effect size
+        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
+        #ground truth null hypothesis that the CREs are the same : true or false?
+        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<1e-8
+
+        merged["reject_null"]=merged["bh_p"]<0.05
+
+        #godawful hack
+        merged=merged.dropna(subset=["p_value"])
+        
+
+        return merged
+    
+    def crosstab(self,test,index):
+        """
+        COLLECTOR FUNCTION
+        Evaluates the performance of a test as a classifier, using 
+        BH corrected p-value cutoff. 
+        """
+        df=self._merge_in_ground_truth(test=test,index=index)
+        return pd.crosstab(df["gt_null"],df["reject_null"])
+    
+    def prc(self,test,index):
+        """
+        COLLECTOR
+        """
+        merged=self._merge_in_ground_truth(test,index)
+        y_true = (~merged["gt_null"]).astype(int).to_numpy()
+        p = merged["p_value"].to_numpy()
+        epsilon = np.finfo(float).tiny
+        scores = -np.log10(p + epsilon)
+
+        prec, rec, _ = precision_recall_curve(y_true, scores)
+        auprc = average_precision_score(y_true, scores)
+
+
+        # Plot PRC with baseline
+        pos_rate = y_true.mean()  # prevalence; PRC baseline
+        plt.figure(figsize=(5,4))
+        plt.plot(rec, prec, lw=2)
+        plt.hlines(pos_rate, 0, 1, linestyles="--", label=f"Baseline = {pos_rate:.3f}")
+        plt.xlim(0, 1); plt.ylim(0, 1)
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"PR Curve (AUPRC = {auprc:.3f})")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def roc(self,test,index):
+        """
+        COLLECTOR
+        """
+        merged=self._merge_in_ground_truth(test,index)
+        y_true = (~merged["gt_null"]).astype(int).to_numpy()
+        p = merged["p_value"].to_numpy()
+        epsilon = np.finfo(float).tiny
+        scores = -np.log10(p + epsilon)
+
+
+        fpr, tpr, _ = roc_curve(y_true, scores)
+        auroc = roc_auc_score(y_true, scores)
+
+        plt.figure(figsize=(5,4))
+        plt.plot(fpr, tpr, lw=2, label=f"AUROC = {auroc:.3f}")
+        plt.plot([0,1],[0,1], "--", color="gray")
+        plt.xlim(0,1); plt.ylim(0,1)
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title("ROC Curve")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 def _wrap_helper(df,negative_controls,reference_cell_type):
     """
@@ -4241,16 +4367,23 @@ def _test_helper(test_data,test,hypothesis_set):
     Helper function for de_novo_simulation._test_all_replicates
     """
     client=get_client()
-    test_data.ortho_filter()
-    primordial=ortho()
-    primordial.criss_cross(client=client,
-                            dat=test_data)
-    primordial.extract_params(client)
-    primordial.precompute_wald(client)
+    if test=="wald":
+        test_data.ortho_filter()
+        primordial=ortho()
+        primordial.criss_cross(client=client,
+                                dat=test_data)
+        primordial.extract_params(client)
+        primordial.precompute_wald(client)
 
-    tester = HypothesisTester(test)
-    results  = tester.run(hypothesis_set, primordial, client)
-    return results
+        tester = HypothesisTester(test)
+        results  = tester.run(hypothesis_set, primordial, client)
+        return results
+    elif test=="mwu":
+        tester = HypothesisTester(test)
+        results  = tester.run(hypothesis_set, test_data, client)
+        return results
+    else:
+        assert 1==2; "Test not yet implemented yet in this context."
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
@@ -4287,8 +4420,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
         #drop number of cells
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
-        #add cell barcodes
-        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        ###add cell barcodes REMOVE
+        ##cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
@@ -4339,26 +4472,40 @@ def _simulate_transfection(experiment_bounds:Bounds,
     
     #now we want to convert from "one row per cell"
     #to "one row per cell_type,cre_id,rep_id" combo
+    
 
     #get a list of all columns except which we mean to aggregate.
     cols=all_rep_cells_df.columns.tolist()
     cols.remove('cell_bc')
-
     
     
-    if transfection_reporter:
-        count_type="size"
-    else:
-        count_type="nunique"
+    # if "transfection_reporter" we assume we can distinguish multiple
+    #
     
-    aggregated = (
+    aggregated_size = (
         all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":count_type
+            "cell_bc":"size"
         }).reset_index()
     )
 
+    aggregated_nunique = (
+        all_rep_cells_df.groupby(cols).agg({
+            "cell_bc":"nunique"
+        }).reset_index()
+    )
 
-    ret=aggregated
+    percent_lost=(len(aggregated_size)-len(aggregated_nunique))/len(aggregated_size)*100
+    print(f"percent lost {percent_lost}")
+    if percent_lost>2:
+        logger.warning("Greater than 2\% collision in simulated transfection!")
+
+    if transfection_reporter:
+        ret=aggregated_size
+    else:
+        ret=aggregated_nunique
+
+    
+
 
     ret=ret.rename({"cell_bc":"cells"},axis=1)
 
