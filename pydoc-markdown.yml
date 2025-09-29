@@ -3,6 +3,7 @@ loaders:
   search_path: [.]
 renderer:
   type: mkdocs
+  output_directory: docs
   pages:
   - title: API Documentation
     name: index
