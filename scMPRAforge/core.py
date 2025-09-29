@@ -80,6 +80,8 @@ HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
 HYPOTHESIS_OPTIONAL = {"reference_CRE", "reference_cell_type", "meta"}
 HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
 
+WARN_MULTI_TRANSFECTION_PERCENT=2.0
+
 RESULT_REQUIRED = {
     "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
 }
@@ -755,6 +757,47 @@ class scMPRA_data:
     
     def flag_emperical(self):
         self.metadata["synthetic"]=False
+    
+    def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
+        """
+        Return True iff the overall percent of cells with >=1 multi-transfection
+        (same mpra_bc observed >1 time in the same cell within a replicate)
+        exceeds `threshold_pct`. Logging is optional. Also flags overtransfection 
+        (or lack thereof) in metadata.
+
+        Uses a scale-free metric: (# cells with >=1 dup) / (total # cells) * 100
+        """
+        df = self.data
+        # Count per (rep, cell, mpra_bc)
+        triplet_counts = (
+            df.groupby(["rep_id", "cell_bc", "mpra_bc"])
+            .size()
+        )
+
+        # For each cell, did ANY barcode appear more than once?
+        cell_has_dup = (
+            triplet_counts.gt(1)
+                        .groupby(level=["rep_id", "cell_bc"])
+                        .any()
+        )
+
+        n_cells = int(cell_has_dup.size)
+        n_cells_with_dup = int(cell_has_dup.sum())
+        percent = (n_cells_with_dup / n_cells * 100.0) if n_cells else 0.0
+
+        if log:
+            msg = (f"{n_cells_with_dup}/{n_cells} cells "
+                f"({percent:.3f}%) have ≥1 multi-transfection event.")
+            if percent > threshold_pct:
+                logger.warning(msg)
+                logger.warning(
+                    f"Multi-transfections exceed threshold of {threshold_pct:.3f}%!"
+                )
+            else:
+                logger.info(msg)
+
+        self.metadata["overtransfected"]=percent
+        return percent > threshold_pct
     
     def describe_transfection(self):
         """
@@ -4356,6 +4399,7 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.set_negative_controls(negative_controls)
     ret.set_reference_cell(reference_cell_type)
     ret.flag_synthetic()
+    ret.overtransfected()
     return ret
 
 def _test_helper(test_data,test,hypothesis_set):
