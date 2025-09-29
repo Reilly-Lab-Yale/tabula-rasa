@@ -758,6 +758,24 @@ class scMPRA_data:
     def flag_emperical(self):
         self.metadata["synthetic"]=False
     
+    def flatten_overtransfection(self):
+        """
+        If you have simulated a dataset, it will probably have some degree of 
+        overtransfection (same MPRA bc transfected into the same cell multiple times).
+        This function flattens such events, as they would be observed in a real dataset.
+        """
+        if not self.metadata.get("synthetic"):
+            raise ValueError("Can't flatten overtransfection on an emperical dataset.")
+        
+        if "overtransfection_flattened" in self.operations:
+            scm.logger.warning("Overtransfection flattening already performed. Skipping.")
+            return
+        
+        groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
+        
+        self.data= self.data.groupby(groupby_columns).agg("sum").reset_index()
+        self.operations.append("overtransfection_flattened")
+    
     def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
         """
         Return True iff the overall percent of cells with >=1 multi-transfection
@@ -767,6 +785,13 @@ class scMPRA_data:
 
         Uses a scale-free metric: (# cells with >=1 dup) / (total # cells) * 100
         """
+
+        if not self.metadata.get("synthetic"):
+            raise ValueError("Can't directly test if an emperical dataset is overtranfected. Use a Bounds object to extract a transfection model, from which you can predict the degree of overtransfection.")
+        
+        if "overtransfection_flattened" in self.operations:
+            raise ValueError("This dataset has already had its overtransfection flattened & so it can't be computed.")
+
         df = self.data
         # Count per (rep, cell, mpra_bc)
         triplet_counts = (
@@ -4150,7 +4175,6 @@ class de_novo_simulation:
         but not self.simulated, since the latter is intermediate.
         """
         
-        
         path=Path(path)/name
         
         clobber_mkdir(path)
@@ -4391,6 +4415,7 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.set_reference_cell(reference_cell_type)
     ret.flag_synthetic()
     ret.overtransfected()
+    ret.flatten_overtransfection()
     return ret
 
 def _test_helper(test_data,test,hypothesis_set):
@@ -4444,7 +4469,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
         cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
-        #since this can draw a zero, some cells may effectively drop out at this step
+        #since this can draw a zero, some cells may effectively drop out at this
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
