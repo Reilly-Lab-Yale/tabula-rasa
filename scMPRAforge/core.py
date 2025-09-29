@@ -4057,16 +4057,9 @@ class de_novo_simulation:
                  ground_truth:pd.DataFrame,
                  library:pd.DataFrame,
                  negative_controls:list[str]=["reference"],
-                 reference_cell_type:str="reference",
-                 transfection_reporter:bool=True):
+                 reference_cell_type:str="reference"):
         """
-        TODO: change transfection_reporter to "dups distingushable" or similar
-        transfection reporter is a tad misleading a name
-        
         See readme for formatting of ground_truth & library dataframes
-        
-        See the `_simulate_transfection` docstring for more information 
-        on the `transfection_reporter` boolean.
         """
         
         self.simulation_replicates=simulation_replicates
@@ -4075,7 +4068,6 @@ class de_novo_simulation:
         self.library=library
         self.negative_controls=negative_controls
         self.reference_cell_type=reference_cell_type
-        self.transfection_reporter=transfection_reporter
 
         #init vars which will be computed but are not taken from input.
         self.descriptions=[]
@@ -4102,8 +4094,7 @@ class de_novo_simulation:
             transfected=_simulate_transfection(
                     experiment_bounds=self.experiment_bounds,
                     ground_truth=self.ground_truth,
-                    library=self.library,
-                    transfection_reporter=self.transfection_reporter)
+                    library=self.library)
             
             self.descriptions.append(transfected)
     
@@ -4150,7 +4141,7 @@ class de_novo_simulation:
             self._test_replicate(client,hypothesis_set,test,index=i)        
 
     
-    _normal_vars=["simulation_replicates","transfection_reporter"]
+    _normal_vars=["simulation_replicates"]
     _df_vars=["ground_truth","library"]
     
     def save(self,path,name):
@@ -4427,22 +4418,13 @@ def _test_helper(test_data,test,hypothesis_set):
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
-                        library:pd.DataFrame,
-                        transfection_reporter:bool):
+                        library:pd.DataFrame):
     """ 
     Simulates transfection, producing a description dataframe
     from which transcription can be simulated...
 
     See README spec for details on ground truth dataframe.
     You can easially create one with the helper function `simple_spread`. 
-
-    transfection_reporter is a boolean that changes how cell numbers are counted
-    TRUE suggests that the assay can distinguish two transfection events of the 
-    same MPRA barcode, due to different transfection reporter barcodes or, if
-    its the exact same construct, by the number of transfection reporter barcode UMIs.
-    FALSE suggests such a distinction cannot be made, which may lead to some minor
-    overcounting if the library complexity is low enough or the cell number is high enough
-    to get repeat transfections.
     """
 
     #known before you start : "to be optimized":
@@ -4462,6 +4444,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
         cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
+        #since this can draw a zero, some cells may effectively drop out at this step
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
@@ -4508,9 +4491,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     all_rep_cells_df=pd.concat(all_rep_cells_df)
     all_rep_cells_df["theta"]=experiment_bounds.theta
     all_rep_cells_df=all_rep_cells_df.rename({"true_mean":"mu"},axis=1)
-    
-    #now we want to convert from "one row per cell"
-    #to "one row per cell_type,cre_id,rep_id" combo
     
 
     ret=all_rep_cells_df
