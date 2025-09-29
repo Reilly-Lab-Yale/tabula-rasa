@@ -1968,32 +1968,28 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe
+    Simulate from a description dataframe.
+    Assumes input is one transfection event per row
+    Removes ground-truth rows.
     """
 
-    def simulate_partition(df):
-        # Repeat rows by 'cells' count, exploding to one row per cell
-        repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
+    # Simulate NB and ZI in numpy
+    r = description['r'].to_numpy()
+    p = description['p'].to_numpy()
+    zi = description['zi'].to_numpy()
 
-        # Simulate NB and ZI in numpy
-        r = repeated_df['r'].to_numpy()
-        p = repeated_df['p'].to_numpy()
-        zi = repeated_df['zi'].to_numpy()
+    nb = np.random.negative_binomial(n=r, p=p)
+    keep_mask = np.random.binomial(n=1, p=1 - zi)
+    zinb = nb * keep_mask
 
-        nb = np.random.negative_binomial(n=r, p=p)
-        keep_mask = np.random.binomial(n=1, p=1 - zi)
-        zinb = nb * keep_mask
+    description['zinb_sample'] = zinb
 
-        repeated_df['zinb_sample'] = zinb
-        return repeated_df
-    # Use auto_partition to repartition the description DataFrame
-    #description = auto_partition(description)
-    #npartitions=
-    description=description.repartition(npartitions=2)
-    return description.map_partitions(simulate_partition)
+    return description
+
 
 class simulation_batch:
     """
+    DEPRECATED
     Class which takes a single <ortho> object and simulates replicates.
     Optionally, fits additional ortho objects to simulations & plots their paremeter spread
     Useful for estimating variance of an experimental setup...
@@ -4420,8 +4416,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
         #drop number of cells
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
-        ###add cell barcodes REMOVE
-        ##cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
@@ -4474,41 +4469,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
     #to "one row per cell_type,cre_id,rep_id" combo
     
 
-    #get a list of all columns except which we mean to aggregate.
-    cols=all_rep_cells_df.columns.tolist()
-    cols.remove('cell_bc')
+    ret=all_rep_cells_df
     
-    
-    # if "transfection_reporter" we assume we can distinguish multiple
-    #
-    
-    aggregated_size = (
-        all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":"size"
-        }).reset_index()
-    )
-
-    aggregated_nunique = (
-        all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":"nunique"
-        }).reset_index()
-    )
-
-    percent_lost=(len(aggregated_size)-len(aggregated_nunique))/len(aggregated_size)*100
-    print(f"percent lost {percent_lost}")
-    if percent_lost>2:
-        logger.warning("Greater than 2\% collision in simulated transfection!")
-
-    if transfection_reporter:
-        ret=aggregated_size
-    else:
-        ret=aggregated_nunique
-
-    
-
-
-    ret=ret.rename({"cell_bc":"cells"},axis=1)
-
     #compute alternate parametrization
     #redundant code with `def describe_parameters()`
     ret["r"]=ret["theta"]
@@ -4517,7 +4479,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
 
     #finally, we convert to a dask dataframe & return 
     
-    return dd.from_pandas(ret)
+    return ret
 
 
 def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
