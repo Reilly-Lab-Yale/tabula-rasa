@@ -80,6 +80,8 @@ HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
 HYPOTHESIS_OPTIONAL = {"reference_CRE", "reference_cell_type", "meta"}
 HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
 
+WARN_MULTI_TRANSFECTION_PERCENT=2.0
+
 RESULT_REQUIRED = {
     "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
 }
@@ -755,6 +757,72 @@ class scMPRA_data:
     
     def flag_emperical(self):
         self.metadata["synthetic"]=False
+    
+    def flatten_overtransfection(self):
+        """
+        If you have simulated a dataset, it will probably have some degree of 
+        overtransfection (same MPRA bc transfected into the same cell multiple times).
+        This function flattens such events, as they would be observed in a real dataset.
+        """
+        if not self.metadata.get("synthetic"):
+            raise ValueError("Can't flatten overtransfection on an emperical dataset.")
+        
+        if "overtransfection_flattened" in self.operations:
+            scm.logger.warning("Overtransfection flattening already performed. Skipping.")
+            return
+        
+        groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
+        
+        self.data= self.data.groupby(groupby_columns).agg("sum").reset_index()
+        self.operations.append("overtransfection_flattened")
+    
+    def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
+        """
+        Return True iff the overall percent of cells with >=1 multi-transfection
+        (same mpra_bc observed >1 time in the same cell within a replicate)
+        exceeds `threshold_pct`. Logging is optional. Also flags overtransfection 
+        (or lack thereof) in metadata.
+
+        Uses a scale-free metric: (# cells with >=1 dup) / (total # cells) * 100
+        """
+
+        if not self.metadata.get("synthetic"):
+            raise ValueError("Can't directly test if an emperical dataset is overtranfected. Use a Bounds object to extract a transfection model, from which you can predict the degree of overtransfection.")
+        
+        if "overtransfection_flattened" in self.operations:
+            raise ValueError("This dataset has already had its overtransfection flattened & so it can't be computed.")
+
+        df = self.data
+        # Count per (rep, cell, mpra_bc)
+        triplet_counts = (
+            df.groupby(["rep_id", "cell_bc", "mpra_bc"])
+            .size()
+        )
+
+        # For each cell, did ANY barcode appear more than once?
+        cell_has_dup = (
+            triplet_counts.gt(1)
+                        .groupby(level=["rep_id", "cell_bc"])
+                        .any()
+        )
+
+        n_cells = int(cell_has_dup.size)
+        n_cells_with_dup = int(cell_has_dup.sum())
+        percent = (n_cells_with_dup / n_cells * 100.0) if n_cells else 0.0
+
+        if log:
+            msg = (f"{n_cells_with_dup}/{n_cells} cells "
+                f"({percent:.3f}%) have ≥1 multi-transfection event.")
+            if percent > threshold_pct:
+                logger.warning(msg)
+                logger.warning(
+                    f"Multi-transfections exceed threshold of {threshold_pct:.3f}%!"
+                )
+            else:
+                logger.info(msg)
+
+        self.metadata["overtransfected"]=percent
+        return percent > threshold_pct
     
     def describe_transfection(self):
         """
@@ -1968,32 +2036,28 @@ def auto_partition(pdf, target_mb_per_partition=PARTITION_SIZE_MB):
 
 def simulate_from_description(description):
     """
-    Simulate from a description dask dataframe
+    Simulate from a description dataframe.
+    Assumes input is one transfection event per row
+    Removes ground-truth rows.
     """
 
-    def simulate_partition(df):
-        # Repeat rows by 'cells' count, exploding to one row per cell
-        repeated_df = df.loc[df.index.repeat(df['cells'])].reset_index(drop=True)
+    # Simulate NB and ZI in numpy
+    r = description['r'].to_numpy()
+    p = description['p'].to_numpy()
+    zi = description['zi'].to_numpy()
 
-        # Simulate NB and ZI in numpy
-        r = repeated_df['r'].to_numpy()
-        p = repeated_df['p'].to_numpy()
-        zi = repeated_df['zi'].to_numpy()
+    nb = np.random.negative_binomial(n=r, p=p)
+    keep_mask = np.random.binomial(n=1, p=1 - zi)
+    zinb = nb * keep_mask
 
-        nb = np.random.negative_binomial(n=r, p=p)
-        keep_mask = np.random.binomial(n=1, p=1 - zi)
-        zinb = nb * keep_mask
+    description['zinb_sample'] = zinb
 
-        repeated_df['zinb_sample'] = zinb
-        return repeated_df
-    # Use auto_partition to repartition the description DataFrame
-    #description = auto_partition(description)
-    #npartitions=
-    description=description.repartition(npartitions=2)
-    return description.map_partitions(simulate_partition)
+    return description
+
 
 class simulation_batch:
     """
+    DEPRECATED
     Class which takes a single <ortho> object and simulates replicates.
     Optionally, fits additional ortho objects to simulations & plots their paremeter spread
     Useful for estimating variance of an experimental setup...
@@ -4018,16 +4082,9 @@ class de_novo_simulation:
                  ground_truth:pd.DataFrame,
                  library:pd.DataFrame,
                  negative_controls:list[str]=["reference"],
-                 reference_cell_type:str="reference",
-                 transfection_reporter:bool=True):
+                 reference_cell_type:str="reference"):
         """
-        TODO: change transfection_reporter to "dups distingushable" or similar
-        transfection reporter is a tad misleading a name
-        
         See readme for formatting of ground_truth & library dataframes
-        
-        See the `_simulate_transfection` docstring for more information 
-        on the `transfection_reporter` boolean.
         """
         
         self.simulation_replicates=simulation_replicates
@@ -4036,7 +4093,6 @@ class de_novo_simulation:
         self.library=library
         self.negative_controls=negative_controls
         self.reference_cell_type=reference_cell_type
-        self.transfection_reporter=transfection_reporter
 
         #init vars which will be computed but are not taken from input.
         self.descriptions=[]
@@ -4063,8 +4119,7 @@ class de_novo_simulation:
             transfected=_simulate_transfection(
                     experiment_bounds=self.experiment_bounds,
                     ground_truth=self.ground_truth,
-                    library=self.library,
-                    transfection_reporter=self.transfection_reporter)
+                    library=self.library)
             
             self.descriptions.append(transfected)
     
@@ -4111,7 +4166,7 @@ class de_novo_simulation:
             self._test_replicate(client,hypothesis_set,test,index=i)        
 
     
-    _normal_vars=["simulation_replicates","transfection_reporter"]
+    _normal_vars=["simulation_replicates"]
     _df_vars=["ground_truth","library"]
     
     def save(self,path,name):
@@ -4119,7 +4174,6 @@ class de_novo_simulation:
         Note that this function saves self.simulated_scMPRA
         but not self.simulated, since the latter is intermediate.
         """
-        
         
         path=Path(path)/name
         
@@ -4360,6 +4414,8 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.set_negative_controls(negative_controls)
     ret.set_reference_cell(reference_cell_type)
     ret.flag_synthetic()
+    ret.overtransfected()
+    ret.flatten_overtransfection()
     return ret
 
 def _test_helper(test_data,test,hypothesis_set):
@@ -4387,22 +4443,13 @@ def _test_helper(test_data,test,hypothesis_set):
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
-                        library:pd.DataFrame,
-                        transfection_reporter:bool):
+                        library:pd.DataFrame):
     """ 
     Simulates transfection, producing a description dataframe
     from which transcription can be simulated...
 
     See README spec for details on ground truth dataframe.
     You can easially create one with the helper function `simple_spread`. 
-
-    transfection_reporter is a boolean that changes how cell numbers are counted
-    TRUE suggests that the assay can distinguish two transfection events of the 
-    same MPRA barcode, due to different transfection reporter barcodes or, if
-    its the exact same construct, by the number of transfection reporter barcode UMIs.
-    FALSE suggests such a distinction cannot be made, which may lead to some minor
-    overcounting if the library complexity is low enough or the cell number is high enough
-    to get repeat transfections.
     """
 
     #known before you start : "to be optimized":
@@ -4420,9 +4467,9 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["cells_per_cell_type"])]
         #drop number of cells
         cells_df=cells_df.drop(columns=["cells_per_cell_type"]).reset_index(drop=True)
-        ###add cell barcodes REMOVE
-        ##cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
+        cells_df["cell_bc"]=generate_barcodes(length=20,count=len(cells_df))
         #now get "how many MPRA constructs transfected into each cell"
+        #since this can draw a zero, some cells may effectively drop out at this
         cells_df["num_transfected"]=experiment_bounds.transfection_model.draw_nb(len(cells_df))
         #duplicate so we have one row for each transfection event
         cells_df=cells_df.loc[cells_df.index.repeat(cells_df["num_transfected"])].reset_index(drop=True)
@@ -4470,45 +4517,9 @@ def _simulate_transfection(experiment_bounds:Bounds,
     all_rep_cells_df["theta"]=experiment_bounds.theta
     all_rep_cells_df=all_rep_cells_df.rename({"true_mean":"mu"},axis=1)
     
-    #now we want to convert from "one row per cell"
-    #to "one row per cell_type,cre_id,rep_id" combo
+
+    ret=all_rep_cells_df
     
-
-    #get a list of all columns except which we mean to aggregate.
-    cols=all_rep_cells_df.columns.tolist()
-    cols.remove('cell_bc')
-    
-    
-    # if "transfection_reporter" we assume we can distinguish multiple
-    #
-    
-    aggregated_size = (
-        all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":"size"
-        }).reset_index()
-    )
-
-    aggregated_nunique = (
-        all_rep_cells_df.groupby(cols).agg({
-            "cell_bc":"nunique"
-        }).reset_index()
-    )
-
-    percent_lost=(len(aggregated_size)-len(aggregated_nunique))/len(aggregated_size)*100
-    print(f"percent lost {percent_lost}")
-    if percent_lost>2:
-        logger.warning("Greater than 2\% collision in simulated transfection!")
-
-    if transfection_reporter:
-        ret=aggregated_size
-    else:
-        ret=aggregated_nunique
-
-    
-
-
-    ret=ret.rename({"cell_bc":"cells"},axis=1)
-
     #compute alternate parametrization
     #redundant code with `def describe_parameters()`
     ret["r"]=ret["theta"]
@@ -4517,7 +4528,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
 
     #finally, we convert to a dask dataframe & return 
     
-    return dd.from_pandas(ret)
+    return ret
 
 
 def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
