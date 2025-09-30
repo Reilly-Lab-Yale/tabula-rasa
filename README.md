@@ -24,7 +24,7 @@ This repository is organzied as follows:
 
 "Preprocessing" processes emperical data for "object_creation".
 
-"object_creation" creates and saves several python objects (`ortho` and `scMPRA_data` and similar) useful in multiple analyses run in "results". Intermediate values are not distributed. Simulated datasets & processed emperical datasets are distributed separately, as `.scmpra` files on a data zenodo **LINK**.
+"object_creation" creates and saves several python objects (`ortho`, `scMPRA_data`, `Bounds` and similar) useful in multiple analyses run in "results". Intermediate values are not distributed. Simulated datasets & processed emperical datasets are distributed separately, as `.scmpra` files on a data zenodo **LINK**. Bounds objects are stored in presets directory in main package.
 
 "results" contains notebooks generating results in the paper. This includes figure panels and numbers. 
 
