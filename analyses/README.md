@@ -1,1 +1,0 @@
-Directory contains notebooks which produce manuscript analyses (figures, etc). These show the analyses that were used to make various modeling decisions in the creation of the package, and (will) demonstrate that final package.

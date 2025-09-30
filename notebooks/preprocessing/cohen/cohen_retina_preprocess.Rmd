@@ -1,0 +1,350 @@
+<!-- # --- -->
+title: "preprocessing cohen data"
+output: html_notebook
+---
+
+obsidian://open?vault=science&file=Excalidraw%2Fcohen_data_map_LKGLKarSVFqsg0mh0TID7KgPed2HxVRM
+
+libs & init definitions
+```{r}
+data_root<-"/home/mcn26/palmer_scratch/tabula_data"
+output_root="/home/mcn26/palmer_scratch/tabula_data/formatted"
+#whether data should be automatically downloaded : run notebook once with true,
+#then subsequently with false
+download_data=FALSE
+library(tidyverse)
+library(Seurat)
+```
+Let's get the cohen data. Specifically, let's start with the mouse retina dataset. 
+(my apologies for the R. Will be useful if we decide to play with the endogenous
+transcriptome & need to load seurat objects). 
+
+# Download data
+
+https://zenodo.org/records/7338678/files/scMPRA.zip?download=1
+
+```{r}
+zenodo=paste(data_root,"/scMPRA.zip",sep="")
+unzipped_zenodo_path=paste(data_root,"/scMPRA",sep="")
+if(download_data){
+  download.file("https://zenodo.org/records/7338678/files/scMPRA.zip?download=1",zenodo)
+  dir.create(unzipped_zenodo_path)
+  unzip(zenodo,exdir=unzipped_zenodo_path)
+  file.remove(zenodo)
+}
+```
+
+# Load retina data
+
+## Load and process MPRAbc data
+
+```{r}
+retina_MPRAbc_rep1<-read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_pBC_ec_rBC_ec_rep1.csv",sep=""))
+retina_MPRAbc_rep2<-read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_pBC_ec_rBC_ec_rep2.csv",sep=""))
+```
+Preferable to have the two replicates in one tibble
+```{r}
+retina_MPRAbc_rep1 <- retina_MPRAbc_rep1 %>% mutate(rep_id=1)
+retina_MPRAbc_rep2 <- retina_MPRAbc_rep2 %>% mutate(rep_id=2)
+retina_MPRAbc <- bind_rows(retina_MPRAbc_rep1, retina_MPRAbc_rep2)
+```
+
+Kill the original variables to free some space. 
+```{r}
+rm(retina_MPRAbc_rep1,retina_MPRAbc_rep2)
+gc()
+```
+
+
+
+```{r}
+retina_MPRAbc
+```
+
+Interestingly there are some zeroes un the umi name and count. Are zeroes in 
+these columns always coincident?
+
+```{r}
+table(
+  Count = ifelse(retina_MPRAbc$count == 0, "count == 0", "count != 0"),
+  UMI = ifelse(retina_MPRAbc$umi == "0", "umi == '0'", "umi != '0'")
+)
+```
+
+Perfect overlap : no UMI means no count and vice versa. Any NAs to mess things up?
+
+```{r}
+any(is.na(retina_MPRAbc$count) | is.na(retina_MPRAbc$umi))
+```
+
+Ok, none are NA, perfect.
+
+We want UMI counts, not counts of reads of individual UMIs, so let's aggregate. 
+```{r}
+retina_MPRAbc_agg <- retina_MPRAbc %>%
+  group_by(cellBC, rBC, name, pBC, cluster, rep_id) %>%
+  summarise(
+    total_count = sum(count),
+    UMIs_MPRA_BC = n_distinct(umi[count > 0]),
+    .groups = "drop"
+  )
+```
+
+
+## Loading transfection reporter (U6) data
+
+Let's factor in the U6 data. 
+
+There are two versions of the U6 data. One is labeled "padded". Examining the 
+tables, the non-padded version appears to be discrete, whole-number read counts, so we'll use that. 
+
+
+```{r}
+u6_retina_r1<-read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_u6_pBC_umi_rep1.csv",sep=""))
+u6_retina_r2<-read_csv(paste(data_root,"/scMPRA/scMPRA/data/sc_expression_retina/retina_u6_pBC_umi_rep2.csv",sep=""))
+```
+
+Preferable to have the two replicates in one tibble
+```{r}
+u6_retina_r1 <- u6_retina_r1 %>% mutate(rep_id=1)
+u6_retina_r2 <- u6_retina_r2 %>% mutate(rep_id=2)
+u6_retina <- bind_rows(u6_retina_r1, u6_retina_r2)
+```
+
+Kill the original variables to free some space. 
+```{r}
+rm(u6_retina_r1,u6_retina_r2)
+gc()
+```
+
+Are any zero?
+
+```{r}
+any(u6_retina$counts==0)
+```
+none, good. 
+
+Since there is no pBC<->promoter name association in that table, let's check to 
+see if all of the reported pBCs map to promoters...
+First, we will extract the pBC<->promoter name map:
+
+```{r}
+map=unique(retina_MPRAbc_agg[c("name","pBC")])
+```
+
+Make sure that the map is 1:1 :
+```{r}
+stopifnot(nrow(unique(map["name"]))==nrow(unique(map["pBC"])))
+stopifnot(nrow(unique(map["name"]))==nrow(map))
+```
+
+are there any pBCs in the u6 data which are not real?
+
+```{r}
+all(u6_retina[["pBC"]] %in% map[["pBC"]])
+```
+
+No, they are all real (in the map). 
+
+
+## Adding transfection reporter (U6) data
+
+Let's add the U6 counts to the MPRAbc tibble
+First, let's unify the names
+
+```{r}
+u6_retina=u6_retina %>%
+  rename(
+    cluster=clustrer,
+    u6_count=counts
+  )
+```
+
+
+Next, we'll join the two dataframes.
+I will perform an outer join to fill in zeroes: transfected but not expressed, 
+and expressed but did not detect transfection reporter. 
+
+Note that one effect of this step will be the duplication of many transfection 
+reporter counts. Since one transfection reporter has a one-to-many relationship 
+with many MPRA barcodes, there's not a great way to avoid this.
+(consequence of cohen construct design & limitations of csvs)
+(ideally id keep in 2x tables and link, but this is csvs not sql). 
+Since we don't really care about the specific U6 count numbers (just presence or 
+absence) I think this is OK. 
+
+First, though, let's make sure that the "key" is unique in the U6 table. 
+If it's not, it could cause unpleasant duplication of MPRAbc data. 
+
+```{r}
+key=c('cellBC','pBC','rep_id')
+```
+
+```{r}
+stopifnot(nrow(unique(u6_retina[key]))==nrow(u6_retina[key]))
+```
+Ok good. 
+
+outer join
+```{r}
+joined=merge(retina_MPRAbc_agg, u6_retina, by=c('cellBC','pBC','rep_id'), all=TRUE)
+```
+
+Let's take a look at how the join went. It's an outer join, so we shouldn't lose
+any information, but there is the possibility of introducing NAs. 
+Were there any NAs before?
+
+```{r}
+any(is.na(retina_MPRAbc_agg)) || any(is.na(u6_retina))
+```
+Nope!
+
+Are there any NAs after?
+
+```{r}
+any(is.na(joined))
+```
+
+Yep. these are the aforementioned "transfected but not expressed, 
+and expressed but did not detect transfection reporter". Let's fill them in with
+zeroes (a more approproiate marker for "not observed" than NA, which suggests 
+"not measured"). 
+
+```{r}
+joined
+```
+
+
+Fill in the cluster info : sometimes coming from each...
+Make sure the two cols never contradict each other, and there are never any case
+s where we have NO cluster information. 
+```{r}
+error_df <- joined %>%
+  filter(is.na(cluster.x) & is.na(cluster.y) | (cluster.x != cluster.y & !is.na(cluster.x) & !is.na(cluster.y)))
+
+stopifnot(nrow(error_df)==0)
+```
+
+make a new cluster column
+```{r}
+cluster_col <- ifelse(!is.na(joined$cluster.x), joined$cluster.x, joined$cluster.y)
+```
+make sure it's complete
+```{r}
+stopifnot(!any(is.na(cluster_col)))
+```
+add new and kill old cluster columns
+```{r}
+joined$cluster=cluster_col
+joined=joined %>% select (-c(cluster.x, cluster.y))
+```
+
+
+fill some NAs
+```{r}
+joined=joined %>%
+  mutate(u6_count = if_else(is.na(u6_count), 0, u6_count)) %>%
+  mutate(rBC = if_else(is.na(rBC),"0",rBC))  %>%
+  mutate(total_count = if_else(is.na(total_count),0,total_count))  %>%
+  mutate(UMIs_MPRA_BC = if_else(is.na(UMIs_MPRA_BC),0,UMIs_MPRA_BC))
+```
+
+Fill in the promoter name based on the map
+
+```{r}
+rows_joined_before=nrow(joined)
+
+joined=joined %>% 
+  select (-c(name)) %>%
+  left_join(map,by="pBC")
+
+stopifnot(rows_joined_before==nrow(joined))
+
+```
+
+
+
+```{r}
+any(is.na(joined))
+```
+
+All NAs filled!
+
+
+Make sure we haven't created any strange situations where umi is zero but its 
+counts aren't, or vice-versa
+
+
+
+```{r}
+invalid_rows <- joined %>%
+  filter(xor(rBC=="0",UMIs_MPRA_BC==0))
+
+#invalid_rows
+stopifnot(nrow(invalid_rows)==0)
+```
+
+Perfect. 
+
+```{r}
+joined
+```
+
+Rename
+
+```{r}
+joined=joined %>% 
+  rename(#new=old
+    MPRA_BC=rBC,
+    reads_MPRA_BC=total_count,
+    cell_type_annotation=cluster,
+    transfection_BC=pBC,
+    CRE_id=name,
+    reads_transfection_BC=u6_count
+  )
+```
+
+```{r}
+joined
+```
+
+
+re-order the columns
+
+```{r}
+joined=joined %>%
+  select(cellBC,rep_id,CRE_id,cell_type_annotation,MPRA_BC,reads_MPRA_BC,UMIs_MPRA_BC,transfection_BC,reads_transfection_BC)
+```
+
+
+make a little 2x2 grid
+
+```{r}
+table(
+  mpra_count = ifelse(joined$UMIs_MPRA_BC == 0, "undetected", "detected"),
+  u6_count = ifelse(joined$reads_transfection_BC == 0, "no tfection reporter", "tfection reporter")
+)
+```
+
+- detected+no tfection reporter = transfected and expressed, but we lost the reporter in RNA processing.
+- detected+tfection reporter = transfected and expressed
+and so forth
+
+The only weird one is double zero: no U6 and no tfection reporter. 
+No evidence for those : not even real zero counts/ let us dump them.
+
+```{r}
+joined=joined %>%
+  filter(UMIs_MPRA_BC != 0 | reads_transfection_BC != 0)
+```
+
+
+
+
+dump to disc
+```{r}
+write.table(joined, file = paste(output_root,"COHEN_RETINA.tsv",sep="/"), sep = "\t", row.names = FALSE, quote = FALSE)
+```
+
+
+

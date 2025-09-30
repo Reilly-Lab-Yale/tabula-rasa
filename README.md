@@ -1,16 +1,42 @@
+# introdution
 
+(take from abstract)
 
-Assumptions:
+Find the preprint HERE
+Find the data zenodo HERE
+Find the github archival zenodo HERE
+
+Skip down to "install" to get started!
+
+This repository is organzied as follows:
+```
+
+├── docs					# documentation
+├── notebooks				# jupyter notebooks
+│   ├── object_creation		# creates objects from scMPRA data
+│   ├── results				# figures and numerical results
+│   └── preprocessing		# preprocesses emperical scMPRA data
+└── scMPRAforge				# the package proper
+    ├── vingettes			# notebooks demonstrating the use of the package
+    ├── presets				# presets to be distributed with the package
+    └── tests				# tests
+```
+
+"Preprocessing" processes emperical data for "object_creation".
+
+"object_creation" creates and saves several python objects (`ortho` and `scMPRA_data` and similar) useful in multiple analyses run in "results". Intermediate values are not distributed. Simulated datasets & processed emperical datasets are distributed separately, as `.scmpra` files on a data zenodo **LINK**.
+
+"results" contains notebooks generating results in the paper. This includes figure panels and numbers. 
+
+# key assumptions
+(move to paper)
 1. Though ideally we would model each barcode (like the approach in MPRAmodel) for greater statistical power, the sparse nature of scMPRA data means that we won't be able to do this. Not that the barcodes are retained, just not modeled separaately. 
 2. Removal of "false zeroes" through clonotype analysis and transfection reporters is part of pre-processing. 
 3. We are interested in changes in CRE activity within and between cell-types
 
-(We may eventually wish to turn the ad-hoc pre-processing steps into common tools.)
-
-Run `pydoc-markdown` in the repo root to update the docs. (Could automate this with a github action). 
 
 # install
-
+(temporary : replace with pip install scMPRAforge once we have actually )
 ```
 conda create -n env_tensorzinb python=3.10
 conda activate env_tensorzinb
@@ -26,7 +52,6 @@ conda install -c apple tensorflow-deps
 python -m pip install tensorflow-macos==2.9.2
 python -m pip install tensorflow-metal==0.5.1
 ```
-
 
 ```
 conda install statsmodels 
@@ -56,19 +81,22 @@ If you see a device, you're good to go.
 
 (adapted from [mccleary docs](https://docs.ycrc.yale.edu/clusters-at-yale/guides/tensorflow/))
 
-# MPRA data formatting
 
-All on-disc data should be tsv or (some high-performace format to be chosen later).
+# Data formats
+
+This section describes the various standard tabular formats used internally.
+
+## MPRA data formatting
 
 Note that most of our code does not *require* that any of the barcode sequences should be actual nucleotide sequences. So you can replace them with, for example, numerical combinatorial barcoding sub-barcode ID strings with no consequence. The exception is barcode-deduplication. 
 
-However, given python's weak typing, I'd recommend not putting something that could be obviously misinterpreted as another type (e.g. replicate a single int as this could easially be misinterpreted to suggest an ordinal position).
 
-Data can be umi-wise or read-wise.
 
 (Collapsing cells, replicates, and MPRA barcodes is not meaningful for us, since this would collapse what we believe to be true biological samples. However we may frequently *summarize* (e.g. compute mean UMIs per cell, or model a distribution where all UMI count originating from one CRE in one cell-type (regardless of MPRA barcode) are considered to have come from one triplicate of zinb parameters).
 
 In memory, dataframes use named columns with dummy row-indicies. 
+
+scMPRA data can be umi-wise or read-wise.
 
 UMI = unique molecular identifier
 
@@ -111,7 +139,7 @@ This keeps it as a totally exogenous source of information, far from the vicissi
 
 Also note that all these strings are really factors / categorical data, and will be treated as such. 
 
- # Hypothesis formatting
+ ## Hypothesis formatting
  A hypothesis set is a table with the following format:
 
 | Column name          | Type | Description    | Mandatory? |
@@ -144,7 +172,7 @@ A result table is the same as a hypothesis table with the following additional c
    p = max(1.0 - chi2.cdf(z*z, 1), eps)
   ```
 
-# Ground-truth formatting
+## Ground-truth formatting
 These tables store made-up ground truth, for the purposes of simulation. 
 | Column name | Type  | Description                           |
 |-------------|-------|---------------------------------------|
@@ -152,7 +180,7 @@ These tables store made-up ground truth, for the purposes of simulation.
 | cre_id      | str   | CRE id or name                        |
 | true_mean   | float | Ground-truth # MPRA barcode UMIs/cell |
 
-# MPRA library table
+## MPRA library table
 
 | Column name | Type                | Description                       | Mandatory? |
 |-------------|---------------------|-----------------------------------|------------|
@@ -162,26 +190,6 @@ These tables store made-up ground truth, for the purposes of simulation.
 
 Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
 
-# Model formatting
 
-(If we change our mind and instead desire a per-CRE model approach, we could replace this with a pandas dataframe). 
- 
-Model can be broken into a cohort parameters + a parameter table (but the reverse is not trivial).
-
-# Cohort parameters formatting
-
-A dictionary with keys
-- alpha: alpha value for the dataset (constant term in mean-variance relationship). 
-
-# Parameter table formatting
-
-Note that this object is closely associated with a gross
-
-# Preprocessing tools
-
-scMPRA is a new technique and there are as of yet no standard flows for the initial analysis. These preprocessing tools are only for common-to but also-specific-to scMPRA tasks and are not a substituite for standard scRNA-seq analysis. 
-
- 1. cell-filterer (kill from a list of low-quality cells)
- 2. MPRABC-CRE association (assign CREs to UMIs on the basis of some lookup table generated from DNA-sequencing). 
 
 
