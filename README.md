@@ -2,9 +2,9 @@
 
 (take from abstract)
 
-Find the preprint HERE
-Find the data zenodo HERE
-Find the github archival zenodo HERE
+- Find the preprint HERE
+- Find the data zenodo HERE (dump of /gpfs/gibbs/pi/reilly/tabula_data)
+- Find the github archival zenodo HERE
 
 Skip down to "install" to get started!
 
