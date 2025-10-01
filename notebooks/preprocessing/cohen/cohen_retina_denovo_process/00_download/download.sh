@@ -5,7 +5,7 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --array=1-4
 
-DATA_ROOT="/home/mcn26/palmer_scratch/raw_recap/cohen_retina"
+DATA_ROOT="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/raw_fastq"
 
 module load SRA-Toolkit
 SRA_LIST="sra_runs.txt"
