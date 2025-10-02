@@ -569,6 +569,8 @@ class Bounds:
     min_mpra_umi:float=None
     max_mpra_umi:float=None
 
+    total_uniq_mpra_bc:int=None
+
     by_cre_theta:float=None
     by_cell_type_theta:float=None
     theta:float=None
@@ -715,6 +717,9 @@ class Bounds:
 
         #cells per cell type
         ret.cells_per_cell_type=inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
+
+        #total number of MPRA barcodes
+        ret.total_uniq_mpra_bc=len(inp.training_data.data["mpra_bc"].unique())
         
         ret.preferred=preferred
         
@@ -841,7 +846,7 @@ class scMPRA_data:
     def describe_library(self):
         """
         Returns a simple_count object describing the number of unique MPRA
-        barcodes for each 
+        barcodes for each cre_id
         """
         y=self.data.groupby("cre_id")["mpra_bc"].nunique()
         return simple_count(data=y)
