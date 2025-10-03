@@ -434,12 +434,13 @@ class simple_count:
         self.r = 1.0 / self.alpha_nb
         self.p = self.r / (self.r + self.mu_nb)
     
-    def draw_nb(self,size):
+    def draw_nb(self,size, rng = np.random.default_rng()):
         """
         returns a 1d numpy vector of draws from the nb
         model of the object. 
         """
-        return scipy.stats.nbinom.rvs(self.r,self.p,size=size)
+        #return rng.negative_binomial(n=self.r, p=self.p, size=size)
+        return scipy.stats.nbinom.rvs(self.r,self.p,size=size,random_state=rng)
     
     def plot(self, max_bins: int = 25, binwidth: int | None = None):
         """
@@ -752,6 +753,7 @@ class Bounds:
         return ret
 
 from pathlib import Path
+
 working_dir = Path(__file__).resolve().parent
 SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
 
