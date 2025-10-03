@@ -581,6 +581,10 @@ class Bounds:
 
     cells_per_cell_type:dict=None
 
+    excess_tfection:float=None
+    total_tfection:float=None
+    total_uniq_mpra_bc:int=None
+
     transfection_model:simple_count=None
     library_model:simple_count=None
 
@@ -713,16 +717,15 @@ class Bounds:
 
         # library model
         ret.library_model=inp.training_data.describe_library()
-        
 
         #cells per cell type
         ret.cells_per_cell_type=inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
 
-        #total number of MPRA barcodes
-        ret.total_uniq_mpra_bc=len(inp.training_data.data["mpra_bc"].unique())
         
+        #save the preferred model direction
         ret.preferred=preferred
         
+        #chose representative parameters based on preferred model direction
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
@@ -732,6 +735,20 @@ class Bounds:
         else:
             assert False, "Unrecognized direction."
 
+        #total number of MPRA barcodes
+        ret.total_uniq_mpra_bc=len(inp.training_data.data["mpra_bc"].unique())
+        
+        #calculate post-hoc overtransfection. 
+        tfection=inp.training_data.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique().reset_index()
+        tfection=tfection.rename({"mpra_bc":"unique_mpra_bc"},axis=1)
+        observed=tfection["unique_mpra_bc"]
+        tfection["tot_plasmid"]=np.log(1-observed/ret.total_uniq_mpra_bc)/np.log((ret.total_uniq_mpra_bc-1)/ret.total_uniq_mpra_bc)
+        total_tfection=tfection['tot_plasmid'].sum()
+        excess=total_tfection-tfection["unique_mpra_bc"].sum()
+        logger.info(f"Computed a total of {excess} estimated collision events, out of a total of {total_tfection}, or {excess/total_tfection*100}%")
+        ret.excess_tfection=excess
+        ret.total_tfection=total_tfection
+        
         return ret
 
 from pathlib import Path
