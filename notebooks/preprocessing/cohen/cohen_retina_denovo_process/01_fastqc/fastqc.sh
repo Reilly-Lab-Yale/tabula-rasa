@@ -20,6 +20,7 @@ for file in "$input_dir"/*.fastq.gz; do
     output_dir="$output_root/$base_name"
     mkdir -p "$output_dir"
     
+    echo "running fastqc on ${file}"
     # Run FastQC on the file and place the output in the created directory
     fastqc --noextract -t 10 -o "$output_dir" "$file"
 done
