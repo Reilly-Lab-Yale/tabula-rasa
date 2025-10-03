@@ -43,7 +43,7 @@ def get_closest_iupac_code(row):
 import os
 def main():
 
-    inp="/home/mcn26/project/tabula_rasa/preprocessing/cohen_retina_denovo_process/process/2_get_stats"
+    inp="/home/mcn26/project/tabula_rasa/notebooks/preprocessing/cohen/cohen_retina_denovo_process/02_get_stats"
     for filename in os.listdir(inp):
         if filename.endswith(".stats"):
             print(f"Inspecting file {filename}")
