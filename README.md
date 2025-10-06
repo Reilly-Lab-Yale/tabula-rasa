@@ -22,6 +22,8 @@ This repository is organzied as follows:
     └── tests				# tests
 ```
 
+"scMPRAforge" contains the actual pacakge
+
 "Preprocessing" processes emperical data for "object_creation".
 
 "object_creation" creates and saves several python objects (`ortho`, `scMPRA_data`, `Bounds` and similar) useful in multiple analyses run in "results". Intermediate values are not distributed. Simulated datasets & processed emperical datasets are distributed separately, as `.scmpra` files on a data zenodo **LINK**. Bounds objects are stored in presets directory in main package.
