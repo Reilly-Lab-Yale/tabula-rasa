@@ -1,38 +1,43 @@
+#run with pypy3 and pipe file input
+
 import sys
-from Bio import SeqIO
-import numpy as np
 
-def calculate_nucleotide_percentage(fastq_stream):
-    # Initialize a list to hold the count of nucleotides at each position
-    count = []
-    total_sequences = 0
+def main():
+    line_number=-1
+    counts=[]
+    init=True
+    for line in sys.stdin.buffer:
+        #fastq format is 
+        #0: header
+        #1: nucleotides
+        #2: header
+        #3: quality
+        #repeat
+        #we only want nucleotides
 
-    # Process each record from the stream
-    for record in SeqIO.parse(fastq_stream, "fastq"):
-        total_sequences += 1
-        seq = str(record.seq)
-
-        # Extend count list size if the current sequence is longer than count list
-        if len(count) < len(seq):
-            count.extend([{'A': 0, 'C': 0, 'G': 0, 'T': 0, 'N': 0} for _ in range(len(seq) - len(count))])
-
-        # Count each nucleotide at each position
-        for i, nucleotide in enumerate(seq):
-            if nucleotide in count[i]:
-                count[i][nucleotide] += 1
-
-    # Calculate percentages
-    percentages = []
-    for pos_counts in count:
-        pos_percentages = {nuc: (pos_counts[nuc] / total_sequences * 100) for nuc in pos_counts}
-        percentages.append(pos_percentages)
-
-    return percentages
-
-# Usage: Pipe in a FASTQ file via standard input
-# Example: cat example.fastq | python this_script.py
-percentages = calculate_nucleotide_percentage(sys.stdin)
-
-# Print or process the percentages as needed
-for i, p in enumerate(percentages):
-    print(f"Position {i+1}: {p}")
+        line_number=line_number+1
+        
+        if line_number % 4 !=1:
+            continue
+        
+        line=line.decode()
+        #print(f"Line: {line}")
+        
+        #initalize length. Assuming all reads are the same length.
+        if init:
+            counts=[{}]*len(line)
+            init=False
+        elif len(line)!=len(counts):
+            raise ValueError(f"different read length at line {line_number}")
+        
+        for idx, nt in enumerate(line):
+            counts[idx][nt] = counts[idx].get(nt,0)+1
+        
+        
+    
+    for i in counts:
+        print(i)
+		
+		
+if __name__=="__main__":
+	main()
