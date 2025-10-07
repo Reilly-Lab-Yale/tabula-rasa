@@ -31,7 +31,7 @@ def main():
 			file=open(f"{output_root}/{filename}_{len(line)}nt.txt","w")
 			output_files[len(line)]=file
 		
-		output_files[len(line)].write(line)
+		output_files[len(line)].write(line+"\n")
 	
 	for key in output_files.keys():
 		output_files[key].close()
