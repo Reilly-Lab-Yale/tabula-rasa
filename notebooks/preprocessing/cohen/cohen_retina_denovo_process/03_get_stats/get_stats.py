@@ -15,12 +15,10 @@ def main():
             counts=[{}]*len(line)
             init=False
         elif len(line)!=len(counts):
-            raise ValueError(f"different read length at line {line_number}")
+            raise ValueError(f"different read length")
         
         for idx, nt in enumerate(line):
             counts[idx][nt] = counts[idx].get(nt,0)+1
-        
-        
     
     for i in counts:
         print(i)
