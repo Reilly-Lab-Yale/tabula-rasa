@@ -3,22 +3,9 @@
 import sys
 
 def main():
-    line_number=-1
     counts=[]
     init=True
     for line in sys.stdin.buffer:
-        #fastq format is 
-        #0: header
-        #1: nucleotides
-        #2: header
-        #3: quality
-        #repeat
-        #we only want nucleotides
-
-        line_number=line_number+1
-        
-        if line_number % 4 !=1:
-            continue
         
         line=line.decode()
         #print(f"Line: {line}")
