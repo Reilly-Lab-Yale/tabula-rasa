@@ -1930,6 +1930,8 @@ def describe_parameters(parameters,dat,split):
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
+    #handle case where mu is zero
+    working.loc[working["mu"]==0.0,"p"]=0.0
     working=working.reset_index()
 
 
@@ -4221,11 +4223,11 @@ class de_novo_simulation:
         # descriptions
         
         clobber_mkdir(path/"descriptions")
-        for i, ddf in enumerate(self.descriptions):
+        for i, df in enumerate(self.descriptions):
             target = path/"descriptions" / f"{i}.tsv.gz"
             # Compute to pandas and then write
-            pdf = ddf.compute()
-            pdf.to_csv(
+            #pdf = ddf.compute()
+            df.to_csv(
                 target,
                 sep="\t",
                 index=False,
@@ -4511,15 +4513,15 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="one_to_one")
         
         
-        #drop library abundance, we don't care anymore.
+        # drop library abundance, we don't care anymore.
         cells_df=cells_df.drop(columns=["abundance"])
         
         # merge in ground truth
+        # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
                                 on=["cell_type","cre_id"],
                                 validate="many_to_one",
-                                how="outer")
-        
+                                how="left")
 
         #check to make sure there were no NAs introduced
         assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
@@ -4549,6 +4551,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
     ret["r"]=ret["theta"]
     ret["sigmasquare"]=ret["mu"]**2/ret["r"]+ret["mu"]
     ret["p"]=ret["mu"]/ret["sigmasquare"]
+    #handle case where mu is zero
+    ret.loc[ret["mu"]==0.0,"p"]=0.0
 
     #finally, we convert to a dask dataframe & return 
     
