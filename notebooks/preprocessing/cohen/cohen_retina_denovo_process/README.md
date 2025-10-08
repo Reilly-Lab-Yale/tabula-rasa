@@ -1,4 +1,4 @@
-DATA_ROOT="/home/mcn26/palmer_scratch/raw_recap/cohen_retina"
+This directory contains code to download and preprocess cohen's ex-vivo retina expreiment into a properly formatted scMPRA data table. 
 
 #GSM6614199 	retina single-cell transcriptome rep1 [scRNA-seq]
 #
