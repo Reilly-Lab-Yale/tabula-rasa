@@ -1,28 +1,38 @@
-#run with pypy3 and pipe file input
-
+# get_stats.py
 import sys
+from collections import Counter
+import fileinput
 
 def main():
-    counts=[]
-    init=True
-    for line in sys.stdin.buffer:
-        
-        line=line.decode()
-        #print(f"Line: {line}")
-        
-        #initalize length. Assuming all reads are the same length.
-        if init:
-            counts=[{}]*len(line)
-            init=False
-        elif len(line)!=len(counts):
-            raise ValueError(f"different read length")
-        
-        for idx, nt in enumerate(line):
-            counts[idx][nt] = counts[idx].get(nt,0)+1
+    total_lines=0
+    counts = None
+    for lineno, line in enumerate(fileinput.input(files=sys.argv[1:] or ('-',)), start=1):
+        line = line.strip()
+        #skip empty lines
+        if not line:
+            continue
+
+        total_lines +=1
+
+        #init code
+        if counts is None:
+            counts = [Counter() for _ in range(len(line))]
+        elif len(line) != len(counts):
+            raise ValueError(f"different read length at line {lineno}: got {len(line)}, expected {len(counts)}")
+
+        #increment counters
+        for i, nt in enumerate(line):
+            counts[i][nt] += 1
+
+    if not counts:
+        return
     
-    for i in counts:
-        print(i)
-		
-		
-if __name__=="__main__":
-	main()
+    for c in counts:
+        #cast to dict from counter, change to percent from abolute count. 
+        c=dict(c)
+        for nt in c:
+            c[nt]=c[nt]/float(total_lines)
+        print(c)
+
+if __name__ == "__main__":
+    main()
