@@ -8,7 +8,8 @@ import re
 import numpy as np
 import pandas as pd
 from dask.distributed import Future
-
+import itertools
+import time
 
 logger = logging.getLogger("scMPRAforge")
 
@@ -43,8 +44,26 @@ def list_unimplemented():
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-import time
 
+def zero_pad_ground_truth(gt_df):
+    """
+    Takes a ground truth dataframe (see specification in readme) 
+    and fills in missing `cell_type`, `cre_id` combinations with 
+    `true_mean`=zero.
+    """
+    #make a df of all zeroes
+    #all combos of cell_type and cre_id
+    zeroes = itertools.product(gt_df["cell_type"].unique(),gt_df["cre_id"].unique())
+    #cast to df
+    zeroes = pd.DataFrame([i for i in zeroes],columns=["cell_type","cre_id"])
+    #get those combos not present in the gt df
+    missing_combos=gt_df.merge(zeroes,how="outer",on=["cell_type","cre_id"],indicator=True)
+    missing_combos=missing_combos[missing_combos["_merge"]=="right_only"]
+    missing_combos=missing_combos[["cell_type","cre_id"]]
+    #init zero true mean
+    missing_combos["true_mean"]=0.0
+    #stack
+    return pd.concat([gt_df,missing_combos])
 
 def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     """
