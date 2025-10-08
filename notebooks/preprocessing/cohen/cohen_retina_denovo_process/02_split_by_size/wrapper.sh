@@ -13,4 +13,4 @@ files=($(ls $inroot))
 file="${files[$SLURM_ARRAY_TASK_ID]}"
 outroot="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/length_split_fastq"
 
-cat $inroot/$file | pypy3 split_by_size.py $file .
+cat $inroot/$file | pypy3 split_by_size.py $file $outroot
