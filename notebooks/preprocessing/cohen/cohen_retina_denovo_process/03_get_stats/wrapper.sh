@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -c 1
-#SBATCH --array=0-14
+#SBATCH --array=0-11
 #SBATCH --mem-per-cpu=1G
 #SBATCH -t 6:00:00
 #SBATCH -p ycga
