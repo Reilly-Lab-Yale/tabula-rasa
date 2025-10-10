@@ -4235,7 +4235,7 @@ class de_novo_simulation:
         # orthos
         clobber_mkdir(path/"orthos")
         for i, orth in enumerate(self.orthos):
-            orth.save(path=path/"orthos",
+            orth.result().save(path=path/"orthos",
                     name=str(i),
                     strip_training_data=True)
         
