@@ -4196,8 +4196,9 @@ class de_novo_simulation:
         """
         Fits an ortho to simulated replicate `index`.
         Useful for downstream wald hypothesis testing.
+        !Collects simulations!
         """
-        result=client.submit(_ortho_helper,self.simulated_scMPRA[index])
+        result=_ortho_helper(self.simulated_scMPRA[index])
         if index>=len(self.orthos):
             self.orthos.extend([None] * (index + 1 - len(self.orthos)))
         self.orthos[index] = result
@@ -4206,6 +4207,7 @@ class de_novo_simulation:
         """
         Fits orthos to all simulated replicates. 
         Useful for downstream wald hypothesis testing.
+        !Collects simulations!
         """
         for i in range(len(self.simulated_scMPRA)):
             self._create_ortho_for_replicate(client,i)
@@ -4235,7 +4237,7 @@ class de_novo_simulation:
         # orthos
         clobber_mkdir(path/"orthos")
         for i, orth in enumerate(self.orthos):
-            orth.result().save(path=path/"orthos",
+            orth.save(path=path/"orthos",
                     name=str(i),
                     strip_training_data=True)
         
@@ -4475,6 +4477,7 @@ def _ortho_helper(data:scMPRA_data):
     Helper function for de_novo_simulation._create_ortho_for_replicate
     """
     client=get_client()
+    data=data.result()
     data.ortho_filter()
     primordial=ortho()
     primordial.criss_cross(client=client,
