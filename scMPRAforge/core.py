@@ -1082,7 +1082,7 @@ class scMPRA_data:
         )
 
         valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
-        all_combos = nonzero_counts[['cell_type', 'cre_id']]
+        all_combos = self.data[['cell_type', 'cre_id']]
 
         # Compute dropped combos
         dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
@@ -4147,7 +4147,6 @@ class de_novo_simulation:
                     experiment_bounds=self.experiment_bounds,
                     ground_truth=self.ground_truth,
                     library=self.library)
-            
             self.descriptions.append(transfected)
     
     def _simulate_transcription(self):
@@ -4485,7 +4484,7 @@ def _ortho_helper(data:scMPRA_data):
     primordial.extract_params(client)
     return primordial
     
-    
+
 
 
 def _test_helper(test_data,test,hypothesis_set):
@@ -4600,7 +4599,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     ret.loc[ret["mu"]==0.0,"p"]=0.0
 
     #finally, we convert to a dask dataframe & return 
-    
     return ret
 
 
