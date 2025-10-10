@@ -10,6 +10,9 @@ def readnt(filename):
             #snip=snip[snip.index(" ")+1:]
             #snip=snip.strip("\n")
             snip=ast.literal_eval(line)
+            for nt in ['A','T','G','C','N']:
+                if not nt in snip.keys():
+                    snip[nt]=0
             lis.append(snip)
     return pd.DataFrame(lis)
 
@@ -31,11 +34,11 @@ def get_closest_iupac_code(row):
     min_difference = float('inf')
     best_match = 'X'
     for code, expected in iupac_expected.items():
-        difference = sum(abs(row[nuc] - 100 * expected[nuc]) for nuc in expected)
+        difference = sum(abs(row[nuc] - expected[nuc]) for nuc in expected)
         if difference < min_difference:
             min_difference = difference
             best_match = code
-    return best_match.upper()
+    return best_match#.upper()
 
 import os
 def main():
