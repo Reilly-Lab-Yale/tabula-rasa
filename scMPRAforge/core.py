@@ -4124,6 +4124,7 @@ class de_novo_simulation:
         self.descriptions=[]
         self.simulated=[]
         self.simulated_scMPRA=[]
+        self.orthos=[]
         self.results={}
     
     def gamut(self, client):
@@ -4188,8 +4189,26 @@ class de_novo_simulation:
         Performs desired test with provided hypothesis set
         saves to self.results dict, keyed on test type. 
         """
-        for i in range(self.simulated_scMPRA):
+        for i in range(len(self.simulated_scMPRA)):
             self._test_replicate(client,hypothesis_set,test,index=i)        
+    
+    def _create_ortho_for_replicate(self,client,index):
+        """
+        Fits an ortho to simulated replicate `index`.
+        Useful for downstream wald hypothesis testing.
+        """
+        result=client.submit(_ortho_helper,self.simulated_scMPRA[index])
+        if index>=len(self.orthos):
+            self.orthos.extend(None * (index + 1 - len(self.orthos)))
+        self.orthos[index] = result
+    
+    def create_orthos_for_all_replicates(self, client):
+        """
+        Fits orthos to all simulated replicates. 
+        Useful for downstream wald hypothesis testing.
+        """
+        for i in range(len(self.simulated_scMPRA)):
+            self._create_ortho_for_replicate(client,i)
 
     
     _normal_vars=["simulation_replicates"]
@@ -4213,15 +4232,19 @@ class de_novo_simulation:
         with open(path / "vars.json","w") as f:
             json.dump(normal_dump,f,indent=4)
         
+        # orthos
+        clobber_mkdir(path/"orthos")
+        for i, orth in enumerate(self.orthos):
+            orth.save(path=path/"orthos",
+                    name=str(i),
+                    strip_training_data=True)
+        
         #dataframes
         for var in self._df_vars:
             getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
 
         
-
-        
         # descriptions
-        
         clobber_mkdir(path/"descriptions")
         for i, df in enumerate(self.descriptions):
             target = path/"descriptions" / f"{i}.tsv.gz"
@@ -4266,6 +4289,9 @@ class de_novo_simulation:
         
         for var, value in normal_dump.items():
             setattr(obj, var, value)
+        
+        # orthos
+        #...
         
         #dfs
         for var in obj._df_vars:
@@ -4444,12 +4470,28 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.flatten_overtransfection()
     return ret
 
+def _ortho_helper(data:scMPRA_data):
+    """
+    Helper function for de_novo_simulation._create_ortho_for_replicate
+    """
+    client=get_client()
+    data.ortho_filter()
+    primordial=ortho()
+    primordial.criss_cross(client=client,
+                            dat=test_data)
+    primordial.extract_params(client)
+    return primordial
+    
+    
+
+
 def _test_helper(test_data,test,hypothesis_set):
     """
     Helper function for de_novo_simulation._test_all_replicates
     """
     client=get_client()
     if test=="wald":
+        #REWRITE TO ACCOMODATE PRECOMPUTED ORTHOS
         test_data.ortho_filter()
         primordial=ortho()
         primordial.criss_cross(client=client,
