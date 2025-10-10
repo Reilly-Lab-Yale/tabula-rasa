@@ -4199,7 +4199,7 @@ class de_novo_simulation:
         """
         result=client.submit(_ortho_helper,self.simulated_scMPRA[index])
         if index>=len(self.orthos):
-            self.orthos.extend(None * (index + 1 - len(self.orthos)))
+            self.orthos.extend([None] * (index + 1 - len(self.orthos)))
         self.orthos[index] = result
     
     def create_orthos_for_all_replicates(self, client):
@@ -4478,7 +4478,7 @@ def _ortho_helper(data:scMPRA_data):
     data.ortho_filter()
     primordial=ortho()
     primordial.criss_cross(client=client,
-                            dat=test_data)
+                            dat=data)
     primordial.extract_params(client)
     return primordial
     
