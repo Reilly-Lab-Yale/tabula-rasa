@@ -2,6 +2,9 @@ Let's examine the consensus sequences we just generated from the cohen retina sc
 
 # reference
 
+![fig4ab](../images/fig4ab.png)
+![chromium_diagram](../images/chromium.png)
+
 TSOs from [10x docs](https://kb.10xgenomics.com/hc/en-us/articles/360001493051-What-is-a-template-switch-oligo-TSO). 
 ```
 CCCATGTACTCTGCGTTGATACCACTGCTT

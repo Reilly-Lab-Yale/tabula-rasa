@@ -4,6 +4,9 @@ Let us check which read lengths are paired.
 DATA_ROOT="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/filtered_fastq/"
 ```
 
+![fig4ab](../images/fig4ab.png)
+![chromium_diagram](../images/chromium.png)
+
 # U6
 
 ## retina u6 barcodes rep2
@@ -77,8 +80,10 @@ cat ${DATA_ROOT}SRR21787462_2.filtered.fastq | grep '^@' | cut -d' ' -f3 >  SRR2
 paste SRR21787462_1 SRR21787462_2 | sort | uniq -c
 ```
 
+```
+347385162 length=28     length=100
+```
+
 ## interpretation
 
 28/100 Makes perfect sense for the poly-A library. 
-![../images/fig4ab.png]
-![../images/chromium.png]
