@@ -18,4 +18,4 @@ We will not process
 #GSM6614200 	retina single-cell transcriptome rep2 [scRNA-seq]
 Since the preprocessed data are sufficient for our purposes here. 
 
-"Reverse-engineer cohen scmpra" in obsidian
+~~"Reverse-engineer cohen scmpra" in obsidian~~ outdated
