@@ -98,7 +98,7 @@ NNNNNNNNNNNNNNNNNNNNNNNNNNNN
 NNNNNNNNNNNNNNNNNNNNNNNNNNNN
 ```
 
-So that's `[10x cbc] [UMI]`, and it's exactly 28 bp (16 bp 10x Barcode + 10 bp UMI, as per docs), as expected!
+So that's `[10x cbc] [UMI]`, and it's exactly 28 bp (16 bp 10x Barcode + 12 bp UMI, as per docs), as expected!
 
 **All reverse reads:**
 - SRR21787461_2.filtered.fastq_44nt.txt.stats
