@@ -4268,7 +4268,7 @@ class de_novo_simulation:
         #save results
         results_root=path/"results"
         clobber_mkdir(results_root)
-        #for each kypothesis test
+        #for each hypothesis test
         for key in self.results.keys():
             hypo_test_path=results_root/key
             clobber_mkdir(hypo_test_path)
@@ -4291,9 +4291,6 @@ class de_novo_simulation:
         for var, value in normal_dump.items():
             setattr(obj, var, value)
         
-        # orthos
-        #...
-        
         #dfs
         for var in obj._df_vars:
             df=pd.read_csv(path/f"{var}.tsv.gz",
@@ -4303,12 +4300,37 @@ class de_novo_simulation:
             
             setattr(obj,var,df)
             
+        # orthos
+        # first, initalize list to appropriate length
+        orth_path=path/"orthos"
+        max_index=int(str(sorted(orth_path.glob("*"))[-1].name))
+        obj.orthos=[None]*(max_index+1)
+        for ortho_dir in sorted(orth_path.glob("*")):
+            obj.orthos[int(str(ortho_dir.name))]=ortho.load(client,path=orth_path,name=ortho_dir.name)
+
+        
         #descriptions
-        obj.descriptions=[]
-        desc_path=path/"descriptions"
-        for file in sorted(desc_path.glob("*.tsv.gz"),
-            key=lambda p: int(p.with_suffix("").stem)):
-            ddf = dd.read_csv(file, sep="\t", compression="gzip")
+        #obj.descriptions=[]
+        #desc_path=path/"descriptions"
+        #for file in sorted(desc_path.glob("*.tsv.gz"),
+        #    key=lambda p: int(p.with_suffix("").stem)):
+        #    ddf = dd.read_csv(file, sep="\t", compression="gzip")
+        #    obj.descriptions.append(ddf)
+
+        
+        # descriptions
+        obj.descriptions = []
+        desc_path = path / "descriptions"
+        for dirpath in sorted(
+                desc_path.glob("*.tsv.gz"),                # these are directories named like "123.tsv.gz/"
+                key=lambda p: int(p.name.replace(".tsv.gz", ""))  # sort by the numeric dir name
+            ):
+            # read all part files inside the directory
+            ddf = dd.read_csv(
+                str(dirpath / "*"),                 # e.g., 0.part
+                sep="\t",
+                compression="gzip"
+            )
             obj.descriptions.append(ddf)
         
         #scMPRA
