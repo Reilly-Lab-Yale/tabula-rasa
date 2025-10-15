@@ -1,6 +1,6 @@
 Let's give the files meaningful names.
 ```
-cd /home/mcn26/palmer_scratch/tabula_data/raw_recap/cohen_retina/counts
+cd /home/mcn26/palmer_scratch/raw_recap/cohen_retina/counts
 
 mv SRR21787460_processed_R1.fastq.count retina_u6_r2.count
 mv SRR21787462.fastq.count retina_mpra_r1.count
