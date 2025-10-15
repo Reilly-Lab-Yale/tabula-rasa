@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -t 4:00:00
 #SBATCH --array=0-3
-#SBATCH -c 10
+#SBATCH -c 1
 #SBATCH -p ycga
 #SBATCH -J counts
-#SBATCH --mem-per-cpu=1G
+#SBATCH --mem-per-cpu=5G
 
 #After the last step, read-names now have extracted barcodes
 #here I extract & count unique barcode combos. 
