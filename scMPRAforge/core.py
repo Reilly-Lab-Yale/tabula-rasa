@@ -1082,7 +1082,7 @@ class scMPRA_data:
         )
 
         valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
-        all_combos = self.data[['cell_type', 'cre_id']]
+        all_combos = self.data[['cell_type', 'cre_id']].drop_duplicates()
 
         # Compute dropped combos
         dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
