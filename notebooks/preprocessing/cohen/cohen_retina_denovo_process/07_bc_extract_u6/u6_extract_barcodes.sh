@@ -30,7 +30,7 @@ echo "beginning UMI/cell barcode extraction for $SAMPLE"
 umi_tools extract \
   --extract-method=regex \
   --bc-pattern='^(?P<cell_1>.{16})(?P<umi_1>.{12})' \
-  --bc-pattern2='(?P<discard_1>CCGGTAAGCTCCCGGGAGCTTGT){s<=3}(?P<umi_2>.{8})' \
+  --bc-pattern2='(?P<discard_lead>.*?)(?P<discard_1>CCGGTAAGCTCCCGGGAGCTTGT){s<=5}(?P<umi_2>.{8})' \
   --stdin="$R1" \
   --stdout="$outdir/${SAMPLE}.processed_R1.fastq" \
   --read2-in="$R2" \
