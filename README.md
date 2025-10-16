@@ -88,6 +88,7 @@ If you see a device, you're good to go.
 The above is sufficient for you to use the package, but recapitulating some of the preprocessing steps & results from the paper require other conda environments. 
 Fill in 
 - [ ] biopython (used for some data carpentry and single cell processing steps)
+- [ ] scanpy_containment (used for scanpy)
 - [ ] speedracer (used for some rapid text-processing steps)
 
 # Data formats
