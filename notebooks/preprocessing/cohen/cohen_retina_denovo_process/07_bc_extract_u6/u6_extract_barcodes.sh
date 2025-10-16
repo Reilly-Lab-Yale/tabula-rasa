@@ -16,7 +16,7 @@ root_inp="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/filtered_fastq"
 root_out="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/u6_bc_extract"
 
 # Each array index handles one pair
-SAMPLES=(SRR21787461 SRR21787462)
+SAMPLES=(SRR21787461 SRR21787460)
 SAMPLE="${SAMPLES[$SLURM_ARRAY_TASK_ID]}"
 
 R1="$root_inp/${SAMPLE}_1.filtered.fastq"

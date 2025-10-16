@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -t 4:00:00
-#SBATCH --array=0-3
+#SBATCH --array=3
 #SBATCH -c 1
 #SBATCH -p ycga
 #SBATCH -J counts
@@ -11,7 +11,7 @@
 #Note that umitools puts the bacrodes in the field-1 (lines that start with @) in both R1 & 2 output
 #so we only need to process one read of the pair for each. I have arbitrarially chosen R1
 
-paths=("main_bc_extract/SRR21787462/SRR21787462.processed_R1.fastq" "main_bc_extract/SRR32774353/SRR32774353.processed_R1.fastq" "u6_bc_extract/SRR21787461/SRR21787461.processed_R1.fastq" "u6_bc_extract/SRR21787462/SRR21787462.processed_R1.fastq" )
+paths=("main_bc_extract/SRR21787462/SRR21787462.processed_R1.fastq" "main_bc_extract/SRR32774353/SRR32774353.processed_R1.fastq" "u6_bc_extract/SRR21787461/SRR21787461.processed_R1.fastq" "u6_bc_extract/SRR21787460/SRR21787460.processed_R1.fastq" )
 
 inp_root="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/"
 out_root="/home/mcn26/palmer_scratch/raw_recap/cohen_retina/counts"
