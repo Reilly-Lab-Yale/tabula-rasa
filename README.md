@@ -83,6 +83,12 @@ If you see a device, you're good to go.
 
 (adapted from [mccleary docs](https://docs.ycrc.yale.edu/clusters-at-yale/guides/tensorflow/))
 
+# supplementary conda environments
+
+The above is sufficient for you to use the package, but recapitulating some of the preprocessing steps & results from the paper require other conda environments. 
+Fill in 
+- [ ] biopython (used for some data carpentry and single cell processing steps)
+- [ ] speedracer (used for some rapid text-processing steps)
 
 # Data formats
 
