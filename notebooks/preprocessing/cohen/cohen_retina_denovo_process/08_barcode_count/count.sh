@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -t 4:00:00
-#SBATCH --array=3
+#SBATCH --array=0-3
 #SBATCH -c 1
 #SBATCH -p ycga
 #SBATCH -J counts
