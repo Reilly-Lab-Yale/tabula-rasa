@@ -90,6 +90,7 @@ Fill in
 - [ ] biopython (used for some data carpentry and single cell processing steps)
 - [ ] parse_scanpy (used for scanpy : particular scanpy version particularly important to get same leiden clustering)
 - [ ] speedracer (used for some rapid text-processing steps)
+- [ ] doc (used to produce documentation)
 
 # Data formats
 
