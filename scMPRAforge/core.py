@@ -4177,7 +4177,18 @@ class de_novo_simulation:
             )
     
     def _test_replicate(self,client,hypothesis_set,test,index):
-        result=client.submit(_test_helper,self.simulated_scMPRA[index],test,hypothesis_set)
+        if test=="wald":
+            result=client.submit(_test_helper,
+                                test=test,
+                                hypothesis_set=hypothesis_set,
+                                test_data=self.simulated_scMPRA[index],
+                                test_ortho=self.orthos[index])
+        else:
+            result=client.submit(_test_helper,
+                                test=test,
+                                hypothesis_set=hypothesis_set,
+                                test_data=self.simulated_scMPRA[index])
+
         lst = self.results.setdefault(test, [])
         if index >= len(lst):
             lst.extend([None] * (index + 1 - len(lst)))
@@ -4509,22 +4520,24 @@ def _ortho_helper(data:scMPRA_data):
 
 
 
-def _test_helper(test_data,test,hypothesis_set):
+def _test_helper(test,
+        hypothesis_set,
+        test_data=None,
+        test_ortho=None):
     """
     Helper function for de_novo_simulation._test_all_replicates
     """
     client=get_client()
-    if test=="wald":
-        #REWRITE TO ACCOMODATE PRECOMPUTED ORTHOS
-        test_data.ortho_filter()
-        primordial=ortho()
-        primordial.criss_cross(client=client,
-                                dat=test_data)
-        primordial.extract_params(client)
-        primordial.precompute_wald(client)
+    if test == "wald" and not test_ortho:
+        raise ValueError("Precomputed ortho required for wald test.")
+    if not test_data:
+        raise ValueError("Test data required") 
 
+    if test=="wald":
+        test_ortho.training_data=test_data
+        test_ortho.precompute_wald(client)
         tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, primordial, client)
+        results  = tester.run(hypothesis_set, test_ortho, client)
         return results
     elif test=="mwu":
         tester = HypothesisTester(test)
@@ -4536,7 +4549,7 @@ def _test_helper(test_data,test,hypothesis_set):
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
                         library:pd.DataFrame):
-    """ 
+    """
     Simulates transfection, producing a description dataframe
     from which transcription can be simulated...
 
