@@ -4101,6 +4101,17 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
 class de_novo_simulation:
     """
     Class for simulating datasets anew.
+    
+    A single instance of this object should be used to 
+    represent n simulated replicates of one experimental setup.
+    For different parameters, initalize multiple objects.
+    
+    Simulated replicates are addressed only by zero-based index.
+    Discontinuious indicies are technically possible (to allow re-runs of failed steps)
+    but not recommended / supported.
+
+    Presently, simulated data is stored outside of orthos, and not saved within them,
+    But is populated within orthos when necessary for some computation. 
     """
     def __init__(self,
                  simulation_replicates:int,
@@ -4126,6 +4137,24 @@ class de_novo_simulation:
         self.simulated_scMPRA=[]
         self.orthos=[]
         self.results={}
+    
+    def precompute_wald(self,client):
+        """
+        Runs precompute for all orthos.
+        Necessary for downstream wald testing.
+        """
+        #note that, since training data is saved
+        #outside the orthos, we pass it through 
+        #in each case, 
+        #TODO: raise an error if orthos & data are decynced
+        for idx in range(len(self.orthos)):
+            if self.orthos[idx]:
+                #for all that are not none...
+
+                #populate ortho with appropriate training data 
+                self.orthos[idx].training_data=self.simulated_scMPRA[idx]
+                #precompute
+                self.orthos[idx].precompute_wald(client)
     
     def gamut(self, client):
         """
@@ -4312,12 +4341,20 @@ class de_novo_simulation:
             setattr(obj,var,df)
             
         # orthos
-        # first, initalize list to appropriate length
-        orth_path=path/"orthos"
-        max_index=int(str(sorted(orth_path.glob("*"))[-1].name))
-        obj.orthos=[None]*(max_index+1)
-        for ortho_dir in sorted(orth_path.glob("*")):
-            obj.orthos[int(str(ortho_dir.name))]=ortho.load(client,path=orth_path,name=ortho_dir.name)
+        orth_path = path / "orthos"
+        orth_dirs = sorted(orth_path.glob("*"))
+
+        if orth_dirs:  # only proceed if directory is not empty
+            max_index = int(orth_dirs[-1].name)
+            # first, initalize list to appropriate length
+            obj.orthos = [None] * (max_index + 1)
+            for ortho_dir in orth_dirs:
+                obj.orthos[int(ortho_dir.name)] = ortho.load(
+                    client, path=orth_path, name=ortho_dir.name
+                )
+        else:
+            obj.orthos = []
+
 
         
         #descriptions
