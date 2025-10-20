@@ -39,6 +39,7 @@ from dask.distributed import Client, Future, get_client
 
 import dask.dataframe as dd
 import dask.array as da
+import dask
 
 import os
 
@@ -1684,25 +1685,29 @@ class ortho:
             raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
 
         by_ct = {}
-        for ct in self.by_cell_type.model.keys():
-            model_f = self.by_cell_type.model[ct]
-            design_f = self.by_cell_type_design[ct]
-            # subset on the worker to avoid shipping big data repeatedly
-            df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
-            by_ct[ct] = client.submit(
-                _build_wald_precomp_for_subset,
-                model_f, design_f, df_ct
-            )
+        #Very Lame retry hack due to extremely rare failures in _hessian_se
+        #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
+        
+        with dask.annotate(retries=10):
+            for ct in self.by_cell_type.model.keys():
+                model_f = self.by_cell_type.model[ct]
+                design_f = self.by_cell_type_design[ct]
+                # subset on the worker to avoid shipping big data repeatedly
+                df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+                by_ct[ct] = client.submit(
+                    _build_wald_precomp_for_subset,
+                    model_f, design_f, df_ct
+                )
 
-        by_cr = {}
-        for cr in self.by_cre.model.keys():
-            model_f = self.by_cre.model[cr]
-            design_f = self.by_cre_design[cr]
-            df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
-            by_cr[cr] = client.submit(
-                _build_wald_precomp_for_subset,
-                model_f, design_f, df_cr
-            )
+            by_cr = {}
+            for cr in self.by_cre.model.keys():
+                model_f = self.by_cre.model[cr]
+                design_f = self.by_cre_design[cr]
+                df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+                by_cr[cr] = client.submit(
+                    _build_wald_precomp_for_subset,
+                    model_f, design_f, df_cr
+                )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
@@ -3422,11 +3427,13 @@ def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
             H = sess.run(hess)
 
     # drop cached graphs in long-lived workers
-    try: tf.keras.backend.clear_session()
-    except: pass
+    #try: tf.keras.backend.clear_session()
+    #except: pass
 
     cov = np.linalg.inv(-H)
     se  = np.sqrt(np.diag(cov))
+
+    del hess, H, grad, ll, x, exog_t, infl_t, endog_t
     return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
