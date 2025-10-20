@@ -3366,20 +3366,52 @@ def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     endog_tensor = tf.constant(endog, dtype=tf.float32)
     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+import uuid
+#def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+#    """
+#    Compute Hessian-based SEs of the ZINB parameters.
+#    Works in both TF2 eager and TF1 graph modes.
+#    """
+#    # Build Hessian with nested GradientTapes
+#    scope = f"wald_{uuid.uuid4().hex}"
+#    with tf.name_scope(scope):
+#        with tf.GradientTape() as tape2:
+#            with tf.GradientTape() as tape1:
+#                ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
+#            grad = tape1.gradient(ll, params_tensor)
+#        hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+#
+#        # Evaluate to numpy depending on execution mode
+#        if tf.executing_eagerly():
+#            H = hess.numpy()
+#        else:
+#            # Graph mode
+#            sess = tf.compat.v1.Session()
+#            with sess.as_default():
+#                sess.run(tf.compat.v1.global_variables_initializer())
+#                H = sess.run(hess)
+#
+#    # Wald covariance = inverse observed information = (-H)^{-1}
+#    cov = np.linalg.inv(-H)
+#    se = np.sqrt(np.diag(cov))
+#    return se, cov
 
 def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-    """
-    Compute Hessian-based SEs of the ZINB parameters.
-    Works in both TF2 eager and TF1 graph modes.
-    """
-    # Build Hessian with nested GradientTapes
-    with tf.GradientTape() as tape2:
-        with tf.GradientTape() as tape1:
-            ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
-        grad = tape1.gradient(ll, params_tensor)
-    hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+    scope = f"wald_{uuid.uuid4().hex}"
+    with tf.name_scope(scope):
+        x       = tf.convert_to_tensor(params_tensor)
+        exog_t  = tf.convert_to_tensor(exog_t)
+        infl_t  = tf.convert_to_tensor(infl_t)
+        endog_t = tf.convert_to_tensor(endog_t)
 
-    # Evaluate to numpy depending on execution mode
+        with tf.GradientTape() as tape2:
+            tape2.watch(x)
+            with tf.GradientTape() as tape1:
+                tape1.watch(x)
+                ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
+            grad = tape1.gradient(ll, x)
+        hess = tape2.jacobian(grad, x)
+
     if tf.executing_eagerly():
         H = hess.numpy()
     else:
@@ -3389,9 +3421,12 @@ def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
             sess.run(tf.compat.v1.global_variables_initializer())
             H = sess.run(hess)
 
-    # Wald covariance = inverse observed information = (-H)^{-1}
+    # drop cached graphs in long-lived workers
+    try: tf.keras.backend.clear_session()
+    except: pass
+
     cov = np.linalg.inv(-H)
-    se = np.sqrt(np.diag(cov))
+    se  = np.sqrt(np.diag(cov))
     return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
