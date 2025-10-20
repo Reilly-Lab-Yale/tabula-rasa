@@ -4137,24 +4137,7 @@ class de_novo_simulation:
         self.simulated_scMPRA=[]
         self.orthos=[]
         self.results={}
-    
-    def precompute_wald(self,client):
-        """
-        Runs precompute for all orthos.
-        Necessary for downstream wald testing.
-        """
-        #note that, since training data is saved
-        #outside the orthos, we pass it through 
-        #in each case, 
-        #TODO: raise an error if orthos & data are decynced
-        for idx in range(len(self.orthos)):
-            if self.orthos[idx]:
-                #for all that are not none...
 
-                #populate ortho with appropriate training data 
-                self.orthos[idx].training_data=self.simulated_scMPRA[idx]
-                #precompute
-                self.orthos[idx].precompute_wald(client)
     
     def gamut(self, client):
         """
