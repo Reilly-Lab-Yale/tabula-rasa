@@ -4141,6 +4141,12 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     
 class de_novo_simulation:
     """
+    TODO: rework to hold no state
+    - once complete, the class will just be a wrapper for functions
+    - processing will occur w/ concurrency
+    - concurrent functions for procesing, helpers to wait until done...
+    - "over a directory"
+
     Class for simulating datasets anew.
     
     A single instance of this object should be used to 
@@ -4153,6 +4159,7 @@ class de_novo_simulation:
 
     Presently, simulated data is stored outside of orthos, and not saved within them,
     But is populated within orthos when necessary for some computation. 
+    TODO: don't do that.
     """
     def __init__(self,
                  simulation_replicates:int,
@@ -4298,11 +4305,11 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        clobber_mkdir(path/"orthos")
-        for i, orth in enumerate(self.orthos):
-            orth.save(path=path/"orthos",
-                    name=str(i),
-                    strip_training_data=True)
+        #clobber_mkdir(path/"orthos")
+        #for i, orth in enumerate(self.orthos):
+        #    orth.save(path=path/"orthos",
+        #            name=str(i),
+        #            strip_training_data=True)
         
         #dataframes
         for var in self._df_vars:
@@ -4330,15 +4337,15 @@ class de_novo_simulation:
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
         #save results
-        results_root=path/"results"
-        clobber_mkdir(results_root)
+        #results_root=path/"results"
+        #clobber_mkdir(results_root)
         #for each hypothesis test
-        for key in self.results.keys():
-            hypo_test_path=results_root/key
-            clobber_mkdir(hypo_test_path)
-            #for each replicate's results object
-            for idx,result_obj in enumerate(self.results[key]):
-                result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
+        #for key in self.results.keys():
+        #    hypo_test_path=results_root/key
+        #    clobber_mkdir(hypo_test_path)
+        #    #for each replicate's results object
+        #    for idx,result_obj in enumerate(self.results[key]):
+        #        result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
 
     @classmethod
     def load(cls, client, path, name):
@@ -4365,19 +4372,19 @@ class de_novo_simulation:
             setattr(obj,var,df)
             
         # orthos
-        orth_path = path / "orthos"
-        orth_dirs = sorted(orth_path.glob("*"))
-
-        if orth_dirs:  # only proceed if directory is not empty
-            max_index = int(orth_dirs[-1].name)
-            # first, initalize list to appropriate length
-            obj.orthos = [None] * (max_index + 1)
-            for ortho_dir in orth_dirs:
-                obj.orthos[int(ortho_dir.name)] = ortho.load(
-                    client, path=orth_path, name=ortho_dir.name
-                )
-        else:
-            obj.orthos = []
+        #orth_path = path / "orthos"
+        #orth_dirs = sorted(orth_path.glob("*"))
+        #
+        #if orth_dirs:  # only proceed if directory is not empty
+        #    max_index = int(orth_dirs[-1].name)
+        #    # first, initalize list to appropriate length
+        #    obj.orthos = [None] * (max_index + 1)
+        #    for ortho_dir in orth_dirs:
+        #        obj.orthos[int(ortho_dir.name)] = ortho.load(
+        #            client, path=orth_path, name=ortho_dir.name
+        #        )
+        #else:
+        #    obj.orthos = []
 
 
         
@@ -4414,27 +4421,26 @@ class de_novo_simulation:
             obj.simulated_scMPRA.append(working)
         
         #load hypothesis testing results
-        obj.results={}
-        
-        results_root=path/"results"
-        for hypo_test_path in results_root.iterdir():
-            if not hypo_test_path.is_dir():
-                continue
-            #found a directory containing results objects. 
-            test=hypo_test_path.name
-            #get all results & sort
-            results_names=sorted([i for i in hypo_test_path.iterdir()])
-            
-            working=[]
-            for rep_results_path in results_names:
-                working.append(
-                        client.submit(
-                            lambda x: x,
-                            ResultSet.from_tsv(rep_results_path)
-                    )
-                )
-            obj.results[test]=working
-        
+        #obj.results={}
+        #results_root=path/"results"
+        #for hypo_test_path in results_root.iterdir():
+        #    if not hypo_test_path.is_dir():
+        #        continue
+        #    #found a directory containing results objects. 
+        #    test=hypo_test_path.name
+        #    #get all results & sort
+        #    results_names=sorted([i for i in hypo_test_path.iterdir()])
+        #    
+        #    working=[]
+        #    for rep_results_path in results_names:
+        #        working.append(
+        #                client.submit(
+        #                    lambda x: x,
+        #                    ResultSet.from_tsv(rep_results_path)
+        #            )
+        #        )
+        #    obj.results[test]=working
+        #
         return obj
     
     def _validate_test(self,test,index):
@@ -4446,47 +4452,7 @@ class de_novo_simulation:
         if len(self.results[test])-1<index:
             raise ValueError(f"Index {index} for test {test} is not in object.")
     
-    def _merge_in_ground_truth(self,test,index):
-        """
-        COLLECTOR FUNCTION
-        Returns a dataframe which a merge of the data of a results object
-        (of a test and particular index)
-        and the ground-truth. 
-        Used as part of test evaluations.
-        """
-        
-        self._validate_test(test=test,index=index)
-        
-        results=self.results[test][index].result().df
-        
-        merged=results.merge(self.ground_truth,
-            left_on=["comparison_CRE","comparison_cell_type"],
-            right_on=["cre_id","cell_type"]
-        )
-        
-        merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
-
-        #merge in `reference` ground truth
-        merged=merged.merge(self.ground_truth,
-            left_on=["reference_CRE","reference_cell_type"],
-            right_on=["cre_id","cell_type"]
-        )
-        merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
-
-        #ground truth effect size
-        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
-        #ground truth null hypothesis that the CREs are the same : true or false?
-        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<1e-8
-
-        merged["reject_null"]=merged["bh_p"]<0.05
-
-        #godawful hack
-        merged=merged.dropna(subset=["p_value"])
-        
-
-        return merged
+    
     
     def crosstab(self,test,index):
         """
