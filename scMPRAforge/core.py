@@ -4054,7 +4054,6 @@ TESTS = {
 }
 
 class HypothesisTester:
-
     """
     Orchestrates running a test function on each hypothesis row.
     You supply `test_fn` that implements a single-row comparison and returns:
