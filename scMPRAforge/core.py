@@ -39,6 +39,7 @@ from dask.distributed import Client, Future, get_client
 
 import dask.dataframe as dd
 import dask.array as da
+import dask
 
 import os
 
@@ -1082,7 +1083,7 @@ class scMPRA_data:
         )
 
         valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
-        all_combos = nonzero_counts[['cell_type', 'cre_id']]
+        all_combos = self.data[['cell_type', 'cre_id']].drop_duplicates()
 
         # Compute dropped combos
         dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
@@ -1684,25 +1685,29 @@ class ortho:
             raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
 
         by_ct = {}
-        for ct in self.by_cell_type.model.keys():
-            model_f = self.by_cell_type.model[ct]
-            design_f = self.by_cell_type_design[ct]
-            # subset on the worker to avoid shipping big data repeatedly
-            df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
-            by_ct[ct] = client.submit(
-                _build_wald_precomp_for_subset,
-                model_f, design_f, df_ct
-            )
+        #Very Lame retry hack due to extremely rare failures in _hessian_se
+        #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
+        
+        with dask.annotate(retries=10):
+            for ct in self.by_cell_type.model.keys():
+                model_f = self.by_cell_type.model[ct]
+                design_f = self.by_cell_type_design[ct]
+                # subset on the worker to avoid shipping big data repeatedly
+                df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+                by_ct[ct] = client.submit(
+                    _build_wald_precomp_for_subset,
+                    model_f, design_f, df_ct
+                )
 
-        by_cr = {}
-        for cr in self.by_cre.model.keys():
-            model_f = self.by_cre.model[cr]
-            design_f = self.by_cre_design[cr]
-            df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
-            by_cr[cr] = client.submit(
-                _build_wald_precomp_for_subset,
-                model_f, design_f, df_cr
-            )
+            by_cr = {}
+            for cr in self.by_cre.model.keys():
+                model_f = self.by_cre.model[cr]
+                design_f = self.by_cre_design[cr]
+                df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+                by_cr[cr] = client.submit(
+                    _build_wald_precomp_for_subset,
+                    model_f, design_f, df_cr
+                )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
@@ -3366,20 +3371,52 @@ def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     endog_tensor = tf.constant(endog, dtype=tf.float32)
     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+import uuid
+#def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+#    """
+#    Compute Hessian-based SEs of the ZINB parameters.
+#    Works in both TF2 eager and TF1 graph modes.
+#    """
+#    # Build Hessian with nested GradientTapes
+#    scope = f"wald_{uuid.uuid4().hex}"
+#    with tf.name_scope(scope):
+#        with tf.GradientTape() as tape2:
+#            with tf.GradientTape() as tape1:
+#                ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
+#            grad = tape1.gradient(ll, params_tensor)
+#        hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+#
+#        # Evaluate to numpy depending on execution mode
+#        if tf.executing_eagerly():
+#            H = hess.numpy()
+#        else:
+#            # Graph mode
+#            sess = tf.compat.v1.Session()
+#            with sess.as_default():
+#                sess.run(tf.compat.v1.global_variables_initializer())
+#                H = sess.run(hess)
+#
+#    # Wald covariance = inverse observed information = (-H)^{-1}
+#    cov = np.linalg.inv(-H)
+#    se = np.sqrt(np.diag(cov))
+#    return se, cov
 
 def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-    """
-    Compute Hessian-based SEs of the ZINB parameters.
-    Works in both TF2 eager and TF1 graph modes.
-    """
-    # Build Hessian with nested GradientTapes
-    with tf.GradientTape() as tape2:
-        with tf.GradientTape() as tape1:
-            ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
-        grad = tape1.gradient(ll, params_tensor)
-    hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
+    scope = f"wald_{uuid.uuid4().hex}"
+    with tf.name_scope(scope):
+        x       = tf.convert_to_tensor(params_tensor)
+        exog_t  = tf.convert_to_tensor(exog_t)
+        infl_t  = tf.convert_to_tensor(infl_t)
+        endog_t = tf.convert_to_tensor(endog_t)
 
-    # Evaluate to numpy depending on execution mode
+        with tf.GradientTape() as tape2:
+            tape2.watch(x)
+            with tf.GradientTape() as tape1:
+                tape1.watch(x)
+                ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
+            grad = tape1.gradient(ll, x)
+        hess = tape2.jacobian(grad, x)
+
     if tf.executing_eagerly():
         H = hess.numpy()
     else:
@@ -3389,9 +3426,14 @@ def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
             sess.run(tf.compat.v1.global_variables_initializer())
             H = sess.run(hess)
 
-    # Wald covariance = inverse observed information = (-H)^{-1}
+    # drop cached graphs in long-lived workers
+    #try: tf.keras.backend.clear_session()
+    #except: pass
+
     cov = np.linalg.inv(-H)
-    se = np.sqrt(np.diag(cov))
+    se  = np.sqrt(np.diag(cov))
+
+    del hess, H, grad, ll, x, exog_t, infl_t, endog_t
     return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
@@ -4012,7 +4054,6 @@ TESTS = {
 }
 
 class HypothesisTester:
-
     """
     Orchestrates running a test function on each hypothesis row.
     You supply `test_fn` that implements a single-row comparison and returns:
@@ -4100,7 +4141,25 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     
 class de_novo_simulation:
     """
+    TODO: rework to hold no state
+    - once complete, the class will just be a wrapper for functions
+    - processing will occur w/ concurrency
+    - concurrent functions for procesing, helpers to wait until done...
+    - "over a directory"
+
     Class for simulating datasets anew.
+    
+    A single instance of this object should be used to 
+    represent n simulated replicates of one experimental setup.
+    For different parameters, initalize multiple objects.
+    
+    Simulated replicates are addressed only by zero-based index.
+    Discontinuious indicies are technically possible (to allow re-runs of failed steps)
+    but not recommended / supported.
+
+    Presently, simulated data is stored outside of orthos, and not saved within them,
+    But is populated within orthos when necessary for some computation. 
+    TODO: don't do that.
     """
     def __init__(self,
                  simulation_replicates:int,
@@ -4124,7 +4183,9 @@ class de_novo_simulation:
         self.descriptions=[]
         self.simulated=[]
         self.simulated_scMPRA=[]
+        self.orthos=[]
         self.results={}
+
     
     def gamut(self, client):
         """
@@ -4146,7 +4207,6 @@ class de_novo_simulation:
                     experiment_bounds=self.experiment_bounds,
                     ground_truth=self.ground_truth,
                     library=self.library)
-            
             self.descriptions.append(transfected)
     
     def _simulate_transcription(self):
@@ -4177,7 +4237,18 @@ class de_novo_simulation:
             )
     
     def _test_replicate(self,client,hypothesis_set,test,index):
-        result=client.submit(_test_helper,self.simulated_scMPRA[index],test,hypothesis_set)
+        if test=="wald":
+            result=client.submit(_test_helper,
+                                test=test,
+                                hypothesis_set=hypothesis_set,
+                                test_data=self.simulated_scMPRA[index],
+                                test_ortho=self.orthos[index])
+        else:
+            result=client.submit(_test_helper,
+                                test=test,
+                                hypothesis_set=hypothesis_set,
+                                test_data=self.simulated_scMPRA[index])
+
         lst = self.results.setdefault(test, [])
         if index >= len(lst):
             lst.extend([None] * (index + 1 - len(lst)))
@@ -4188,8 +4259,28 @@ class de_novo_simulation:
         Performs desired test with provided hypothesis set
         saves to self.results dict, keyed on test type. 
         """
-        for i in range(self.simulated_scMPRA):
+        for i in range(len(self.simulated_scMPRA)):
             self._test_replicate(client,hypothesis_set,test,index=i)        
+    
+    def _create_ortho_for_replicate(self,client,index):
+        """
+        Fits an ortho to simulated replicate `index`.
+        Useful for downstream wald hypothesis testing.
+        !Collects simulations!
+        """
+        result=_ortho_helper(self.simulated_scMPRA[index])
+        if index>=len(self.orthos):
+            self.orthos.extend([None] * (index + 1 - len(self.orthos)))
+        self.orthos[index] = result
+    
+    def create_orthos_for_all_replicates(self, client):
+        """
+        Fits orthos to all simulated replicates. 
+        Useful for downstream wald hypothesis testing.
+        !Collects simulations!
+        """
+        for i in range(len(self.simulated_scMPRA)):
+            self._create_ortho_for_replicate(client,i)
 
     
     _normal_vars=["simulation_replicates"]
@@ -4213,15 +4304,19 @@ class de_novo_simulation:
         with open(path / "vars.json","w") as f:
             json.dump(normal_dump,f,indent=4)
         
+        # orthos
+        #clobber_mkdir(path/"orthos")
+        #for i, orth in enumerate(self.orthos):
+        #    orth.save(path=path/"orthos",
+        #            name=str(i),
+        #            strip_training_data=True)
+        
         #dataframes
         for var in self._df_vars:
             getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
 
         
-
-        
         # descriptions
-        
         clobber_mkdir(path/"descriptions")
         for i, df in enumerate(self.descriptions):
             target = path/"descriptions" / f"{i}.tsv.gz"
@@ -4242,15 +4337,15 @@ class de_novo_simulation:
             dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
 
         #save results
-        results_root=path/"results"
-        clobber_mkdir(results_root)
-        #for each kypothesis test
-        for key in self.results.keys():
-            hypo_test_path=results_root/key
-            clobber_mkdir(hypo_test_path)
-            #for each replicate's results object
-            for idx,result_obj in enumerate(self.results[key]):
-                result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
+        #results_root=path/"results"
+        #clobber_mkdir(results_root)
+        #for each hypothesis test
+        #for key in self.results.keys():
+        #    hypo_test_path=results_root/key
+        #    clobber_mkdir(hypo_test_path)
+        #    #for each replicate's results object
+        #    for idx,result_obj in enumerate(self.results[key]):
+        #        result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
 
     @classmethod
     def load(cls, client, path, name):
@@ -4276,12 +4371,45 @@ class de_novo_simulation:
             
             setattr(obj,var,df)
             
+        # orthos
+        #orth_path = path / "orthos"
+        #orth_dirs = sorted(orth_path.glob("*"))
+        #
+        #if orth_dirs:  # only proceed if directory is not empty
+        #    max_index = int(orth_dirs[-1].name)
+        #    # first, initalize list to appropriate length
+        #    obj.orthos = [None] * (max_index + 1)
+        #    for ortho_dir in orth_dirs:
+        #        obj.orthos[int(ortho_dir.name)] = ortho.load(
+        #            client, path=orth_path, name=ortho_dir.name
+        #        )
+        #else:
+        #    obj.orthos = []
+
+
+        
         #descriptions
-        obj.descriptions=[]
-        desc_path=path/"descriptions"
-        for file in sorted(desc_path.glob("*.tsv.gz"),
-            key=lambda p: int(p.with_suffix("").stem)):
-            ddf = dd.read_csv(file, sep="\t", compression="gzip")
+        #obj.descriptions=[]
+        #desc_path=path/"descriptions"
+        #for file in sorted(desc_path.glob("*.tsv.gz"),
+        #    key=lambda p: int(p.with_suffix("").stem)):
+        #    ddf = dd.read_csv(file, sep="\t", compression="gzip")
+        #    obj.descriptions.append(ddf)
+
+        
+        # descriptions
+        obj.descriptions = []
+        desc_path = path / "descriptions"
+        for dirpath in sorted(
+                desc_path.glob("*.tsv.gz"),                # these are directories named like "123.tsv.gz/"
+                key=lambda p: int(p.name.replace(".tsv.gz", ""))  # sort by the numeric dir name
+            ):
+            # read all part files inside the directory
+            ddf = dd.read_csv(
+                str(dirpath / "*"),                 # e.g., 0.part
+                sep="\t",
+                compression="gzip"
+            )
             obj.descriptions.append(ddf)
         
         #scMPRA
@@ -4293,27 +4421,26 @@ class de_novo_simulation:
             obj.simulated_scMPRA.append(working)
         
         #load hypothesis testing results
-        obj.results={}
-        
-        results_root=path/"results"
-        for hypo_test_path in results_root.iterdir():
-            if not hypo_test_path.is_dir():
-                continue
-            #found a directory containing results objects. 
-            test=hypo_test_path.name
-            #get all results & sort
-            results_names=sorted([i for i in hypo_test_path.iterdir()])
-            
-            working=[]
-            for rep_results_path in results_names:
-                working.append(
-                        client.submit(
-                            lambda x: x,
-                            ResultSet.from_tsv(rep_results_path)
-                    )
-                )
-            obj.results[test]=working
-        
+        #obj.results={}
+        #results_root=path/"results"
+        #for hypo_test_path in results_root.iterdir():
+        #    if not hypo_test_path.is_dir():
+        #        continue
+        #    #found a directory containing results objects. 
+        #    test=hypo_test_path.name
+        #    #get all results & sort
+        #    results_names=sorted([i for i in hypo_test_path.iterdir()])
+        #    
+        #    working=[]
+        #    for rep_results_path in results_names:
+        #        working.append(
+        #                client.submit(
+        #                    lambda x: x,
+        #                    ResultSet.from_tsv(rep_results_path)
+        #            )
+        #        )
+        #    obj.results[test]=working
+        #
         return obj
     
     def _validate_test(self,test,index):
@@ -4325,47 +4452,7 @@ class de_novo_simulation:
         if len(self.results[test])-1<index:
             raise ValueError(f"Index {index} for test {test} is not in object.")
     
-    def _merge_in_ground_truth(self,test,index):
-        """
-        COLLECTOR FUNCTION
-        Returns a dataframe which a merge of the data of a results object
-        (of a test and particular index)
-        and the ground-truth. 
-        Used as part of test evaluations.
-        """
-        
-        self._validate_test(test=test,index=index)
-        
-        results=self.results[test][index].result().df
-        
-        merged=results.merge(self.ground_truth,
-            left_on=["comparison_CRE","comparison_cell_type"],
-            right_on=["cre_id","cell_type"]
-        )
-        
-        merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
-
-        #merge in `reference` ground truth
-        merged=merged.merge(self.ground_truth,
-            left_on=["reference_CRE","reference_cell_type"],
-            right_on=["cre_id","cell_type"]
-        )
-        merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
-
-        #ground truth effect size
-        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
-        #ground truth null hypothesis that the CREs are the same : true or false?
-        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<1e-8
-
-        merged["reject_null"]=merged["bh_p"]<0.05
-
-        #godawful hack
-        merged=merged.dropna(subset=["p_value"])
-        
-
-        return merged
+    
     
     def crosstab(self,test,index):
         """
@@ -4444,21 +4531,40 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     ret.flatten_overtransfection()
     return ret
 
-def _test_helper(test_data,test,hypothesis_set):
+def _ortho_helper(data:scMPRA_data):
+    """
+    Helper function for de_novo_simulation._create_ortho_for_replicate
+    """
+    client=get_client()
+    data=data.result()
+    data.ortho_filter()
+    primordial=ortho()
+    primordial.criss_cross(client=client,
+                            dat=data)
+    primordial.extract_params(client)
+    return primordial
+    
+
+
+
+def _test_helper(test,
+        hypothesis_set,
+        test_data=None,
+        test_ortho=None):
     """
     Helper function for de_novo_simulation._test_all_replicates
     """
     client=get_client()
-    if test=="wald":
-        test_data.ortho_filter()
-        primordial=ortho()
-        primordial.criss_cross(client=client,
-                                dat=test_data)
-        primordial.extract_params(client)
-        primordial.precompute_wald(client)
+    if test == "wald" and not test_ortho:
+        raise ValueError("Precomputed ortho required for wald test.")
+    if not test_data:
+        raise ValueError("Test data required") 
 
+    if test=="wald":
+        test_ortho.training_data=test_data
+        test_ortho.precompute_wald(client)
         tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, primordial, client)
+        results  = tester.run(hypothesis_set, test_ortho, client)
         return results
     elif test=="mwu":
         tester = HypothesisTester(test)
@@ -4470,7 +4576,7 @@ def _test_helper(test_data,test,hypothesis_set):
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
                         library:pd.DataFrame):
-    """ 
+    """
     Simulates transfection, producing a description dataframe
     from which transcription can be simulated...
 
@@ -4555,7 +4661,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     ret.loc[ret["mu"]==0.0,"p"]=0.0
 
     #finally, we convert to a dask dataframe & return 
-    
     return ret
 
 

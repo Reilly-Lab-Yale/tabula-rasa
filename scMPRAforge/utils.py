@@ -44,6 +44,16 @@ def list_unimplemented():
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
+from pathlib import Path
+def chkdir(path):
+    p = Path(path)
+    if not p.is_dir():
+        raise FileNotFoundError(f"Directory not found: {p}")
+
+def chkfile(path):
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"File not found: {p}")
 
 def zero_pad_ground_truth(gt_df):
     """
