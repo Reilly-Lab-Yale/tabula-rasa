@@ -1210,7 +1210,7 @@ def abort_on_failure(future,client):
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
 def smart_matrix(data,split):
-    _smart_matrix(data,split)
+    return _smart_matrix(data,split)
 
 def _smart_matrix(data,split):
     """
@@ -1263,7 +1263,7 @@ def _smart_matrix(data,split):
     }
 
 def tensorzinb_fit(matricies,name):
-    _tensorzinb_fit(matricies,name)
+    return _tensorzinb_fit(matricies,name)
 
 def _tensorzinb_fit(matricies,name):
     """
