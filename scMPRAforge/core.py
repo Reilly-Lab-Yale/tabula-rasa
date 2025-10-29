@@ -3470,57 +3470,124 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
-
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
     cre = row["comparison_CRE"]
     blk = bundle["by_cell_type"].get(ct)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no precomp block for cell_type={ct}"
+        }
 
     if cre == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": None,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no coefficient for CRE={cre} in cell_type={ct}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # catch bad SEs
+    if (not np.isfinite(se)) or (se == 0):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"bad SE for CRE={cre} in cell_type={ct}: beta={beta}, se={se}",
+        }
 
     z = beta / se
     p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": None,
+    }
+
 
 def _wald_by_cre_row(row: dict, bundle: dict):
     cre = row["comparison_CRE"]
     ct  = row["comparison_cell_type"]
     blk = bundle["by_cre"].get(cre)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no precomp block for CRE={cre}",
+        }
 
     if ct == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": None,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no coefficient for cell_type={ct} in CRE={cre}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if (not np.isfinite(se)) or (se == 0):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"bad SE for cell_type={ct} in CRE={cre}: beta={beta}, se={se}",
+        }
 
     z = beta / se
     p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": None,
+    }
+
 
 def _wald_row_fn(row: dict, bundle: dict):
-    # We assume hypotheses were canonicalized already (labels normalized).
     ref_ct  = row.get("reference_cell_type")
     ref_cre = row.get("reference_CRE")
     comp_ct  = row["comparison_cell_type"]
@@ -3529,11 +3596,19 @@ def _wald_row_fn(row: dict, bundle: dict):
     # by-cell-type if reference cell type missing or equals the comparison
     if pd.isna(ref_ct) or (ref_ct == comp_ct):
         return _wald_by_celltype_row(row, bundle)
+
     # by-CRE if reference CRE missing or equals the comparison
     if pd.isna(ref_cre) or (ref_cre == comp_cre):
         return _wald_by_cre_row(row, bundle)
-    # crossed case not supported here
-    return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # crossed case not supported
+    return {
+        "test_statistic": np.nan,
+        "p_value": np.nan,
+        "fold_change": np.nan,
+        "flattened": False,
+        "wald_debug": "crossed comparison not supported",
+    }
 
 def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
     # expects an ortho object with make_wald_eval_bundle()
