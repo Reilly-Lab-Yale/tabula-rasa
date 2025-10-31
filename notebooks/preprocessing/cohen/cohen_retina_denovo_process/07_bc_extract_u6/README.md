@@ -1,0 +1,3 @@
+- <cell1> : cbc
+- <umi1> : actual umi
+- <umi2> : cbc

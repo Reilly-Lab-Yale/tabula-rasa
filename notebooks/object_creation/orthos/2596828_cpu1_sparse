@@ -1,0 +1,167 @@
+2025-10-28 18:26:47.806769: I tensorflow/core/util/util.cc:169] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-10-28 18:26:47.809946: W tensorflow/stream_executor/platform/default/dso_loader.cc:64] Could not load dynamic library 'libcudart.so.11.0'; dlerror: libcudart.so.11.0: cannot open shared object file: No such file or directory
+2025-10-28 18:26:47.809959: I tensorflow/stream_executor/cuda/cudart_stub.cc:29] Ignore above cudart dlerror if you do not have a GPU set up on your machine.
+scMPRAforge: INFO: Dropped 0 of 456 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+2025-10-28 18:27:31.664846: E tensorflow/stream_executor/cuda/cuda_driver.cc:271] failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected
+2025-10-28 18:27:31.664875: I tensorflow/stream_executor/cuda/cuda_diagnostics.cc:156] kernel driver does not appear to be running on this host (a1132u22n02.mghpcc.ycrc.yale.edu): /proc/driver/nvidia/version does not exist
+2025-10-28 18:27:31.665343: I tensorflow/core/platform/cpu_feature_guard.cc:193] This TensorFlow binary is optimized with oneAPI Deep Neural Network Library (oneDNN) to use the following CPU instructions in performance-critical operations:  AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA
+To enable them in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2025-10-28 18:28:55.666296: I tensorflow/compiler/mlir/mlir_graph_optimization_pass.cc:354] MLIR V1 optimization pass is not enabled
+[+0:00:07.482675]  imports done
+[+0:00:14.722441]  matricies created
+{'nb_regressors':          Intercept  ...  C(cre_id, contr.treatment(base='reference'))[T.tail_conserve6_503_to_508]
+0                1  ...                                                  0                        
+1                1  ...                                                  0                        
+2                1  ...                                                  0                        
+3                1  ...                                                  0                        
+4                1  ...                                                  0                        
+...            ...  ...                                                ...                        
+7351464          1  ...                                                  0                        
+7351465          1  ...                                                  0                        
+7351466          1  ...                                                  0                        
+7351467          1  ...                                                  0                        
+7351468          1  ...                                                  0                        
+
+[6579970 rows x 114 columns], 'regressand':          umis_mpra_bc
+0                 1.0
+1                 1.0
+2                 1.0
+3                 1.0
+4                 1.0
+...               ...
+7351464           1.0
+7351465           1.0
+7351466           1.0
+7351467           1.0
+7351468           1.0
+
+[6579970 rows x 1 columns], 'zi_regressors':          C(rep_id)[1]  C(rep_id)[2]
+0                   1             0
+1                   1             0
+2                   1             0
+3                   1             0
+4                   1             0
+...               ...           ...
+7351464             0             1
+7351465             0             1
+7351466             0             1
+7351467             0             1
+7351468             0             1
+
+[6579970 rows x 2 columns], 'model_type': 'contrastable', 'nb_formula': "umis_mpra_bc ~ C(cre_id, contr.treatment(base='reference'))", 'zi_formula': 'C(rep_id)-1', 'reference': 'reference', 'split': 'cell_type'}
+[+3:33:13.393222]  model fitting done
+{'llf_total': -8621708.745632302, 'llfs': array([-8621708.7456323]), 'aic_total': 17243651.491264604, 'aics': array([17243651.4912646]), 'df_model_total': 117, 'df': 117, 'weights': {'x_mu': array([[ 1.78999692e-01],
+       [ 2.95345038e-02],
+       [-5.42490065e-01],
+       [-1.89671218e-01],
+       [-3.01178265e-02],
+       [-1.40221948e-02],
+       [-4.45636921e-02],
+       [-2.91821896e-03],
+       [ 1.55376121e-02],
+       [-2.54709959e-01],
+       [-3.69645655e-02],
+       [ 1.21676913e-02],
+       [ 2.36184336e-02],
+       [-4.39895481e-01],
+       [-4.17170785e-02],
+       [ 6.19408302e-03],
+       [ 1.88797843e-02],
+       [-1.54532241e-02],
+       [-4.15236242e-02],
+       [-7.24028982e-03],
+       [ 9.89514124e-03],
+       [-4.11155254e-01],
+       [-8.12162366e-03],
+       [-6.05758163e-04],
+       [-1.10869274e-01],
+       [ 9.14105028e-03],
+       [ 2.37705652e-02],
+       [ 4.09203134e-02],
+       [ 6.32530544e-03],
+       [ 1.14796981e-02],
+       [ 9.31047462e-03],
+       [-1.27353519e-02],
+       [-9.82475057e-02],
+       [ 3.23425909e-03],
+       [ 6.86637266e-03],
+       [-1.27130328e-02],
+       [-1.92953199e-02],
+       [ 4.20946032e-02],
+       [-4.39025313e-02],
+       [-8.81882012e-03],
+       [ 2.12307312e-02],
+       [ 3.85430120e-02],
+       [-4.03635614e-02],
+       [ 1.93302054e-02],
+       [-8.03669170e-03],
+       [ 2.33241497e-03],
+       [ 3.07710888e-03],
+       [ 2.25768015e-02],
+       [-6.12790883e-03],
+       [-3.30051966e-02],
+       [-1.34992572e-02],
+       [-1.11726187e-01],
+       [-1.16399944e-01],
+       [-1.04473747e-01],
+       [ 1.00729674e-01],
+       [-1.77537277e-02],
+       [-1.86536014e-02],
+       [ 2.68360488e-02],
+       [-5.66628762e-02],
+       [ 1.01936013e-02],
+       [-6.15112968e-02],
+       [-1.15588019e-02],
+       [-1.26726981e-02],
+       [-7.61571666e-03],
+       [ 1.59089621e-02],
+       [ 1.78019013e-02],
+       [ 2.85778325e-02],
+       [-3.79341142e-03],
+       [ 8.96616653e-03],
+       [-4.61316155e-03],
+       [-6.27898425e-03],
+       [ 1.55322319e-02],
+       [-1.33320447e-02],
+       [ 2.57310364e-02],
+       [ 2.00388599e-02],
+       [-5.15724532e-04],
+       [ 1.02258706e-02],
+       [ 2.65385807e-02],
+       [ 3.64518911e-02],
+       [ 2.35180017e-02],
+       [-4.56420984e-03],
+       [ 2.11312249e-02],
+       [-2.40855273e-02],
+       [-5.68835251e-03],
+       [-1.15633477e-02],
+       [-4.01223339e-02],
+       [-1.08056981e-02],
+       [-3.99057791e-02],
+       [-1.89300641e-01],
+       [ 1.99668258e-02],
+       [ 1.99369602e-02],
+       [ 2.15491503e-02],
+       [-1.49461534e-02],
+       [ 4.40256409e-02],
+       [ 1.85960885e-02],
+       [ 4.15373258e-02],
+       [ 2.45858021e-02],
+       [ 2.08126176e-02],
+       [ 4.56528924e-03],
+       [-6.13640528e-03],
+       [ 3.71678099e-02],
+       [ 2.36871522e-02],
+       [ 1.90450083e-02],
+       [ 9.40598734e-03],
+       [ 1.47213098e-02],
+       [ 6.94968505e-03],
+       [-1.06373774e-02],
+       [ 4.20442969e-03],
+       [-5.97576145e-03],
+       [ 1.12543358e-02],
+       [-6.61893934e-03],
+       [ 9.02366918e-03],
+       [ 1.65933315e-02],
+       [ 1.14348456e-02]], dtype=float32), 'x_pi': array([[-10.64655 ],
+       [ -9.926667]], dtype=float32), 'theta': array([[2.1662214]], dtype=float32)}, 'cpu_time': 11442.573252916336, 'num_sample': 6579970, 'epochs': 3890}
