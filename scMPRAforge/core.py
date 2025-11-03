@@ -1690,7 +1690,7 @@ class ortho:
             raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
 
         by_ct = {}
-		by_cr = {}
+        by_cr = {}
         #Very Lame retry hack due to extremely rare failures in _hessian_se
         #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         
@@ -2645,13 +2645,14 @@ class WaldPrecompEntry:
     Minimal payload needed to evaluate Wald tests quickly for a single fitted model.
     All numpy; safe to pickle.
     """
-    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb")
+    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb", "debug_msg")
 
-    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb):
+    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb, debug_msg=None):
         self.xmu_names = list(map(str, xmu_names))
         self.se_x_mu   = np.asarray(se_x_mu, dtype=float)
         self.cov_nb    = np.asarray(cov_nb, dtype=float)
         self.k_nb      = int(k_nb)
+        self.debug_msg = debug_msg  # string or None
 
     def name_to_idx(self):
         # build lazily to keep pickle small
@@ -3362,12 +3363,13 @@ def _pack_model_block(model_dict, entry):
         "k_nb":     int(entry.k_nb),
     }
 
-def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
+def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     """
     Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
     """
-    y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
-    Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+    # y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+    # Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+    X, y, Z = design_dict['nb_regressors'], design_dict['regressand'], design_dict['zi_regressors']
 
     endog = y.to_numpy().reshape((-1, 1))
     exog = X.to_numpy()
@@ -3377,6 +3379,7 @@ def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
     endog_tensor = tf.constant(endog, dtype=tf.float32)
     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+
 import uuid
 #def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
 #    """
@@ -3409,6 +3412,7 @@ import uuid
 
 def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
     scope = f"wald_{uuid.uuid4().hex}"
+
     with tf.name_scope(scope):
         x       = tf.convert_to_tensor(params_tensor)
         exog_t  = tf.convert_to_tensor(exog_t)
@@ -3460,72 +3464,189 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     _require_tensorflow()
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
+
 
     # Params var
     _, params_t = _setup_params_from_fit(model_dict)
 
     # Hessian and covariance
     se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+
+    if not np.all(np.isfinite(se_all)):
+        warnings.warn(
+            "[wald_precomp] non-finite SEs.\n"
+            f"  subset n={len(df_subset)}\n"
+            f"  unique cell_types={df_subset['cell_type'].unique()[:5]}\n"
+            f"  unique cre_id={df_subset['cre_id'].unique()[:5]}\n"
+            f"  any all-zero cols in X? {np.any(np.all(np.asarray(X)==0, axis=0))}"
+        )
+
     se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
 
     k_nb  = len(X.columns)
     cov_nb = cov[:k_nb, :k_nb]
 
+        # --- NEW: build debug message for this block ---
+    if not np.all(np.isfinite(se_all)):
+        debug_msg = (
+            f"non-finite SEs; "
+            f"n={len(df_subset)}, "
+            f"ct(s)={list(df_subset['cell_type'].astype(str).unique())[:3]}, "
+            f"cre(s)={list(df_subset['cre_id'].astype(str).unique())[:3]}"
+        )
+    elif np.linalg.cond(cov_nb) > 1e12:
+        # extremely ill-conditioned covariance -> unstable Wald
+        debug_msg = (
+            f"ill-conditioned cov_nb (cond={np.linalg.cond(cov_nb):.2e}); "
+            f"n={len(df_subset)}"
+        )
+    else:
+        debug_msg = "ok"
+
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
-
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
     cre = row["comparison_CRE"]
     blk = bundle["by_cell_type"].get(ct)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "no precomp block for cell_type",
+        }
+
+    debug_base = getattr(blk, "debug_msg", "ok")
 
     if cre == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": debug_base,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no contrast term for {cre}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # sanity / failure modes
+    if not np.isfinite(se):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; non-finite se for {cre}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {cre}",
+        }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": debug_base,
+    }
 
 def _wald_by_cre_row(row: dict, bundle: dict):
     cre = row["comparison_CRE"]
     ct  = row["comparison_cell_type"]
     blk = bundle["by_cre"].get(cre)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "no precomp block for cre",
+        }
+
+    debug_base = getattr(blk, "debug_msg", "ok")
 
     if ct == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": debug_base,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no contrast term for {ct}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if not np.isfinite(se):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; non-finite se for {ct}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {ct}",
+        }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": debug_base,
+    }
 
 def _wald_row_fn(row: dict, bundle: dict):
-    # We assume hypotheses were canonicalized already (labels normalized).
     ref_ct  = row.get("reference_cell_type")
     ref_cre = row.get("reference_CRE")
     comp_ct  = row["comparison_cell_type"]
@@ -3534,11 +3655,19 @@ def _wald_row_fn(row: dict, bundle: dict):
     # by-cell-type if reference cell type missing or equals the comparison
     if pd.isna(ref_ct) or (ref_ct == comp_ct):
         return _wald_by_celltype_row(row, bundle)
+
     # by-CRE if reference CRE missing or equals the comparison
     if pd.isna(ref_cre) or (ref_cre == comp_cre):
         return _wald_by_cre_row(row, bundle)
-    # crossed case not supported here
-    return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # crossed case not supported
+    return {
+        "test_statistic": np.nan,
+        "p_value": np.nan,
+        "fold_change": np.nan,
+        "flattened": False,
+        "wald_debug": "crossed comparison not supported",
+    }
 
 def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
     # expects an ortho object with make_wald_eval_bundle()
