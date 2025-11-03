@@ -2640,13 +2640,14 @@ class WaldPrecompEntry:
     Minimal payload needed to evaluate Wald tests quickly for a single fitted model.
     All numpy; safe to pickle.
     """
-    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb")
+    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb", "debug_msg")
 
-    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb):
+    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb, debug_msg=None):
         self.xmu_names = list(map(str, xmu_names))
         self.se_x_mu   = np.asarray(se_x_mu, dtype=float)
         self.cov_nb    = np.asarray(cov_nb, dtype=float)
         self.k_nb      = int(k_nb)
+        self.debug_msg = debug_msg  # string or None
 
     def name_to_idx(self):
         # build lazily to keep pickle small
@@ -3289,7 +3290,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
 
     params = concat([x_mu, x_pi, log_theta])
     """
-    N = tf.cast(tf.shape(endog)[0], tf.float32)
+    N = tf.cast(tf.shape(endog)[0], tf.float64)
 
     num_features = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
@@ -3306,7 +3307,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
-    y = tf.cast(endog, tf.float32)
+    y = tf.cast(endog, tf.float64)
 
     # NB log-likelihood (for y>0)
     t1 = tf.math.lgamma(y + theta)
@@ -3343,7 +3344,7 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    params_tensor = tf.Variable(params, dtype=tf.float32)
+    params_tensor = tf.Variable(params, dtype=tf.float64)
     return params, params_tensor
 
 def _pack_model_block(model_dict, entry):
@@ -3357,22 +3358,22 @@ def _pack_model_block(model_dict, entry):
         "k_nb":     int(entry.k_nb),
     }
 
-def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
-    """
-    Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
-    """
-    y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
-    Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+# def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
+#     """
+#     Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
+#     """
+#     y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+#     Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
 
-    endog = y.to_numpy().reshape((-1, 1))
-    exog = X.to_numpy()
-    exog_infl = Z.to_numpy()
+#     endog = y.to_numpy().reshape((-1, 1))
+#     exog = X.to_numpy()
+#     exog_infl = Z.to_numpy()
 
-    exog_tensor = tf.constant(exog, dtype=tf.float32)
-    endog_tensor = tf.constant(endog, dtype=tf.float32)
-    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
-    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
-import uuid
+#     exog_tensor = tf.constant(exog, dtype=tf.float64)
+#     endog_tensor = tf.constant(endog, dtype=tf.float64)
+#     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
+#     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+# import uuid
 #def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
 #    """
 #    Compute Hessian-based SEs of the ZINB parameters.
@@ -3455,17 +3456,45 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     _require_tensorflow()
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+    X, y, Z = design_dict['nb_regressors'], design_dict['regressand'], design_dict['zi_regressors']
+    endog_np, exog_np, infl_np = y.to_numpy().reshape((-1, 1)), X.to_numpy(), Z.to_numpy()
 
     # Params var
     _, params_t = _setup_params_from_fit(model_dict)
 
     # Hessian and covariance
     se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+
+    if not np.all(np.isfinite(se_all)):
+        warnings.warn(
+            "[wald_precomp] non-finite SEs.\n"
+            f"  subset n={len(df_subset)}\n"
+            f"  unique cell_types={df_subset['cell_type'].unique()[:5]}\n"
+            f"  unique cre_id={df_subset['cre_id'].unique()[:5]}\n"
+            f"  any all-zero cols in X? {np.any(np.all(np.asarray(X)==0, axis=0))}"
+        )
+
     se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
 
     k_nb  = len(X.columns)
     cov_nb = cov[:k_nb, :k_nb]
+
+        # --- NEW: build debug message for this block ---
+    if not np.all(np.isfinite(se_all)):
+        debug_msg = (
+            f"non-finite SEs; "
+            f"n={len(df_subset)}, "
+            f"ct(s)={list(df_subset['cell_type'].astype(str).unique())[:3]}, "
+            f"cre(s)={list(df_subset['cre_id'].astype(str).unique())[:3]}"
+        )
+    elif np.linalg.cond(cov_nb) > 1e12:
+        # extremely ill-conditioned covariance -> unstable Wald
+        debug_msg = (
+            f"ill-conditioned cov_nb (cond={np.linalg.cond(cov_nb):.2e}); "
+            f"n={len(df_subset)}"
+        )
+    else:
+        debug_msg = "ok"
 
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
@@ -3481,8 +3510,10 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"no precomp block for cell_type={ct}"
+            "wald_debug": "no precomp block for cell_type",
         }
+
+    debug_base = getattr(blk, "debug_msg", "ok")
 
     if cre == "reference":
         return {
@@ -3490,7 +3521,7 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "p_value": 1.0,
             "fold_change": 1.0,
             "flattened": False,
-            "wald_debug": None,
+            "wald_debug": debug_base,
         }
 
     col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
@@ -3500,34 +3531,42 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"no coefficient for CRE={cre} in cell_type={ct}",
+            "wald_debug": f"no contrast term for {cre}",
         }
 
     j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
 
-    # catch bad SEs
-    if (not np.isfinite(se)) or (se == 0):
+    # sanity / failure modes
+    if not np.isfinite(se):
         return {
             "test_statistic": np.nan,
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"bad SE for CRE={cre} in cell_type={ct}: beta={beta}, se={se}",
+            "wald_debug": f"{debug_base}; non-finite se for {cre}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {cre}",
         }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
+    p = max(chi2.sf(z*z, 1), eps)
 
     return {
         "test_statistic": z,
         "p_value": p,
         "fold_change": float(np.exp(beta)),
         "flattened": False,
-        "wald_debug": None,
+        "wald_debug": debug_base,
     }
-
 
 def _wald_by_cre_row(row: dict, bundle: dict):
     cre = row["comparison_CRE"]
@@ -3540,8 +3579,10 @@ def _wald_by_cre_row(row: dict, bundle: dict):
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"no precomp block for CRE={cre}",
+            "wald_debug": "no precomp block for cre",
         }
+
+    debug_base = getattr(blk, "debug_msg", "ok")
 
     if ct == "reference":
         return {
@@ -3549,7 +3590,7 @@ def _wald_by_cre_row(row: dict, bundle: dict):
             "p_value": 1.0,
             "fold_change": 1.0,
             "flattened": False,
-            "wald_debug": None,
+            "wald_debug": debug_base,
         }
 
     col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
@@ -3559,33 +3600,41 @@ def _wald_by_cre_row(row: dict, bundle: dict):
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"no coefficient for cell_type={ct} in CRE={cre}",
+            "wald_debug": f"no contrast term for {ct}",
         }
 
     j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
 
-    if (not np.isfinite(se)) or (se == 0):
+    if not np.isfinite(se):
         return {
             "test_statistic": np.nan,
             "p_value": np.nan,
             "fold_change": np.nan,
             "flattened": False,
-            "wald_debug": f"bad SE for cell_type={ct} in CRE={cre}: beta={beta}, se={se}",
+            "wald_debug": f"{debug_base}; non-finite se for {ct}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {ct}",
         }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
+    p = max(chi2.sf(z*z, 1), eps)
 
     return {
         "test_statistic": z,
         "p_value": p,
         "fold_change": float(np.exp(beta)),
         "flattened": False,
-        "wald_debug": None,
+        "wald_debug": debug_base,
     }
-
 
 def _wald_row_fn(row: dict, bundle: dict):
     ref_ct  = row.get("reference_cell_type")
@@ -3878,9 +3927,9 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
         ct_union = ct_levels.categories
         ct_map = {ct: i for i, ct in enumerate(ct_union)}
 
-        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         A_v  = A_df["value"].to_numpy(dtype=float)
-        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         C_v  = C_df["value"].to_numpy(dtype=float)
 
         nA = A_v.size
