@@ -3290,7 +3290,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
 
     params = concat([x_mu, x_pi, log_theta])
     """
-    N = tf.cast(tf.shape(endog)[0], tf.float64)
+    N = tf.cast(tf.shape(endog)[0], tf.float32)
 
     num_features = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
@@ -3307,7 +3307,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
-    y = tf.cast(endog, tf.float64)
+    y = tf.cast(endog, tf.float32)
 
     # NB log-likelihood (for y>0)
     t1 = tf.math.lgamma(y + theta)
@@ -3344,7 +3344,7 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    params_tensor = tf.Variable(params, dtype=tf.float64)
+    params_tensor = tf.Variable(params, dtype=tf.float32)
     return params, params_tensor
 
 def _pack_model_block(model_dict, entry):
@@ -3358,22 +3358,24 @@ def _pack_model_block(model_dict, entry):
         "k_nb":     int(entry.k_nb),
     }
 
-# def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
-#     """
-#     Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
-#     """
-#     y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
-#     Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
+    """
+    Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
+    """
+    # y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+    # Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+    X, y, Z = design_dict['nb_regressors'], design_dict['regressand'], design_dict['zi_regressors']
 
-#     endog = y.to_numpy().reshape((-1, 1))
-#     exog = X.to_numpy()
-#     exog_infl = Z.to_numpy()
+    endog = y.to_numpy().reshape((-1, 1))
+    exog = X.to_numpy()
+    exog_infl = Z.to_numpy()
 
-#     exog_tensor = tf.constant(exog, dtype=tf.float64)
-#     endog_tensor = tf.constant(endog, dtype=tf.float64)
-#     exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
-#     return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
-# import uuid
+    exog_tensor = tf.constant(exog, dtype=tf.float32)
+    endog_tensor = tf.constant(endog, dtype=tf.float32)
+    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
+    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+
+import uuid
 #def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
 #    """
 #    Compute Hessian-based SEs of the ZINB parameters.
@@ -3405,6 +3407,7 @@ def _pack_model_block(model_dict, entry):
 
 def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
     scope = f"wald_{uuid.uuid4().hex}"
+
     with tf.name_scope(scope):
         x       = tf.convert_to_tensor(params_tensor)
         exog_t  = tf.convert_to_tensor(exog_t)
@@ -3456,8 +3459,8 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     _require_tensorflow()
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    X, y, Z = design_dict['nb_regressors'], design_dict['regressand'], design_dict['zi_regressors']
-    endog_np, exog_np, infl_np = y.to_numpy().reshape((-1, 1)), X.to_numpy(), Z.to_numpy()
+    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
+
 
     # Params var
     _, params_t = _setup_params_from_fit(model_dict)
@@ -3558,7 +3561,8 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
         }
 
     z = beta / se
-    p = max(chi2.sf(z*z, 1), eps)
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
 
     return {
         "test_statistic": z,
@@ -3626,7 +3630,8 @@ def _wald_by_cre_row(row: dict, bundle: dict):
         }
 
     z = beta / se
-    p = max(chi2.sf(z*z, 1), eps)
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
 
     return {
         "test_statistic": z,
@@ -3927,9 +3932,9 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
         ct_union = ct_levels.categories
         ct_map = {ct: i for i, ct in enumerate(ct_union)}
 
-        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
+        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
         A_v  = A_df["value"].to_numpy(dtype=float)
-        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
+        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
         C_v  = C_df["value"].to_numpy(dtype=float)
 
         nA = A_v.size
