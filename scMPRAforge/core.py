@@ -3419,13 +3419,19 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
 #     del hess, H, grad, ll, x, exog_t, infl_t, endog_t
 #     return se, cov
 
-def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
+def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8, return_info=False):
     """
     Graph-mode only:
       - builds a self-contained graph,
       - evaluates gradients/Hessian in a local Session,
       - adds tiny ridge to stabilize inversion.
     """
+
+        # ---------- NEW: preflight finite checks ----------
+    if not (np.isfinite(params_np).all() and np.isfinite(exog_np).all()
+            and np.isfinite(infl_np).all() and np.isfinite(endog_np).all()):
+        raise FloatingPointError("non-finite inputs to Hessian")
+
     g = tf.Graph()
     with g.as_default():
         P = int(params_np.size)
@@ -3441,12 +3447,12 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
         hcols = [tf.gradients(grad[i], params)[0] for i in range(P)]
         hess  = tf.stack(hcols, axis=1)                   # (P, P)
 
-        cfg = tf.compat.v1.ConfigProto(
-            intra_op_parallelism_threads=1,
-            inter_op_parallelism_threads=1,
-            allow_soft_placement=True,
-        )
-        with tf.compat.v1.Session(graph=g, config=cfg) as sess:
+        # cfg = tf.compat.v1.ConfigProto(
+        #     intra_op_parallelism_threads=1,
+        #     inter_op_parallelism_threads=1,
+        #     allow_soft_placement=True,
+        # )
+        with tf.compat.v1.Session(graph=g) as sess: # , config=cfg
             sess.run(tf.compat.v1.global_variables_initializer())
             G, H = sess.run(
                 [grad, hess],
@@ -3463,16 +3469,73 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     if not np.all(np.isfinite(H)):
         raise FloatingPointError("non-finite Hessian")
 
-    H_info = -H
-    H_info[np.diag_indices_from(H_info)] += ridge
+    H = 0.5 * (H + H.T)          # symmetrize numerically
+    I = -H
 
+    # ---------- NEW: jittered Cholesky with escalation ----------
+    eye = np.eye(I.shape[0], dtype=I.dtype)
+    ridges_tried = []
+    cov = None
+    chol_used = False
+    cur_ridge = float(ridge)
+
+    for _ in range(8):  # escalate up to ~1e-8 * 10^7
+        ridges_tried.append(cur_ridge)
+        try:
+            L = np.linalg.cholesky(I + cur_ridge * eye)
+            # Invert via Cholesky (stable & fast)
+            Linv = la.solve_triangular(L, eye, lower=True, check_finite=False)
+            cov = Linv.T @ Linv
+            chol_used = True
+            break
+        except LinAlgError:
+            cur_ridge *= 10.0
+
+    # ---------- NEW: fallbacks if Cholesky keeps failing ----------
+    if cov is None:
+        try:
+            cov = np.linalg.inv(I + cur_ridge * eye)
+        except LinAlgError:
+            cov = la.pinvh(I + cur_ridge * eye)
+
+    # ---------- NEW: diagnostics ----------
+    # Use the actual matrix we inverted (I + last ridge * I)
+    I_used = I + (ridges_tried[-1] if ridges_tried else 0.0) * eye
     try:
-        cov = np.linalg.inv(H_info)
-    except LinAlgError:
-        cov = la.pinvh(H_info)
+        # eigvalsh & cond can fail if not finite; guard with try
+        min_eig = float(np.min(np.linalg.eigvalsh(0.5*(I_used+I_used.T))))
+    except Exception:
+        min_eig = np.nan
+    try:
+        cond_I = float(np.linalg.cond(I_used))
+    except Exception:
+        cond_I = np.inf
 
-    se = np.sqrt(np.diag(cov))
-    return se, cov
+    if not np.all(np.isfinite(cov)):
+        # As a last resort, switch to pseudo-inverse from the symmetrized matrix
+        cov = la.pinvh(0.5*(I_used + I_used.T))
+
+    se = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))  # avoid tiny negs from roundoff
+
+    # Optional info blob for upstream wald_debug strings
+    info = {
+        "chol_used": chol_used,
+        "ridges_tried": ridges_tried,
+        "min_eig_I_used": min_eig,
+        "cond_I_used": cond_I,
+        "any_nonfinite_se": bool(~np.isfinite(se).all()),
+    }
+    ### COMMENT OUT OLD
+    # H_info = -H
+    # H_info[np.diag_indices_from(H_info)] += ridge
+
+    # try:
+    #     cov = np.linalg.inv(H_info)
+    # except LinAlgError:
+    #     cov = la.pinvh(H_info)
+
+    # se = np.sqrt(np.diag(cov))
+    return (se, cov, info) if return_info else (se, cov)
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3540,16 +3603,20 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
 
     # Hessian / SE in graph mode only
     try:
-        se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        # cov_nb = cov[:k_nb, :k_nb]
+        se_all, cov, info = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8, return_info=True)
+        cond_nb = np.linalg.cond(cov[:k_nb,:k_nb]) if np.all(np.isfinite(cov[:k_nb,:k_nb])) else np.inf
+
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
-        cov_nb = cov[:k_nb, :k_nb]
+        
 
         # Diagnostics
         zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
         cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
         if not np.all(np.isfinite(se_all)):
-            debug_msg = "non-finite SEs"
+            debug_msg = f"hessian failure: non-finite SEs; chol={info['chol_used']}; ridge~{info['ridges_tried'][-1]:.1e}; condI={info['cond_I_used']:.2e}; minEig={info['min_eig_I_used']:.2e}"
         elif len(zero_var_cols) > 0:
             debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
         elif cond_nb > 1e12:
