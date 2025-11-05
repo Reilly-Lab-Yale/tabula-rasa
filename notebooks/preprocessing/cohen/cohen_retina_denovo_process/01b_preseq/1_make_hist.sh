@@ -12,4 +12,5 @@ current_file=${files[$SLURM_ARRAY_TASK_ID]}
 name=$(basename "$current_file" ".txt")
 
 echo "Processing ${current_file}"
-cat ${inp}/${current_file} | cut -f1 | sort | uniq -c | awk '{print $1 "\t" $2}' > ${oup}/${name}.hist
+cat ${inp}/${current_file} | cut -f1 | sort | uniq -c | awk '{print $2 "\t" $1}' > ${oup}/${name}.hist
+# we reverse the order because preseq expects 
