@@ -57,9 +57,14 @@ import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
 try:
-    import tensorflow as tf  # optional dep
+    import tensorflow as tf
+    tf.compat.v1.disable_eager_execution()  # single source of truth: graph mode only
 except Exception as _tf_err:
     tf = None
+
+import scipy.linalg as la
+from numpy.linalg import LinAlgError
+# import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -3333,7 +3338,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
 
 def _setup_params_from_fit(zinb_model_fit):
     """
-    Extract params vector and TF variable (x_mu, x_pi, theta) from a single
+    Extract params vector and [ optional, commented out for now TF variable] (x_mu, x_pi, theta) from a single
     fitted TensorZINB result dict with labeled weights.
     """
     x_mu = zinb_model_fit['weights']['x_mu']
@@ -3344,8 +3349,8 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    params_tensor = tf.Variable(params, dtype=tf.float32)
-    return params, params_tensor
+    # params_tensor = tf.Variable(params, dtype=tf.float32)
+    return params #, params_tensor
 
 def _pack_model_block(model_dict, entry):
     # model_dict['weights']['x_mu'] is a Series with names
@@ -3356,6 +3361,7 @@ def _pack_model_block(model_dict, entry):
         "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
         "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
         "k_nb":     int(entry.k_nb),
+        "debug_msg": entry.debug_msg,   # NEW carry through debugging messages to make Erin's life easier
     }
 
 def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
@@ -3370,75 +3376,102 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     exog = X.to_numpy()
     exog_infl = Z.to_numpy()
 
-    exog_tensor = tf.constant(exog, dtype=tf.float32)
-    endog_tensor = tf.constant(endog, dtype=tf.float32)
-    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
-    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
+    # exog_tensor = tf.constant(exog, dtype=tf.float32)
+    # endog_tensor = tf.constant(endog, dtype=tf.float32)
+    # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
+    return (y, X, Z), (endog, exog, exog_infl) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
-import uuid
-#def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-#    """
-#    Compute Hessian-based SEs of the ZINB parameters.
-#    Works in both TF2 eager and TF1 graph modes.
-#    """
-#    # Build Hessian with nested GradientTapes
-#    scope = f"wald_{uuid.uuid4().hex}"
-#    with tf.name_scope(scope):
-#        with tf.GradientTape() as tape2:
-#            with tf.GradientTape() as tape1:
-#                ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
-#            grad = tape1.gradient(ll, params_tensor)
-#        hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
-#
-#        # Evaluate to numpy depending on execution mode
-#        if tf.executing_eagerly():
-#            H = hess.numpy()
-#        else:
-#            # Graph mode
-#            sess = tf.compat.v1.Session()
-#            with sess.as_default():
-#                sess.run(tf.compat.v1.global_variables_initializer())
-#                H = sess.run(hess)
-#
-#    # Wald covariance = inverse observed information = (-H)^{-1}
-#    cov = np.linalg.inv(-H)
-#    se = np.sqrt(np.diag(cov))
-#    return se, cov
 
-def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-    scope = f"wald_{uuid.uuid4().hex}"
 
-    with tf.name_scope(scope):
-        x       = tf.convert_to_tensor(params_tensor)
-        exog_t  = tf.convert_to_tensor(exog_t)
-        infl_t  = tf.convert_to_tensor(infl_t)
-        endog_t = tf.convert_to_tensor(endog_t)
+# def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
+#     scope = f"wald_{uuid.uuid4().hex}"
 
-        with tf.GradientTape() as tape2:
-            tape2.watch(x)
-            with tf.GradientTape() as tape1:
-                tape1.watch(x)
-                ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
-            grad = tape1.gradient(ll, x)
-        hess = tape2.jacobian(grad, x)
+#     with tf.name_scope(scope):
+#         x       = tf.convert_to_tensor(params_tensor)
+#         exog_t  = tf.convert_to_tensor(exog_t)
+#         infl_t  = tf.convert_to_tensor(infl_t)
+#         endog_t = tf.convert_to_tensor(endog_t)
 
-    if tf.executing_eagerly():
-        H = hess.numpy()
-    else:
-        # Graph mode
-        sess = tf.compat.v1.Session()
-        with sess.as_default():
+#         with tf.GradientTape() as tape2:
+#             tape2.watch(x)
+#             with tf.GradientTape() as tape1:
+#                 tape1.watch(x)
+#                 ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
+#             grad = tape1.gradient(ll, x)
+#         hess = tape2.jacobian(grad, x)
+
+#     if tf.executing_eagerly():
+#         H = hess.numpy()
+#     else:
+#         # Graph mode
+#         sess = tf.compat.v1.Session()
+#         with sess.as_default():
+#             sess.run(tf.compat.v1.global_variables_initializer())
+#             H = sess.run(hess)
+
+#     # drop cached graphs in long-lived workers
+#     #try: tf.keras.backend.clear_session()
+#     #except: pass
+
+#     cov = np.linalg.inv(-H)
+#     se  = np.sqrt(np.diag(cov))
+
+#     del hess, H, grad, ll, x, exog_t, infl_t, endog_t
+#     return se, cov
+
+def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
+    """
+    Graph-mode only:
+      - builds a self-contained graph,
+      - evaluates gradients/Hessian in a local Session,
+      - adds tiny ridge to stabilize inversion.
+    """
+    g = tf.Graph()
+    with g.as_default():
+        P = int(params_np.size)
+        params = tf.compat.v1.placeholder(tf.float64, shape=[P], name="params")
+        exog   = tf.compat.v1.placeholder(tf.float64, shape=[None, exog_np.shape[1]], name="exog")
+        infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]], name="infl")
+        endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1], name="endog")
+
+        ll = _zinb_loglik_tf(params, exog, infl, endog)   # your existing TF op; works in graph mode
+
+        grad = tf.gradients(ll, params)[0]                # (P,)
+        # Build Hessian by differentiating each grad component
+        hcols = [tf.gradients(grad[i], params)[0] for i in range(P)]
+        hess  = tf.stack(hcols, axis=1)                   # (P, P)
+
+        cfg = tf.compat.v1.ConfigProto(
+            intra_op_parallelism_threads=1,
+            inter_op_parallelism_threads=1,
+            allow_soft_placement=True,
+        )
+        with tf.compat.v1.Session(graph=g, config=cfg) as sess:
             sess.run(tf.compat.v1.global_variables_initializer())
-            H = sess.run(hess)
+            G, H = sess.run(
+                [grad, hess],
+                feed_dict={
+                    params: params_np,
+                    exog:   exog_np,
+                    infl:   infl_np,
+                    endog:  endog_np,
+                },
+            )
 
-    # drop cached graphs in long-lived workers
-    #try: tf.keras.backend.clear_session()
-    #except: pass
+    if not np.all(np.isfinite(G)):
+        raise FloatingPointError("non-finite gradient")
+    if not np.all(np.isfinite(H)):
+        raise FloatingPointError("non-finite Hessian")
 
-    cov = np.linalg.inv(-H)
-    se  = np.sqrt(np.diag(cov))
+    H_info = -H
+    H_info[np.diag_indices_from(H_info)] += ridge
 
-    del hess, H, grad, ll, x, exog_t, infl_t, endog_t
+    try:
+        cov = np.linalg.inv(H_info)
+    except LinAlgError:
+        cov = la.pinvh(H_info)
+
+    se = np.sqrt(np.diag(cov))
     return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
@@ -3459,48 +3492,86 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     _require_tensorflow()
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
+    # (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
+    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
 
 
     # Params var
-    _, params_t = _setup_params_from_fit(model_dict)
+    ######## OLD from non graph hessian #######
+    # # _, params_t = _setup_params_from_fit(model_dict)
+    # params_np = _setup_params_from_fit(model_dict)
 
-    # Hessian and covariance
-    se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
+    # # Hessian and covariance
+    # se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
 
-    if not np.all(np.isfinite(se_all)):
-        warnings.warn(
-            "[wald_precomp] non-finite SEs.\n"
-            f"  subset n={len(df_subset)}\n"
-            f"  unique cell_types={df_subset['cell_type'].unique()[:5]}\n"
-            f"  unique cre_id={df_subset['cre_id'].unique()[:5]}\n"
-            f"  any all-zero cols in X? {np.any(np.all(np.asarray(X)==0, axis=0))}"
-        )
+    # if not np.all(np.isfinite(se_all)):
+    #     warnings.warn(
+    #         "[wald_precomp] non-finite SEs.\n"
+    #         f"  subset n={len(df_subset)}\n"
+    #         f"  unique cell_types={df_subset['cell_type'].unique()[:5]}\n"
+    #         f"  unique cre_id={df_subset['cre_id'].unique()[:5]}\n"
+    #         f"  any all-zero cols in X? {np.any(np.all(np.asarray(X)==0, axis=0))}"
+    #     )
 
-    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+    # se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
 
-    k_nb  = len(X.columns)
-    cov_nb = cov[:k_nb, :k_nb]
+    # k_nb  = len(X.columns)
+    # cov_nb = cov[:k_nb, :k_nb]
 
-        # --- NEW: build debug message for this block ---
-    if not np.all(np.isfinite(se_all)):
-        debug_msg = (
-            f"non-finite SEs; "
-            f"n={len(df_subset)}, "
-            f"ct(s)={list(df_subset['cell_type'].astype(str).unique())[:3]}, "
-            f"cre(s)={list(df_subset['cre_id'].astype(str).unique())[:3]}"
-        )
-    elif np.linalg.cond(cov_nb) > 1e12:
-        # extremely ill-conditioned covariance -> unstable Wald
-        debug_msg = (
-            f"ill-conditioned cov_nb (cond={np.linalg.cond(cov_nb):.2e}); "
-            f"n={len(df_subset)}"
-        )
-    else:
-        debug_msg = "ok"
+    #     # --- NEW: build debug message for this block ---
+    # if not np.all(np.isfinite(se_all)):
+    #     debug_msg = (
+    #         f"non-finite SEs; "
+    #         f"n={len(df_subset)}, "
+    #         f"ct(s)={list(df_subset['cell_type'].astype(str).unique())[:3]}, "
+    #         f"cre(s)={list(df_subset['cre_id'].astype(str).unique())[:3]}"
+    #     )
+    # elif np.linalg.cond(cov_nb) > 1e12:
+    #     # extremely ill-conditioned covariance -> unstable Wald
+    #     debug_msg = (
+    #         f"ill-conditioned cov_nb (cond={np.linalg.cond(cov_nb):.2e}); "
+    #         f"n={len(df_subset)}"
+    #     )
+    # else:
+    #     debug_msg = "ok"
+
+    # xmu_names = list(model_dict['weights']['x_mu'].index)
+
+
+    # Hessian / SE in graph mode only
+    try:
+        se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+        k_nb  = len(X.columns)
+        cov_nb = cov[:k_nb, :k_nb]
+
+        # Diagnostics
+        zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
+        cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
+        if not np.all(np.isfinite(se_all)):
+            debug_msg = "non-finite SEs"
+        elif len(zero_var_cols) > 0:
+            debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
+        elif cond_nb > 1e12:
+            debug_msg = f"ill-conditioned cov_nb (cond={cond_nb:.2e})"
+        else:
+            debug_msg = "ok"
+
+    except FloatingPointError as e:
+        # Gradient/Hessian had NaNs/Infs
+        se_x_mu = np.full(len(X.columns), np.nan)
+        cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
+        debug_msg = f"hessian failure: {e.__class__.__name__}"
+    # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
     xmu_names = list(model_dict['weights']['x_mu'].index)
-    return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
+    return WaldPrecompEntry(
+        xmu_names=xmu_names,
+        se_x_mu=se_x_mu,
+        cov_nb=cov_nb,
+        k_nb=len(X.columns),
+        debug_msg=debug_msg,
+    )
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
@@ -3516,7 +3587,7 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "wald_debug": "no precomp block for cell_type",
         }
 
-    debug_base = getattr(blk, "debug_msg", "ok")
+    debug_base = blk.get("debug_msg", "ok")
 
     if cre == "reference":
         return {
@@ -3586,7 +3657,7 @@ def _wald_by_cre_row(row: dict, bundle: dict):
             "wald_debug": "no precomp block for cre",
         }
 
-    debug_base = getattr(blk, "debug_msg", "ok")
+    debug_base = blk.get("debug_msg", "ok")
 
     if ct == "reference":
         return {
