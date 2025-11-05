@@ -3295,7 +3295,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
 
     params = concat([x_mu, x_pi, log_theta])
     """
-    N = tf.cast(tf.shape(endog)[0], tf.float32)
+    N = tf.cast(tf.shape(endog)[0], tf.float64)
 
     num_features = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
@@ -3312,7 +3312,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
-    y = tf.cast(endog, tf.float32)
+    y = tf.cast(endog, tf.float64)
 
     # NB log-likelihood (for y>0)
     t1 = tf.math.lgamma(y + theta)
@@ -3349,8 +3349,8 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    # params_tensor = tf.Variable(params, dtype=tf.float32)
-    return params #, params_tensor
+    # params_tensor = tf.Variable(params, dtype=tf64)
+    return params.astype(np.float64, copy=False) #, params_tensor
 
 def _pack_model_block(model_dict, entry):
     # model_dict['weights']['x_mu'] is a Series with names
@@ -3376,10 +3376,10 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     exog = X.to_numpy()
     exog_infl = Z.to_numpy()
 
-    # exog_tensor = tf.constant(exog, dtype=tf.float32)
-    # endog_tensor = tf.constant(endog, dtype=tf.float32)
-    # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
-    return (y, X, Z), (endog, exog, exog_infl) # , (endog_tensor, exog_tensor, exog_infl_tensor)
+    # exog_tensor = tf.constant(exog, dtype=tf.float64)
+    # endog_tensor = tf.constant(endog, dtype=tf.float64)
+    # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
+    return (y, X, Z), (endog.astype(np.float64, copy=False), exog.astype(np.float64, copy=False), exog_infl.astype(np.float64, copy=False)) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
 
 
@@ -4003,9 +4003,9 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
         ct_union = ct_levels.categories
         ct_map = {ct: i for i, ct in enumerate(ct_union)}
 
-        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         A_v  = A_df["value"].to_numpy(dtype=float)
-        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         C_v  = C_df["value"].to_numpy(dtype=float)
 
         nA = A_v.size
