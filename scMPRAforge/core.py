@@ -2844,7 +2844,7 @@ def make_by_celltype_hypotheses(
                 comparison_cell_type="NeuroectodermBrain",
                 counts=shendure,
                 comparison_cres="all",
-                reference_cre="reference",   # your flattened minP/noP
+                reference_cre="reference",   # flattened minP/noP
                 meta="emvar_screen")
 
     Notes:
@@ -3308,7 +3308,7 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
     pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
 
-    # zero-inflation logits -> log(q0), log(q1) as in your code
+    # zero-inflation logits -> log(q0), log(q1) 
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
@@ -3419,19 +3419,13 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
 #     del hess, H, grad, ll, x, exog_t, infl_t, endog_t
 #     return se, cov
 
-def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8, return_info=False):
+def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     """
     Graph-mode only:
       - builds a self-contained graph,
       - evaluates gradients/Hessian in a local Session,
       - adds tiny ridge to stabilize inversion.
     """
-
-        # ---------- NEW: preflight finite checks ----------
-    if not (np.isfinite(params_np).all() and np.isfinite(exog_np).all()
-            and np.isfinite(infl_np).all() and np.isfinite(endog_np).all()):
-        raise FloatingPointError("non-finite inputs to Hessian")
-
     g = tf.Graph()
     with g.as_default():
         P = int(params_np.size)
@@ -3440,7 +3434,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8, retu
         infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]], name="infl")
         endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1], name="endog")
 
-        ll = _zinb_loglik_tf(params, exog, infl, endog)   # your existing TF op; works in graph mode
+        ll = _zinb_loglik_tf(params, exog, infl, endog)   
 
         grad = tf.gradients(ll, params)[0]                # (P,)
         # Build Hessian by differentiating each grad component
@@ -3469,73 +3463,16 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8, retu
     if not np.all(np.isfinite(H)):
         raise FloatingPointError("non-finite Hessian")
 
-    H = 0.5 * (H + H.T)          # symmetrize numerically
-    I = -H
+    H_info = -H
+    H_info[np.diag_indices_from(H_info)] += ridge
 
-    # ---------- NEW: jittered Cholesky with escalation ----------
-    eye = np.eye(I.shape[0], dtype=I.dtype)
-    ridges_tried = []
-    cov = None
-    chol_used = False
-    cur_ridge = float(ridge)
-
-    for _ in range(8):  # escalate up to ~1e-8 * 10^7
-        ridges_tried.append(cur_ridge)
-        try:
-            L = np.linalg.cholesky(I + cur_ridge * eye)
-            # Invert via Cholesky (stable & fast)
-            Linv = la.solve_triangular(L, eye, lower=True, check_finite=False)
-            cov = Linv.T @ Linv
-            chol_used = True
-            break
-        except LinAlgError:
-            cur_ridge *= 10.0
-
-    # ---------- NEW: fallbacks if Cholesky keeps failing ----------
-    if cov is None:
-        try:
-            cov = np.linalg.inv(I + cur_ridge * eye)
-        except LinAlgError:
-            cov = la.pinvh(I + cur_ridge * eye)
-
-    # ---------- NEW: diagnostics ----------
-    # Use the actual matrix we inverted (I + last ridge * I)
-    I_used = I + (ridges_tried[-1] if ridges_tried else 0.0) * eye
     try:
-        # eigvalsh & cond can fail if not finite; guard with try
-        min_eig = float(np.min(np.linalg.eigvalsh(0.5*(I_used+I_used.T))))
-    except Exception:
-        min_eig = np.nan
-    try:
-        cond_I = float(np.linalg.cond(I_used))
-    except Exception:
-        cond_I = np.inf
+        cov = np.linalg.inv(H_info)
+    except LinAlgError:
+        cov = la.pinvh(H_info)
 
-    if not np.all(np.isfinite(cov)):
-        # As a last resort, switch to pseudo-inverse from the symmetrized matrix
-        cov = la.pinvh(0.5*(I_used + I_used.T))
-
-    se = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))  # avoid tiny negs from roundoff
-
-    # Optional info blob for upstream wald_debug strings
-    info = {
-        "chol_used": chol_used,
-        "ridges_tried": ridges_tried,
-        "min_eig_I_used": min_eig,
-        "cond_I_used": cond_I,
-        "any_nonfinite_se": bool(~np.isfinite(se).all()),
-    }
-    ### COMMENT OUT OLD
-    # H_info = -H
-    # H_info[np.diag_indices_from(H_info)] += ridge
-
-    # try:
-    #     cov = np.linalg.inv(H_info)
-    # except LinAlgError:
-    #     cov = la.pinvh(H_info)
-
-    # se = np.sqrt(np.diag(cov))
-    return (se, cov, info) if return_info else (se, cov)
+    se = np.sqrt(np.diag(cov))
+    return se, cov
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3603,20 +3540,16 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
 
     # Hessian / SE in graph mode only
     try:
-        # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
-        # cov_nb = cov[:k_nb, :k_nb]
-        se_all, cov, info = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8, return_info=True)
-        cond_nb = np.linalg.cond(cov[:k_nb,:k_nb]) if np.all(np.isfinite(cov[:k_nb,:k_nb])) else np.inf
-
+        se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
-        
+        cov_nb = cov[:k_nb, :k_nb]
 
         # Diagnostics
         zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
         cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
         if not np.all(np.isfinite(se_all)):
-            debug_msg = f"hessian failure: non-finite SEs; chol={info['chol_used']}; ridge~{info['ridges_tried'][-1]:.1e}; condI={info['cond_I_used']:.2e}; minEig={info['min_eig_I_used']:.2e}"
+            debug_msg = "non-finite SEs"
         elif len(zero_var_cols) > 0:
             debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
         elif cond_nb > 1e12:
@@ -4032,10 +3965,10 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     controls = set(bundle["controls"])
 
     # We ignore comparison_cell_type when max_over_celltypes=True (match old behavior)
-    # If user explicitly disabled max_over_celltypes, we fall back to your previous per-CT logic.
+    # If user explicitly disabled max_over_celltypes, we fall back to  previous per-CT logic.
     if not max_over_ct:
-        # fall back to your prior per-CT implementation (the version you posted last)
-        return _bootstrap_row_fn_per_ct(row, bundle, **kw)  # you can keep your previous function under this name
+        # fall back to  prior per-CT implementation 
+        return _bootstrap_row_fn_per_ct(row, bundle, **kw)  # can keep previous function under this name
 
     # Prepare RNG stable per CRE
     rng = np.random.default_rng(None if seed is None else (hash(("BOOTMAX", seed, comp_cre)) % (2**32 - 1)))
@@ -4142,7 +4075,7 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     A_bar = A_mat.mean(axis=0)                 # (B,)
     C_bar = C_mat.mean(axis=0)                 # (B,)
 
-    # Observed difference = medians of CRE and Control boot max (matches your summary centering)
+    # Observed difference = medians of CRE and Control boot max (matches summary centering)
     obs_diff = float(np.median(A_bar) - np.median(C_bar))
     
     # NEW ⬇︎ Build combined NULL distribution (average per-rep null diffs across reps)
@@ -4152,7 +4085,7 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     # NEW ⬇︎ Two-sided empirical p-value against null
     p = float((np.sum(np.abs(NULL_bar) >= np.abs(obs_diff)) + 1) / (NULL_bar.size + 1))
 
-    # Reportables (matching your old summaries)
+    # Reportables (matching old summaries)
     test_statistic = float(np.median(A_bar))                       # q50 of CRE bootstrap max across CTs
     fold_change    = float((np.median(A_bar) + pc) / (np.median(C_bar) + pc))
 
