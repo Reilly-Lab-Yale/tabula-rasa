@@ -3493,7 +3493,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
 
     nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
     # (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
-    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(df_subset,design_dict, nb_formula, zi_formula)
 
 
     # Params var
