@@ -7,7 +7,7 @@
 module load miniconda
 conda activate env_preseq
 
-root=/home/mcn26/palmer_scratch/raw_recap/cohen_retina/uniq_counts
+root=/home/mcn26/palmer_scratch/raw_recap/cohen_retina/histograms
 files=($(ls $root))
 current_file=${files[$SLURM_ARRAY_TASK_ID]}
 echo "---FILE ${current_file} ---"
