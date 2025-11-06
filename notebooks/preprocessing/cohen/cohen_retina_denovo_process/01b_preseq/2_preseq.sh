@@ -2,7 +2,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
 #SBATCH --array=0-7
-#SBATCH -t 4:00:00
+#SBATCH -t 12:00:00
 
 module load miniconda
 conda activate env_preseq
