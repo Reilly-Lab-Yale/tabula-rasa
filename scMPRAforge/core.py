@@ -3440,15 +3440,40 @@ def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, 
     H_info = -H_np
     H_info = 0.5 * (H_info + H_info.T)
     H_info[np.diag_indices_from(H_info)] += ridge_h
-    try:
-        H_inv = np.linalg.inv(H_info)
-    except LinAlgError:
-        H_inv = la.pinvh(H_info)
 
-    cov = H_inv @ J @ H_inv
+
+    used = "chol"
+    try:
+        if not np.all(np.isfinite(H_info)):
+            raise FloatingPointError("non-finite H_info")
+        c, low = la.cho_factor(H_info, check_finite=False)
+        X   = la.cho_solve((c, low), J, check_finite=False)
+        cov = la.cho_solve((c, low), X, check_finite=False)
+    except (LinAlgError, ValueError, FloatingPointError):
+        used = "solve"
+        try:
+            X   = la.solve(H_info, J, assume_a='sym', check_finite=False)
+            cov = la.solve(H_info, X, assume_a='sym', check_finite=False)
+        except (LinAlgError, ValueError):
+            used = "pinv"
+            H_pinv = la.pinvh(H_info, check_finite=False)
+            cov    = H_pinv @ J @ H_pinv
+
     cov = 0.5 * (cov + cov.T)
     se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
-    return se, cov
+
+        # Compact diagnostics
+    try:
+        evals_H = la.eigvalsh(H_info, check_finite=False)
+        evals_J = la.eigvalsh(J,      check_finite=False)
+        condH   = (np.inf if evals_H.min() <= 0 else evals_H.max() / evals_H.min())
+        condJ   = (np.inf if evals_J.min() <= 0 else evals_J.max() / evals_J.min())
+        diag = f"sandwich: Hmin={evals_H.min():.2e},Hmax={evals_H.max():.2e},condH={condH:.2e}; " \
+               f"Jmin={evals_J.min():.2e},Jmax={evals_J.max():.2e},condJ={condJ:.2e}; sol={used}"
+    except Exception:
+        diag = f"sandwich: sol={used}"
+
+    return se, cov, diag
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3477,8 +3502,8 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     # Hessian / SE in graph mode only
     try:
         # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
-        se_all, cov = _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np,
-                                  ridge_h=1e-8, ridge_j=1e-12)
+        se_all, cov, diag = _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np,
+                                            ridge_h=1e-8, ridge_j=1e-12)
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
         cov_nb = cov[:k_nb, :k_nb]
@@ -3487,19 +3512,19 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
         cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
         if not np.all(np.isfinite(se_all)):
-            debug_msg = "non-finite SEs"
+            debug_msg = f"sandwich: non-finite SEs; {diag}"
         elif len(zero_var_cols) > 0:
-            debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
+            debug_msg = f"sandwich: zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}; {diag}"
         elif cond_nb > 1e12:
-            debug_msg = f"ill-conditioned cov_nb (cond={cond_nb:.2e})"
+            debug_msg = f"sandwich: ill-conditioned cov_nb (cond={cond_nb:.2e}); {diag}"
         else:
-            debug_msg = "ok"
+            debug_msg = f"ok; {diag}"
 
-    except FloatingPointError as e:
-        # Gradient/Hessian had NaNs/Infs
+    except Exception as e:
+        # Any failure: fill NaNs and report *sandwich* failure, not hessian
         se_x_mu = np.full(len(X.columns), np.nan)
         cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
-        debug_msg = f"hessian failure: {e.__class__.__name__}"
+        debug_msg = f"sandwich failure: {type(e).__name__}: {e}"
     # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
     xmu_names = list(model_dict['weights']['x_mu'].index)
