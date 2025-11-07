@@ -90,39 +90,39 @@
 88	Gata4_chr14_5710	ok
 89	Lamb1_chr12_2215	ok
 90	Lamc1_chr1_12185	ok
-91	Lamc1_chr1_12188	non-finite SEs
+91	Lamc1_chr1_12188	NaNs in SEs
 92	Map1b_chr13_9436	ok
 93	Sox17_chr1_59	ok
 94	Tubb2b_chr13_2557	ok
 95	Col1a1_chr11_15273	ok
 96	Col1a2_chr6_73	ok
 97	Lamc1_chr1_12189	ok
-98	Bend5_chr4_8168	non-finite SEs
+98	Bend5_chr4_8168	NaNs in SEs
 99	Bend5_chr4_8201	ok
-100	Btg1_chr10_9612	non-finite SEs
-101	Cdk5r1_chr11_12590	non-finite SEs
+100	Btg1_chr10_9612	NaNs in SEs
+101	Cdk5r1_chr11_12590	NaNs in SEs
 102	Col1a1_chr11_15316	ok
-103	Col5a1_chr2_2562	non-finite SEs
+103	Col5a1_chr2_2562	NaNs in SEs
 104	Foxa2_chr2_13862	ok
 105	Gata4_chr14_5693	ok
 106	Gata4_chr14_5763	ok
-107	Gata4_chr14_5779	non-finite SEs
+107	Gata4_chr14_5779	NaNs in SEs
 108	Igfbp4_chr11_16735	ok
 109	Igfbp4_chr11_16738	ok
 110	Klf4_chr4_3946	ok
 111	Lama1_chr17_7814	ok
-112	Lamb1_chr12_2182	non-finite SEs
+112	Lamb1_chr12_2182	NaNs in SEs
 113	Lamb1_chr12_2203	ok
 114	Sox17_chr1_65	ok
-115	Sox17_chr1_73	non-finite SEs
+115	Sox17_chr1_73	NaNs in SEs
 116	Btg1_chr10_9588	ok
 117	Cited2_chr10_1267	ok
 118	Epas1_chr17_10056	ok
-119	Foxa2_chr2_13812	non-finite SEs
+119	Foxa2_chr2_13812	NaNs in SEs
 120	Igfbp4_chr11_16716	ok
 121	Lama1_chr17_7788	ok
 122	Sox17_chr1_69	ok
-123	Sox4_chr13_2057	non-finite SEs
+123	Sox4_chr13_2057	NaNs in SEs
 124	Sparc_chr11_7180	ok
 125	Sparc_chr11_7199	ok
 126	Col1a1_chr11_15269	ok
@@ -131,7 +131,7 @@
 129	Lama1_chr17_7787	ok
 130	Sox17_chr1_83	ok
 131	Sparc_chr11_7205	ok
-132	Txndc12_chr4_7975	non-finite SEs
+132	Txndc12_chr4_7975	NaNs in SEs
 133	Btg1_chr10_9593	ok
 134	Foxa2_chr2_13861	ok
 135	Sox4_chr13_2054	ok
@@ -159,13 +159,13 @@
 157	Lamb1_chr12_2189	ok
 158	Tgfbi_chr13_5701	ok
 159	Tgfbi_chr13_5735	ok
-160	Tubb2b_chr13_2580	non-finite SEs
+160	Tubb2b_chr13_2580	NaNs in SEs
 161	Col1a1_chr11_15259	ok
 162	Foxa2_chr2_13820	ok
 163	Foxa2_chr2_13830	ok
-164	Gata4_chr14_5752	non-finite SEs
+164	Gata4_chr14_5752	NaNs in SEs
 165	Foxa2_chr2_13806	ok
-166	Sox17_chr1_60	non-finite SEs
+166	Sox17_chr1_60	NaNs in SEs
 167	Col1a1_chr11_15258	ok
 168	Txndc12_chr4_7971	ok
 169	Klf4_chr4_3951	ok
@@ -176,25 +176,25 @@
 174	Klf4_chr4_3949	ok
 175	Lamb1_chr12_2238	ok
 176	Lama1_chr17_7791	ok
-177	Col1a1_chr11_15301	non-finite SEs
-178	Sparc_chr11_7207	non-finite SEs
+177	Col1a1_chr11_15301	NaNs in SEs
+178	Sparc_chr11_7207	NaNs in SEs
 179	Lamb1_chr12_2206	ok
-180	Lamc1_chr1_12127	non-finite SEs
+180	Lamc1_chr1_12127	NaNs in SEs
 181	Igfbp4_chr11_16694	ok
 182	Epas1_chr17_10063	ok
 183	Sparc_chr11_7233	ok
 184	Lama1_chr17_7784	ok
 185	Lamb1_chr12_2207	ok
 186	Lamb1_chr12_2288	ok
-187	Bend5_chr4_8192	non-finite SEs
+187	Bend5_chr4_8192	NaNs in SEs
 188	Epas1_chr17_10057	ok
 189	Gata4_chr14_5762	ok
-190	Sox17_chr1_78	non-finite SEs
-191	Cited2_chr10_1270	non-finite SEs
+190	Sox17_chr1_78	NaNs in SEs
+191	Cited2_chr10_1270	NaNs in SEs
 192	Klf4_chr4_3952	ok
 193	Klf4_chr4_3936	ok
 194	Sparc_chr11_7182	ok
-195	Cited2_chr10_1248	non-finite SEs
+195	Cited2_chr10_1248	NaNs in SEs
 196	Bend5_chr4_8172	ok
 197	Txndc12_chr4_7969	ok
 198	Lamb1_chr12_2196	ok

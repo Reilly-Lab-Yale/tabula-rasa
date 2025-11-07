@@ -3463,6 +3463,13 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
                 },
             )
 
+    # Check for NaNs in gradient or Hessian
+    if np.isnan(G).any():
+        raise FloatingPointError("NaNs detected in gradient")
+    if np.isnan(H).any():
+        raise FloatingPointError("NaNs detected in Hessian")
+
+    # Check for non-finite values (Inf / -Inf)
     if not np.all(np.isfinite(G)):
         raise FloatingPointError("non-finite gradient")
     if not np.all(np.isfinite(H)):
@@ -3551,22 +3558,56 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         cov_nb = cov[:k_nb, :k_nb]
 
         # Diagnostics
-        zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
-        cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
-        if not np.all(np.isfinite(se_all)):
-            debug_msg = "non-finite SEs"
-        elif len(zero_var_cols) > 0:
-            debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
-        elif cond_nb > 1e12:
-            debug_msg = f"ill-conditioned cov_nb (cond={cond_nb:.2e})"
+        # Zero-variance regressors
+        zero_var_cols = [
+            c for c in X.columns
+            if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)
+        ]
+
+        # Covariance pathologies
+        cov_has_nan = np.isnan(cov_nb).any()
+        cov_has_inf = np.isinf(cov_nb).any()
+
+        # SE pathologies
+        se_has_nan = np.isnan(se_all).any()
+        se_has_inf = np.isinf(se_all).any()
+
+        # Condition number (only if finite)
+        if not (cov_has_nan or cov_has_inf):
+            cond_nb = np.linalg.cond(cov_nb)
         else:
-            debug_msg = "ok"
+            cond_nb = np.inf
+
+        # Collect all issues
+        issues = []
+
+        if se_has_nan:
+            issues.append("NaNs in SEs")
+        if se_has_inf:
+            issues.append("Infs in SEs")
+
+        if cov_has_nan:
+            issues.append("NaNs in cov_nb")
+        if cov_has_inf:
+            issues.append("Infs in cov_nb")
+
+        if len(zero_var_cols) > 0:
+            issues.append(
+                f"zero-var in X: {zero_var_cols[:3]}"
+                f"{'...' if len(zero_var_cols) > 3 else ''}"
+            )
+
+        if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
+            issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
+
+        # Final message
+        debug_msg = "; ".join(issues) if issues else "ok"
 
     except FloatingPointError as e:
         # Gradient/Hessian had NaNs/Infs
         se_x_mu = np.full(len(X.columns), np.nan)
         cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
-        debug_msg = f"hessian failure: {e.__class__.__name__}"
+        debug_msg = f"hessian failure: {e.__class__.__name__}: {e}"
     # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
     xmu_names = list(model_dict['weights']['x_mu'].index)
