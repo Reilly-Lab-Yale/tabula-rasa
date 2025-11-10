@@ -3428,6 +3428,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     Graph-mode only:
       - builds a self-contained graph,
       - evaluates gradients/Hessian in a local Session,
+      - adds tiny ridge to stabilize inversion.
     """
     g = tf.Graph()
     with g.as_default():
@@ -3474,31 +3475,12 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
         raise FloatingPointError("non-finite Hessian")
 
     H_info = -H
-    #H_info[np.diag_indices_from(H_info)] += ridge
+    H_info[np.diag_indices_from(H_info)] += ridge
 
-    # After computing H (the Hessian of log-likelihood)
-    Hs = 0.5 * (H + H.T)           # symmetrize
-    J  = -(Hs)                     # observed information
-
-    # Eigen floor to make it PD (minimal shift)
-    w, V = np.linalg.eigh(J)
-    w_floor = np.maximum(w, 0.0)
-    if w_floor.min() <= 0:
-        eps = 1e-10
-        shift = eps - w_floor.min()
-        w_floor = w_floor + shift    # tiniest shift to PD
-    J_pd = (V * w_floor) @ V.T
-
-    # Cholesky-based inverse/solve
-    L = np.linalg.cholesky(J_pd)
-    I = np.eye(J_pd.shape[0])
-    cov = np.linalg.solve(L.T, np.linalg.solve(L, I))
-
-    
-    #try:
-    #    cov = np.linalg.inv(H_info)
-    #except LinAlgError:
-    #    cov = la.pinvh(H_info)
+    try:
+        cov = np.linalg.inv(H_info)
+    except LinAlgError:
+        cov = la.pinvh(H_info)
 
     se = np.sqrt(np.diag(cov))
     return se, cov, H
