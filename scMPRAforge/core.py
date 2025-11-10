@@ -3610,6 +3610,18 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         debug_msg = f"hessian failure: {e.__class__.__name__}: {e}"
     # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
+    # Add a concise colinearity check for categorical designs
+    try:
+        # Quick rank test for X and Z
+        rank_X = np.linalg.matrix_rank(X)
+        rank_Z = np.linalg.matrix_rank(Z)
+        if rank_X < X.shape[1]:
+            debug_msg += f"; colinearity in X (rank {rank_X}/{X.shape[1]})"
+        if rank_Z < Z.shape[1]:
+            debug_msg += f"; colinearity in Z (rank {rank_Z}/{Z.shape[1]})"
+    except Exception as e:
+        debug_msg += f"; colinearity check failed: {e.__class__.__name__}"
+    
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(
         xmu_names=xmu_names,
@@ -3618,6 +3630,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         k_nb=len(X.columns),
         debug_msg=debug_msg,
     )
+    
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
