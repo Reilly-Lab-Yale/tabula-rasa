@@ -3484,7 +3484,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
         cov = la.pinvh(H_info)
 
     se = np.sqrt(np.diag(cov))
-    return se, cov
+    return se, cov, H
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3552,7 +3552,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
 
     # Hessian / SE in graph mode only
     try:
-        se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        se_all, cov, H = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
         cov_nb = cov[:k_nb, :k_nb]
@@ -3600,8 +3600,10 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
-        # Final message
-        debug_msg = "; ".join(issues) if issues else "ok"
+        if issues:
+            debug_msg = "; ".join(issues) + f"; H={H}"
+        else:
+            debug_msg = "ok"
 
     except FloatingPointError as e:
         # Gradient/Hessian had NaNs/Infs
