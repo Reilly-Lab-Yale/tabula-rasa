@@ -1272,7 +1272,7 @@ def _smart_matrix(data,split):
         level_frequency=level_frequency.sort_values(ascending=False)
         reference=level_frequency.index[0]
 
-    zi_formula="C(rep_id)-1"
+    zi_formula="C(rep_id)"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     
     y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
