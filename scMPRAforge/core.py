@@ -2665,7 +2665,6 @@ class WaldPrecompEntry:
 
 
 class WaldPrecomp:
-
     """
     Mirrors the shape of `parameters`: dicts keyed by split level.
     Values are WaldPrecompEntry objects (or Futures thereof when live on a cluster).
@@ -3601,7 +3600,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
         if issues:
-            debug_msg = "; ".join(issues) + f"; H={H}"
+            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())})"
         else:
             debug_msg = "ok"
 
