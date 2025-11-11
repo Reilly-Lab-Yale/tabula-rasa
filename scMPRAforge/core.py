@@ -761,7 +761,7 @@ class Bounds:
 from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
-SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
+SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds_intercept.tgz")
 
 class scMPRA_data:
     """
@@ -1943,6 +1943,11 @@ def describe_parameters(parameters,dat,split):
     cell_counts=cell_counts.dropna()
 
     working=flattened_param.join(cell_counts,how="inner")
+    dense = working.copy()
+    for col in dense.columns:
+        if pd.api.types.is_sparse(dense[col].dtype):
+            dense[col] = dense[col].sparse.to_dense()
+    working=dense
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
