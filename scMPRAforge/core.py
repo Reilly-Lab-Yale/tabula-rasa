@@ -4573,11 +4573,11 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        #clobber_mkdir(path/"orthos")
-        #for i, orth in enumerate(self.orthos):
-        #    orth.save(path=path/"orthos",
-        #            name=str(i),
-        #            strip_training_data=True)
+        clobber_mkdir(path/"orthos")
+        for i, orth in enumerate(self.orthos):
+            orth.save(path=path/"orthos",
+                    name=str(i),
+                    strip_training_data=True)
         
         #dataframes
         for var in self._df_vars:
