@@ -3309,8 +3309,18 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     log_theta = params[-1]
     theta = tf.exp(log_theta)
 
-    mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
-    pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+    # --- NEW: clip the linear predictors to keep exp() in a safe range ---
+    # These bounds are conservative and keep exp() in ~[2e-9, 4.8e8].
+    eta_mu      = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
+    eta_mu      = tf.clip_by_value(eta_mu, -20.0, 20.0)
+    mu          = tf.exp(eta_mu)
+
+    pi_logits   = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+    pi_logits   = tf.clip_by_value(pi_logits, -20.0, 20.0)
+
+    # --- NEW: bound dispersion away from 0/inf ---
+    log_theta   = tf.clip_by_value(log_theta, -10.0, 10.0)
+    theta       = tf.exp(log_theta)
 
     # zero-inflation logits -> log(q0), log(q1) 
     log_q0 = -tf.nn.softplus(-pi_logits)
