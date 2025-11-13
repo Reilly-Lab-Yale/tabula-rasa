@@ -64,7 +64,7 @@ except Exception as _tf_err:
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
-# import uuid
+import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -3468,11 +3468,24 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
             )
 
     # Check for NaNs in gradient or Hessian
-    with np.printoptions(threshold=np.inf, edgeitems=np.inf, linewidth=10_000):
-        if np.isnan(G).any():
-            raise FloatingPointError(f"NaNs detected in gradient :G={repr(G)} ; params_np={repr(params_np)} ; exog_np={repr(exog_np)} ; infl_np={repr(infl_np)} ; endog_np={repr(endog_np)}")
-        if np.isnan(H).any():
-            raise FloatingPointError("NaNs detected in Hessian")
+    
+    if np.isnan(G).any():
+        uid = str(uuid.uuid4())
+        for name, arr in [
+            ("G", G),
+            ("params", params_np),
+            ("exog", exog_np),
+            ("infl", infl_np),
+            ("endog", endog_np),
+        ]:
+            np.save(f"{uid}_{name}.npy", arr)
+
+        raise FloatingPointError(
+            f"NaNs detected in gradient; dumped arrays to disk with prefix {uid}"
+        )
+        #raise FloatingPointError(f"NaNs detected in gradient :G={repr(G)} ; params_np={repr(params_np)} ; exog_np={repr(exog_np)} ; infl_np={repr(infl_np)} ; endog_np={repr(endog_np)}")
+    if np.isnan(H).any():
+        raise FloatingPointError("NaNs detected in Hessian")
 
     # Check for non-finite values (Inf / -Inf)
     if not np.all(np.isfinite(G)):
