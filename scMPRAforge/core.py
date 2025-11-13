@@ -3469,7 +3469,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
 
     # Check for NaNs in gradient or Hessian
     if np.isnan(G).any():
-        raise FloatingPointError("NaNs detected in gradient")
+        raise FloatingPointError(f"NaNs detected in gradient : {repr(G)}")
     if np.isnan(H).any():
         raise FloatingPointError("NaNs detected in Hessian")
 
@@ -3605,7 +3605,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
         if issues:
-            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())})"
+            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
         else:
             debug_msg = "ok"
 
