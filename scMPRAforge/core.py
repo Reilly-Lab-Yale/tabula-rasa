@@ -4547,8 +4547,6 @@ class de_novo_simulation:
         """
         for i in range(len(self.simulated_scMPRA)):
             self._create_ortho_for_replicate(client,i)
-            #DEBUG
-            break
 
     
     _normal_vars=["simulation_replicates"]
