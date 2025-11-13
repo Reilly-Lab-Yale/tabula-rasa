@@ -3468,10 +3468,11 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
             )
 
     # Check for NaNs in gradient or Hessian
-    if np.isnan(G).any():
-        raise FloatingPointError(f"NaNs detected in gradient : {repr(G)}")
-    if np.isnan(H).any():
-        raise FloatingPointError("NaNs detected in Hessian")
+    with np.printoptions(threshold=np.inf, edgeitems=np.inf, linewidth=10_000):
+        if np.isnan(G).any():
+            raise FloatingPointError(f"NaNs detected in gradient :G={repr(G)} ; params_np={repr(params_np)} ; exog_np={repr(exog_np)} ; infl_np={repr(infl_np)} ; endog_np={repr(endog_np)}")
+        if np.isnan(H).any():
+            raise FloatingPointError("NaNs detected in Hessian")
 
     # Check for non-finite values (Inf / -Inf)
     if not np.all(np.isfinite(G)):
