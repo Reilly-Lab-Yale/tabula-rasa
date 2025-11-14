@@ -64,7 +64,7 @@ except Exception as _tf_err:
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
-# import uuid
+import uuid
 
 #internal imports
 from .utils import unimplemented
