@@ -1292,8 +1292,6 @@ def _smart_matrix(data,split):
         'split':split
     }
 
-def tensorzinb_fit(matricies,name):
-    return _tensorzinb_fit(matricies,name)
 
 def _tensorzinb_fit(matricies,name):
     """
@@ -1307,6 +1305,9 @@ def _tensorzinb_fit(matricies,name):
     result = zinbo.fit(init_method="nb")
 
     del zinbo
+    
+    if pd.isnull(result["llf_total"]):
+        raise RuntimeError("Unconverged model in {name}")
     
     return result
 
