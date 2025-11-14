@@ -4,7 +4,7 @@
 2	ExEndodermParietal	ok
 3	ExEndodermVisceral	ok
 4	Haematoendothelial	ok
-5	Mesoderm	ok
+5	Mesoderm	hessian failure: FloatingPointError: NaNs detected in gradient
 6	NeuroectodermBrain	ok
 7	NeuroectodermRostral	ok
 8	SurfaceEctoderm	ok

@@ -64,7 +64,7 @@ except Exception as _tf_err:
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
-import uuid
+# import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -761,7 +761,7 @@ class Bounds:
 from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
-SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds_intercept.tgz")
+SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
 
 class scMPRA_data:
     """
@@ -1272,7 +1272,7 @@ def _smart_matrix(data,split):
         level_frequency=level_frequency.sort_values(ascending=False)
         reference=level_frequency.index[0]
 
-    zi_formula="C(rep_id)"
+    zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     
     y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
@@ -1943,11 +1943,6 @@ def describe_parameters(parameters,dat,split):
     cell_counts=cell_counts.dropna()
 
     working=flattened_param.join(cell_counts,how="inner")
-    dense = working.copy()
-    for col in dense.columns:
-        if pd.api.types.is_sparse(dense[col].dtype):
-            dense[col] = dense[col].sparse.to_dense()
-    working=dense
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
@@ -3468,22 +3463,8 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
             )
 
     # Check for NaNs in gradient or Hessian
-    
     if np.isnan(G).any():
-        uid = str(uuid.uuid4())
-        for name, arr in [
-            ("G", G),
-            ("params", params_np),
-            ("exog", exog_np),
-            ("infl", infl_np),
-            ("endog", endog_np),
-        ]:
-            np.save(f"{uid}_{name}.npy", arr)
-
-        raise FloatingPointError(
-            f"NaNs detected in gradient; dumped arrays to disk with prefix {uid}"
-        )
-        #raise FloatingPointError(f"NaNs detected in gradient :G={repr(G)} ; params_np={repr(params_np)} ; exog_np={repr(exog_np)} ; infl_np={repr(infl_np)} ; endog_np={repr(endog_np)}")
+        raise FloatingPointError("NaNs detected in gradient")
     if np.isnan(H).any():
         raise FloatingPointError("NaNs detected in Hessian")
 
@@ -3619,7 +3600,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
         if issues:
-            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
+            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())})"
         else:
             debug_msg = "ok"
 
@@ -4585,11 +4566,11 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        clobber_mkdir(path/"orthos")
-        for i, orth in enumerate(self.orthos):
-            orth.save(path=path/"orthos",
-                    name=str(i),
-                    strip_training_data=True)
+        #clobber_mkdir(path/"orthos")
+        #for i, orth in enumerate(self.orthos):
+        #    orth.save(path=path/"orthos",
+        #            name=str(i),
+        #            strip_training_data=True)
         
         #dataframes
         for var in self._df_vars:
