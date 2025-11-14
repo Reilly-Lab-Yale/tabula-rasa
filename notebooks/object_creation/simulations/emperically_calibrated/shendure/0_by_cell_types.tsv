@@ -4,7 +4,7 @@
 2	ExEndodermParietal	ok
 3	ExEndodermVisceral	ok
 4	Haematoendothelial	ok
-5	Mesoderm	hessian failure: FloatingPointError: NaNs detected in gradient
+5	Mesoderm	hessian failure: FloatingPointError: NaNs detected in gradient; dumped arrays to disk with prefix 5afd4676-159d-4f67-b03a-4d708cd0e8d2
 6	NeuroectodermBrain	ok
 7	NeuroectodermRostral	ok
 8	SurfaceEctoderm	ok

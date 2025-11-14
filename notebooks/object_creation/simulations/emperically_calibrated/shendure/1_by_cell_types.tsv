@@ -1,0 +1,11 @@
+	name	debug
+0	Cardiomyocytes	ok
+1	EpiblastPrimitiveStreak	hessian failure: FloatingPointError: NaNs detected in gradient; dumped arrays to disk with prefix 83999d00-899a-4eec-88bc-7942f09800fa
+2	ExEndodermParietal	ok
+3	ExEndodermVisceral	ok
+4	Haematoendothelial	ok
+5	Mesoderm	ok
+6	NeuroectodermBrain	ok
+7	NeuroectodermRostral	ok
+8	SurfaceEctoderm	hessian failure: FloatingPointError: NaNs detected in gradient; dumped arrays to disk with prefix 770462f9-cd14-4d50-84fc-13722381f92f
+9	reference	ok
