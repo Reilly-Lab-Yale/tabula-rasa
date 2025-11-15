@@ -1302,12 +1302,13 @@ def _tensorzinb_fit(matricies,name):
                     exog_infl=matricies["zi_regressors"].to_numpy())
     
 
-    result = zinbo.fit(init_method="nb")
+    result = zinbo.fit(init_method="nb",
+                        return_history=True)#reset_keras_session=True)
 
     del zinbo
     
     if pd.isnull(result["llf_total"]):
-        raise RuntimeError("Unconverged model in {name}")
+        logger.warning(f"Unconverged model in {name}")
     
     return result
 
