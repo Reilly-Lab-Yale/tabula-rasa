@@ -64,7 +64,7 @@ except Exception as _tf_err:
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
-# import uuid
+import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -1292,8 +1292,6 @@ def _smart_matrix(data,split):
         'split':split
     }
 
-def tensorzinb_fit(matricies,name):
-    return _tensorzinb_fit(matricies,name)
 
 def _tensorzinb_fit(matricies,name):
     """
@@ -1304,9 +1302,12 @@ def _tensorzinb_fit(matricies,name):
                     exog_infl=matricies["zi_regressors"].to_numpy())
     
 
-    result = zinbo.fit(init_method="nb")
+    result = zinbo.fit(return_history=True)#reset_keras_session=True)
 
     del zinbo
+    
+    if pd.isnull(result["llf_total"]):
+        logger.warning(f"Unconverged model in {name}")
     
     return result
 
@@ -1943,6 +1944,11 @@ def describe_parameters(parameters,dat,split):
     cell_counts=cell_counts.dropna()
 
     working=flattened_param.join(cell_counts,how="inner")
+    dense = working.copy()
+    for col in dense.columns:
+        if pd.api.types.is_sparse(dense[col].dtype):
+            dense[col] = dense[col].sparse.to_dense()
+    working=dense
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
@@ -3455,7 +3461,19 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
 
     # Check for NaNs in gradient or Hessian
     if np.isnan(G).any():
-        raise FloatingPointError("NaNs detected in gradient")
+        uid = str(uuid.uuid4())
+        for name, arr in [
+            ("G", G),
+            ("params", params_np),
+            ("exog", exog_np),
+            ("infl", infl_np),
+            ("endog", endog_np),
+        ]:
+            np.save(f"{uid}_{name}.npy", arr)
+
+        raise FloatingPointError(
+            f"NaNs detected in gradient; dumped arrays to disk with prefix {uid}"
+        )
     if np.isnan(H).any():
         raise FloatingPointError("NaNs detected in Hessian")
 
@@ -3591,7 +3609,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
         if issues:
-            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())})"
+            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
         else:
             debug_msg = "ok"
 
@@ -4557,11 +4575,11 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        #clobber_mkdir(path/"orthos")
-        #for i, orth in enumerate(self.orthos):
-        #    orth.save(path=path/"orthos",
-        #            name=str(i),
-        #            strip_training_data=True)
+        clobber_mkdir(path/"orthos")
+        for i, orth in enumerate(self.orthos):
+            orth.save(path=path/"orthos",
+                    name=str(i),
+                    strip_training_data=True)
         
         #dataframes
         for var in self._df_vars:
