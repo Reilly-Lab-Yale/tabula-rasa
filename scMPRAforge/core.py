@@ -3293,36 +3293,46 @@ def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
 
 
 # ---- Wald Test -------------------------------------
-def _zinb_loglik_tf(params, exog, exog_infl, endog):
+def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
     """
-    TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
+    TF implementation of the ZINB log-likelihood.
 
     params = concat([x_mu, x_pi, log_theta])
+
+    If return_per_obs=False (default):
+        returns a scalar total log-likelihood (previous existing behavior).
+
+    If return_per_obs=True:
+        returns (ll_sum, ll_vec), where:
+          - ll_vec is shape (N,)   per-observation log-likelihoods (up to const.)
+          - ll_sum is scalar sum(ll_vec)
     """
     N = tf.cast(tf.shape(endog)[0], tf.float64)
 
-    num_features = tf.shape(exog)[1]
+    num_features      = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
 
-    x_mu = params[:num_features]
-    x_pi = params[num_features:num_features + num_infl_features]
-    log_theta = params[-1]
-    theta = tf.exp(log_theta)
+    # Split parameter vector
+    x_mu      = params[:num_features]
+    x_pi      = params[num_features:num_features + num_infl_features]
+    raw_log_theta = params[-1]
 
-    # --- NEW: clip the linear predictors to keep exp() in a safe range ---
-    # These bounds are conservative and keep exp() in ~[2e-9, 4.8e8].
-    eta_mu      = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
-    eta_mu      = tf.clip_by_value(eta_mu, -20.0, 20.0)
-    mu          = tf.exp(eta_mu)
+    # --- CLIPPED linear predictors and dispersion (same as prev. current version) ---
 
-    pi_logits   = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
-    pi_logits   = tf.clip_by_value(pi_logits, -20.0, 20.0)
+    # μ part: η_mu = X β_mu, clipped before exp
+    eta_mu = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
+    eta_mu = tf.clip_by_value(eta_mu, -20.0, 20.0)
+    mu     = tf.exp(eta_mu)
 
-    # --- NEW: bound dispersion away from 0/inf ---
-    log_theta   = tf.clip_by_value(log_theta, -10.0, 10.0)
-    theta       = tf.exp(log_theta)
+    # π logits for ZI part
+    pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+    pi_logits = tf.clip_by_value(pi_logits, -20.0, 20.0)
 
-    # zero-inflation logits -> log(q0), log(q1) 
+    # θ (dispersion) bounded away from 0/∞ in log-space
+    log_theta = tf.clip_by_value(raw_log_theta, -10.0, 10.0)
+    theta     = tf.exp(log_theta)
+
+    # zero-inflation logits -> log(q0), log(q1)
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
@@ -3338,15 +3348,22 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     nb_case = t1 + t2 + t3 + t4 + t5 + log_q1
 
     # Zero case
-    p1 = theta * (log_theta - ty) + log_q1
+    p1        = theta * (log_theta - ty) + log_q1
     zero_case = tf.reduce_logsumexp(tf.stack([log_q0, p1], axis=0), axis=0)
 
-    ll = tf.where(y < 1e-8, zero_case, nb_case)
+    # ll per observation (up to the log-factorial constant)
+    ll = tf.where(y < 1e-8, zero_case, nb_case)   # shape (N, 1)
 
-    # 3-step reduction (mean neg LL per output, add back log-factorial, sum)
-    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                      # (num_outputs,)
-    log_fact = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)    # ∑ ln(y!)
-    llfs = -(mean_neg_ll * N + log_fact)                           # (num_outputs,)
+    if return_per_obs:
+        # Per-observation loglik (we don't include log(y!) since it drops out of scores)
+        ll_vec = tf.reshape(ll, [-1])           # (N,)
+        ll_sum = tf.reduce_sum(ll_vec)          # scalar
+        return ll_sum, ll_vec
+
+    # ---- existing “total log-likelihood” reduction for compatibility ----
+    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                   # (num_outputs,)
+    log_fact    = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)
+    llfs        = -(mean_neg_ll * N + log_fact)                 # (num_outputs,)
     log_likelihood = tf.reduce_sum(llfs)
     return log_likelihood
 
@@ -3396,42 +3413,6 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     return (y, X, Z), (endog.astype(np.float64, copy=False), exog.astype(np.float64, copy=False), exog_infl.astype(np.float64, copy=False)) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
 
-
-# def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-#     scope = f"wald_{uuid.uuid4().hex}"
-
-#     with tf.name_scope(scope):
-#         x       = tf.convert_to_tensor(params_tensor)
-#         exog_t  = tf.convert_to_tensor(exog_t)
-#         infl_t  = tf.convert_to_tensor(infl_t)
-#         endog_t = tf.convert_to_tensor(endog_t)
-
-#         with tf.GradientTape() as tape2:
-#             tape2.watch(x)
-#             with tf.GradientTape() as tape1:
-#                 tape1.watch(x)
-#                 ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
-#             grad = tape1.gradient(ll, x)
-#         hess = tape2.jacobian(grad, x)
-
-#     if tf.executing_eagerly():
-#         H = hess.numpy()
-#     else:
-#         # Graph mode
-#         sess = tf.compat.v1.Session()
-#         with sess.as_default():
-#             sess.run(tf.compat.v1.global_variables_initializer())
-#             H = sess.run(hess)
-
-#     # drop cached graphs in long-lived workers
-#     #try: tf.keras.backend.clear_session()
-#     #except: pass
-
-#     cov = np.linalg.inv(-H)
-#     se  = np.sqrt(np.diag(cov))
-
-#     del hess, H, grad, ll, x, exog_t, infl_t, endog_t
-#     return se, cov
 
 def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     """
