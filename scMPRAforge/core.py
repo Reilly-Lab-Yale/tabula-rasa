@@ -64,7 +64,7 @@ except Exception as _tf_err:
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
-# import uuid
+import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -1292,8 +1292,6 @@ def _smart_matrix(data,split):
         'split':split
     }
 
-def tensorzinb_fit(matricies,name):
-    return _tensorzinb_fit(matricies,name)
 
 def _tensorzinb_fit(matricies,name):
     """
@@ -1304,9 +1302,12 @@ def _tensorzinb_fit(matricies,name):
                     exog_infl=matricies["zi_regressors"].to_numpy())
     
 
-    result = zinbo.fit(init_method="nb")
+    result = zinbo.fit(return_history=True)#reset_keras_session=True)
 
     del zinbo
+    
+    if pd.isnull(result["llf_total"]):
+        logger.warning(f"Unconverged model in {name}")
     
     return result
 
@@ -1943,6 +1944,11 @@ def describe_parameters(parameters,dat,split):
     cell_counts=cell_counts.dropna()
 
     working=flattened_param.join(cell_counts,how="inner")
+    dense = working.copy()
+    for col in dense.columns:
+        if pd.api.types.is_sparse(dense[col].dtype):
+            dense[col] = dense[col].sparse.to_dense()
+    working=dense
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
@@ -2665,7 +2671,6 @@ class WaldPrecompEntry:
 
 
 class WaldPrecomp:
-
     """
     Mirrors the shape of `parameters`: dicts keyed by split level.
     Values are WaldPrecompEntry objects (or Futures thereof when live on a cluster).
@@ -3463,6 +3468,25 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
                 },
             )
 
+    # Check for NaNs in gradient or Hessian
+    if np.isnan(G).any():
+        uid = str(uuid.uuid4())
+        for name, arr in [
+            ("G", G),
+            ("params", params_np),
+            ("exog", exog_np),
+            ("infl", infl_np),
+            ("endog", endog_np),
+        ]:
+            np.save(f"{uid}_{name}.npy", arr)
+
+        raise FloatingPointError(
+            f"NaNs detected in gradient; dumped arrays to disk with prefix {uid}"
+        )
+    if np.isnan(H).any():
+        raise FloatingPointError("NaNs detected in Hessian")
+
+    # Check for non-finite values (Inf / -Inf)
     if not np.all(np.isfinite(G)):
         raise FloatingPointError("non-finite gradient")
     if not np.all(np.isfinite(H)):
@@ -3477,7 +3501,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
         cov = la.pinvh(H_info)
 
     se = np.sqrt(np.diag(cov))
-    return se, cov
+    return se, cov, H
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3545,20 +3569,56 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
 
     # Hessian / SE in graph mode only
     try:
-        se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        se_all, cov, H = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
         cov_nb = cov[:k_nb, :k_nb]
 
         # Diagnostics
-        zero_var_cols = [c for c in X.columns if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)]
-        cond_nb = np.linalg.cond(cov_nb) if np.all(np.isfinite(cov_nb)) else np.inf
-        if not np.all(np.isfinite(se_all)):
-            debug_msg = "non-finite SEs"
-        elif len(zero_var_cols) > 0:
-            debug_msg = f"zero-var in X: {zero_var_cols[:3]}{'...' if len(zero_var_cols)>3 else ''}"
-        elif cond_nb > 1e12:
-            debug_msg = f"ill-conditioned cov_nb (cond={cond_nb:.2e})"
+        # Zero-variance regressors
+        zero_var_cols = [
+            c for c in X.columns
+            if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)
+        ]
+
+        # Covariance pathologies
+        cov_has_nan = np.isnan(cov_nb).any()
+        cov_has_inf = np.isinf(cov_nb).any()
+
+        # SE pathologies
+        se_has_nan = np.isnan(se_all).any()
+        se_has_inf = np.isinf(se_all).any()
+
+        # Condition number (only if finite)
+        if not (cov_has_nan or cov_has_inf):
+            cond_nb = np.linalg.cond(cov_nb)
+        else:
+            cond_nb = np.inf
+
+        # Collect all issues
+        issues = []
+
+        if se_has_nan:
+            issues.append("NaNs in SEs")
+        if se_has_inf:
+            issues.append("Infs in SEs")
+
+        if cov_has_nan:
+            issues.append("NaNs in cov_nb")
+        if cov_has_inf:
+            issues.append("Infs in cov_nb")
+
+        if len(zero_var_cols) > 0:
+            issues.append(
+                f"zero-var in X: {zero_var_cols[:3]}"
+                f"{'...' if len(zero_var_cols) > 3 else ''}"
+            )
+
+        if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
+            issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
+
+        if issues:
+            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
         else:
             debug_msg = "ok"
 
@@ -3566,9 +3626,21 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         # Gradient/Hessian had NaNs/Infs
         se_x_mu = np.full(len(X.columns), np.nan)
         cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
-        debug_msg = f"hessian failure: {e.__class__.__name__}"
+        debug_msg = f"hessian failure: {e.__class__.__name__}: {e}"
     # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
 
+    # Add a concise colinearity check for categorical designs
+    try:
+        # Quick rank test for X and Z
+        rank_X = np.linalg.matrix_rank(X)
+        rank_Z = np.linalg.matrix_rank(Z)
+        if rank_X < X.shape[1]:
+            debug_msg += f"; colinearity in X (rank {rank_X}/{X.shape[1]})"
+        if rank_Z < Z.shape[1]:
+            debug_msg += f"; colinearity in Z (rank {rank_Z}/{Z.shape[1]})"
+    except Exception as e:
+        debug_msg += f"; colinearity check failed: {e.__class__.__name__}"
+    
     xmu_names = list(model_dict['weights']['x_mu'].index)
     return WaldPrecompEntry(
         xmu_names=xmu_names,
@@ -3577,6 +3649,7 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         k_nb=len(X.columns),
         debug_msg=debug_msg,
     )
+    
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
@@ -4511,11 +4584,11 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        #clobber_mkdir(path/"orthos")
-        #for i, orth in enumerate(self.orthos):
-        #    orth.save(path=path/"orthos",
-        #            name=str(i),
-        #            strip_training_data=True)
+        clobber_mkdir(path/"orthos")
+        for i, orth in enumerate(self.orthos):
+            orth.save(path=path/"orthos",
+                    name=str(i),
+                    strip_training_data=True)
         
         #dataframes
         for var in self._df_vars:
