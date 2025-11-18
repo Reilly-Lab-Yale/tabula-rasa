@@ -3328,26 +3328,46 @@ def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
 
 
 # ---- Wald Test -------------------------------------
-def _zinb_loglik_tf(params, exog, exog_infl, endog):
+def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
     """
-    TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
+    TF implementation of the ZINB log-likelihood.
 
     params = concat([x_mu, x_pi, log_theta])
+
+    If return_per_obs=False (default):
+        returns a scalar total log-likelihood (previous existing behavior).
+
+    If return_per_obs=True:
+        returns (ll_sum, ll_vec), where:
+          - ll_vec is shape (N,)   per-observation log-likelihoods (up to const.)
+          - ll_sum is scalar sum(ll_vec)
     """
     N = tf.cast(tf.shape(endog)[0], tf.float64)
 
-    num_features = tf.shape(exog)[1]
+    num_features      = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
 
-    x_mu = params[:num_features]
-    x_pi = params[num_features:num_features + num_infl_features]
-    log_theta = params[-1]
-    theta = tf.exp(log_theta)
+    # Split parameter vector
+    x_mu      = params[:num_features]
+    x_pi      = params[num_features:num_features + num_infl_features]
+    raw_log_theta = params[-1]
 
-    mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
+    # --- CLIPPED linear predictors and dispersion (same as prev. current version) ---
+
+    # μ part: η_mu = X β_mu, clipped before exp
+    eta_mu = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
+    eta_mu = tf.clip_by_value(eta_mu, -20.0, 20.0)
+    mu     = tf.exp(eta_mu)
+
+    # π logits for ZI part
     pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+    pi_logits = tf.clip_by_value(pi_logits, -20.0, 20.0)
 
-    # zero-inflation logits -> log(q0), log(q1) 
+    # θ (dispersion) bounded away from 0/∞ in log-space
+    log_theta = tf.clip_by_value(raw_log_theta, -10.0, 10.0)
+    theta     = tf.exp(log_theta)
+
+    # zero-inflation logits -> log(q0), log(q1)
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
@@ -3363,15 +3383,22 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     nb_case = t1 + t2 + t3 + t4 + t5 + log_q1
 
     # Zero case
-    p1 = theta * (log_theta - ty) + log_q1
+    p1        = theta * (log_theta - ty) + log_q1
     zero_case = tf.reduce_logsumexp(tf.stack([log_q0, p1], axis=0), axis=0)
 
-    ll = tf.where(y < 1e-8, zero_case, nb_case)
+    # ll per observation (up to the log-factorial constant)
+    ll = tf.where(y < 1e-8, zero_case, nb_case)   # shape (N, 1)
 
-    # 3-step reduction (mean neg LL per output, add back log-factorial, sum)
-    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                      # (num_outputs,)
-    log_fact = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)    # ∑ ln(y!)
-    llfs = -(mean_neg_ll * N + log_fact)                           # (num_outputs,)
+    if return_per_obs:
+        # Per-observation loglik (we don't include log(y!) since it drops out of scores)
+        ll_vec = tf.reshape(ll, [-1])           # (N,)
+        ll_sum = tf.reduce_sum(ll_vec)          # scalar
+        return ll_sum, ll_vec
+
+    # ---- existing “total log-likelihood” reduction for compatibility ----
+    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                   # (num_outputs,)
+    log_fact    = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)
+    llfs        = -(mean_neg_ll * N + log_fact)                 # (num_outputs,)
     log_likelihood = tf.reduce_sum(llfs)
     return log_likelihood
 
@@ -3420,43 +3447,94 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
     return (y, X, Z), (endog.astype(np.float64, copy=False), exog.astype(np.float64, copy=False), exog_infl.astype(np.float64, copy=False)) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
+def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, ridge_j=1e-12, batch_size=4096):
+    """
+    Compute covariance via Sandwich: cov = H^{-1} J H^{-1}, where
+      H = -∂^2 log L / ∂θ∂θᵀ  (observed information)
+      J = Σ_i s_i s_iᵀ        (outer product of per-observation scores)
+    Uses TF1 graph mode; float64 throughout. Batches per-observation scores for memory safety.
+    """
+    g = tf.Graph()
+    with g.as_default():
+        # Shapes (placeholders accept variable N along axis 0)
+        P = int(params_np.size)
+        params = tf.compat.v1.placeholder(tf.float64, shape=[P],                           name="params")
+        exog   = tf.compat.v1.placeholder(tf.float64, shape=[None, exog_np.shape[1]],      name="exog")
+        infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]],      name="infl")
+        endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1],                     name="endog")
+
+        ll_sum, ll_vec = _zinb_loglik_tf(params, exog, infl, endog, return_per_obs=True)
+
+        # H and per-obs scores S
+        H = tf.hessians(ll_sum, params)[0]  # (P,P)
+
+        def _grad_one(li):
+            gi = tf.gradients(li, params)[0]
+            return tf.where(tf.math.is_finite(gi), gi, tf.zeros_like(gi))
+        S = tf.map_fn(_grad_one, ll_vec, dtype=tf.float64)  # (N,P)
+
+    with tf.compat.v1.Session(graph=g) as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
+        H_np = sess.run(H, feed_dict={params: params_np, exog: exog_np, infl: infl_np, endog: endog_np})
+        if not np.all(np.isfinite(H_np)):
+            raise FloatingPointError("Sandwich path: non-finite Hessian")
+
+        # Batch J accumulation
+        P = params_np.size
+        J = np.zeros((P, P), dtype=np.float64)
+        N = endog_np.shape[0]
+        for start in range(0, N, batch_size):
+            stop = min(start + batch_size, N)
+            S_b = sess.run(
+                S,
+                feed_dict={params: params_np, exog: exog_np[start:stop], infl: infl_np[start:stop], endog: endog_np[start:stop]},
+            )
+            S_b[~np.isfinite(S_b)] = 0.0
+            J += S_b.T @ S_b
+
+    # HC1 correction and ridge
+    n, p = endog_np.shape[0], P
+    if n > p:
+        J *= (n / (n - p))
+    J[np.diag_indices_from(J)] += ridge_j
+
+    H_info = -H_np
+    H_info = 0.5 * (H_info + H_info.T)
+    H_info[np.diag_indices_from(H_info)] += ridge_h
 
 
-# def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-#     scope = f"wald_{uuid.uuid4().hex}"
+    used = "chol"
+    try:
+        if not np.all(np.isfinite(H_info)):
+            raise FloatingPointError("non-finite H_info")
+        c, low = la.cho_factor(H_info, check_finite=False)
+        X   = la.cho_solve((c, low), J, check_finite=False)
+        cov = la.cho_solve((c, low), X, check_finite=False)
+    except (LinAlgError, ValueError, FloatingPointError):
+        used = "solve"
+        try:
+            X   = la.solve(H_info, J, assume_a='sym', check_finite=False)
+            cov = la.solve(H_info, X, assume_a='sym', check_finite=False)
+        except (LinAlgError, ValueError):
+            used = "pinv"
+            H_pinv = la.pinvh(H_info, check_finite=False)
+            cov    = H_pinv @ J @ H_pinv
 
-#     with tf.name_scope(scope):
-#         x       = tf.convert_to_tensor(params_tensor)
-#         exog_t  = tf.convert_to_tensor(exog_t)
-#         infl_t  = tf.convert_to_tensor(infl_t)
-#         endog_t = tf.convert_to_tensor(endog_t)
+    cov = 0.5 * (cov + cov.T)
+    se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
 
-#         with tf.GradientTape() as tape2:
-#             tape2.watch(x)
-#             with tf.GradientTape() as tape1:
-#                 tape1.watch(x)
-#                 ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
-#             grad = tape1.gradient(ll, x)
-#         hess = tape2.jacobian(grad, x)
+        # Compact diagnostics
+    try:
+        evals_H = la.eigvalsh(H_info, check_finite=False)
+        evals_J = la.eigvalsh(J,      check_finite=False)
+        condH   = (np.inf if evals_H.min() <= 0 else evals_H.max() / evals_H.min())
+        condJ   = (np.inf if evals_J.min() <= 0 else evals_J.max() / evals_J.min())
+        diag = f"sandwich: Hmin={evals_H.min():.2e},Hmax={evals_H.max():.2e},condH={condH:.2e}; " \
+               f"Jmin={evals_J.min():.2e},Jmax={evals_J.max():.2e},condJ={condJ:.2e}; sol={used}"
+    except Exception:
+        diag = f"sandwich: sol={used}"
 
-#     if tf.executing_eagerly():
-#         H = hess.numpy()
-#     else:
-#         # Graph mode
-#         sess = tf.compat.v1.Session()
-#         with sess.as_default():
-#             sess.run(tf.compat.v1.global_variables_initializer())
-#             H = sess.run(hess)
-
-#     # drop cached graphs in long-lived workers
-#     #try: tf.keras.backend.clear_session()
-#     #except: pass
-
-#     cov = np.linalg.inv(-H)
-#     se  = np.sqrt(np.diag(cov))
-
-#     del hess, H, grad, ll, x, exog_t, infl_t, endog_t
-#     return se, cov
+    return se, cov, diag
 
 def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     """
@@ -3555,50 +3633,12 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
     # # _, params_t = _setup_params_from_fit(model_dict)
     params_np = _setup_params_from_fit(model_dict)
 
-    # Params var
-    ######## OLD from non graph hessian #######
 
-
-    # # Hessian and covariance
-    # se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
-
-    # if not np.all(np.isfinite(se_all)):
-    #     warnings.warn(
-    #         "[wald_precomp] non-finite SEs.\n"
-    #         f"  subset n={len(df_subset)}\n"
-    #         f"  unique cell_types={df_subset['cell_type'].unique()[:5]}\n"
-    #         f"  unique cre_id={df_subset['cre_id'].unique()[:5]}\n"
-    #         f"  any all-zero cols in X? {np.any(np.all(np.asarray(X)==0, axis=0))}"
-    #     )
-
-    # se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
-
-    # k_nb  = len(X.columns)
-    # cov_nb = cov[:k_nb, :k_nb]
-
-    #     # --- NEW: build debug message for this block ---
-    # if not np.all(np.isfinite(se_all)):
-    #     debug_msg = (
-    #         f"non-finite SEs; "
-    #         f"n={len(df_subset)}, "
-    #         f"ct(s)={list(df_subset['cell_type'].astype(str).unique())[:3]}, "
-    #         f"cre(s)={list(df_subset['cre_id'].astype(str).unique())[:3]}"
-    #     )
-    # elif np.linalg.cond(cov_nb) > 1e12:
-    #     # extremely ill-conditioned covariance -> unstable Wald
-    #     debug_msg = (
-    #         f"ill-conditioned cov_nb (cond={np.linalg.cond(cov_nb):.2e}); "
-    #         f"n={len(df_subset)}"
-    #     )
-    # else:
-    #     debug_msg = "ok"
-
-    # xmu_names = list(model_dict['weights']['x_mu'].index)
-
-
-    # Hessian / SE in graph mode only
+    # Sandwich in graph mode only
     try:
-        se_all, cov, H = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        se_all, cov, diag = _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np,
+                                            ridge_h=1e-8, ridge_j=1e-12)
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
         k_nb  = len(X.columns)
         cov_nb = cov[:k_nb, :k_nb]
@@ -3650,13 +3690,13 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
         else:
             debug_msg = "ok"
-
-    except FloatingPointError as e:
-        # Gradient/Hessian had NaNs/Infs
+    except Exception as e:
+        # Any failure: fill NaNs and report *sandwich* failure, not hessian
         se_x_mu = np.full(len(X.columns), np.nan)
         cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
-        debug_msg = f"hessian failure: {e.__class__.__name__}: {e}"
-    # return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
+        debug_msg = f"sandwich failure: {type(e).__name__}: {e}"
+
+
 
     # Add a concise colinearity check for categorical designs
     try:
