@@ -2132,10 +2132,15 @@ def simulate_from_description(description):
     """
 
     # Simulate NB and ZI in numpy
-    r = description['r'].to_numpy()
-    p = description['p'].to_numpy()
-    zi = description['zi'].to_numpy()
+    r = description['r'].to_numpy(dtype=float)
+    p = description['p'].to_numpy(dtype=float)
+    zi = description['zi'].to_numpy(dtype=float)
 
+    #print(description['r'].map(type).value_counts())
+    #print(description['p'].map(type).value_counts())
+
+    #print(f"type(r):{type(r)}; type(p): {type(p)}; r: {r} ; p:{p}")
+    
     nb = np.random.negative_binomial(n=r, p=p)
     keep_mask = np.random.binomial(n=1, p=1 - zi)
     zinb = nb * keep_mask
@@ -4991,7 +4996,14 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 how="left")
 
         #check to make sure there were no NAs introduced
-        assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+        #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+
+        bad = cells_df[cells_df.isna().any(axis=1)]
+        assert bad.empty, (
+            "DataFrame contains NA values in these rows:\n"
+            f"{bad}\n\n"
+            "Check that cell type & CRE names match across parameters."
+        )
         
         return cells_df
 
