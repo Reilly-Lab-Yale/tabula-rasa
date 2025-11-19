@@ -586,6 +586,10 @@ class Bounds:
     by_cre_zi:float=None
     by_cell_type_zi:float=None
 
+    reference_activity:float=None
+    by_cell_type_reference_activity:float=None
+    by_cre_reference_activity:float=None
+
     cells_per_cell_type:dict=None
 
     excess_tfection:float=None
@@ -691,6 +695,17 @@ class Bounds:
                 current=getattr(inp,var).theta[key].result()
                 thetas.append(current)
             
+            ## reference ##
+            if var=="by_cell_type_parameters":
+                reference_mus=[]
+                for key in getattr(inp,var).nb:
+                    df=getattr(inp,var).nb["Mesoderm"].result()
+                    assert len(df.loc["reference"])==1; "Multi reference"
+                    reference_mus.append(df.loc["reference"]["mu"])
+                ret.by_cell_type_reference_activity=np.mean(reference_mus)
+            elif var=="by_cre_parameters":
+                ret.by_cre_reference_activity=np.mean(getattr(inp,var).nb["reference"].result()["mu"].to_list())
+            
             ## theta means ##
             #we could munge the strings & use setattr but i think this is more readable
             if var=="by_cell_type_parameters":
@@ -736,9 +751,11 @@ class Bounds:
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
+            ret.reference_activity=ret.by_cell_type_reference_activity
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
             ret.theta=ret.by_cre_theta
+            ret.reference_activity=by_cre_reference_activity
         else:
             assert False, "Unrecognized direction."
 
