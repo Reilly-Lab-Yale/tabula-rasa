@@ -1293,25 +1293,17 @@ def _smart_matrix(data,split):
     }
 
 
-def _tensorzinb_fit(matricies,name):
+def _tensorzinb_fit(matricies,name,init_method="nb"):
     """
     Takes matricies & produces a single tensorzinb model
     """
-    #first, we try to fit in the normal way
-    zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                    exog=matricies["nb_regressors"].to_numpy(),
-                    exog_infl=matricies["zi_regressors"].to_numpy())
-    
-
-    result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
-
-    del zinbo
-    
-    #if it works, go to else & return. Otherwise, try again with 1s initialization
-    if pd.isnull(result["llf_total"]):
-        logger.warning(f"Unconverged model in {name}. Re-attempting with all one initalization.")
-        
-        
+    if init_method=="nb":
+        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                        exog=matricies["nb_regressors"].to_numpy(),
+                        exog_infl=matricies["zi_regressors"].to_numpy())
+        result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
+        del zinbo
+    elif init_method=="ones":
         num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
         num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
         if matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze().ndim == 1:
@@ -1328,19 +1320,20 @@ def _tensorzinb_fit(matricies,name):
                     exog=matricies["nb_regressors"].to_numpy(),
                     exog_infl=matricies["zi_regressors"].to_numpy())
         
-        result_ones = zinbo_ones.fit(return_history=True,init_weights=ones_init)
+        result = zinbo_ones.fit(return_history=True,init_weights=ones_init)
 
         del zinbo_ones
-
-        if pd.isnull(result_ones["llf_total"]):
-            logger.warning(f"{name} still did not converge after 1s initialization.")
-        
-        return result_ones
-
     else:
-        return result
+        raise ValueError(f"Unrecognized initalization type {init_method}.")
 
-def standard_fit(client,data,split):
+    
+    
+    if pd.isnull(result["llf_total"]):
+        logger.warning(f"Unconverged model in {name}.")
+    
+    return result
+
+def standard_fit(client,data,split,init_method):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -1362,7 +1355,8 @@ def standard_fit(client,data,split):
         t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
-                t
+                t,
+                init_method=init_method
             )
         for t in levels
     }
@@ -1609,11 +1603,13 @@ class ortho:
         """
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
-                                                     split="cre_id")
+                                                     split="cre_id",
+                                                     init_method="nb")
         
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
-                                                        split="cell_type")
+                                                        split="cell_type",
+                                                        init_method="ones")
         
         self.training_data=dat.copy()
         self.annotate_models(client)
