@@ -3906,13 +3906,28 @@ def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
 # ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
 def _mwu_make_bundle(hypotheses, models_or_counts, client=None, **kw):
-    # expects scMPRA_data (UMI-wise) so we can sample the raw counts
+    """
+    Build a lookup table of UMI counts keyed by (cell_type, cre_id).
+
+    This lets the row_fn do O(1) dict lookups instead of re-filtering the
+    full counts dataframe for every hypothesis row, which drastically
+    reduces overhead when running under Dask.
+    """
     if not hasattr(models_or_counts, "data"):
         raise TypeError("MWU requires a scMPRA_data object (UMI-wise).")
+
     df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
     df["cell_type"] = df["cell_type"].astype(str)
     df["cre_id"] = df["cre_id"].astype(str)
-    return {"counts": df}
+
+    # Group once: (cell_type, cre_id) → np.array of counts
+    grouped = (
+        df.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
+          .apply(lambda s: s.to_numpy())
+    )
+    counts_dict = {key: arr for key, arr in grouped.items()}
+
+    return {"counts": counts_dict}
 
 def _mwu_row_fn(
     row,
@@ -3923,33 +3938,66 @@ def _mwu_row_fn(
 ):
     """
     Compute Mann–Whitney U p-value for the appropriate within-cell / within-CRE
-    comparison, and a descriptive fold change based on the chosen summary stat
-    (median by default) with a small pseudocount to handle zeros.
-    """
-    df = bundle["counts"]
+    comparison, and a descriptive fold change based on a log1p-mean summary.
 
-    comp_ct  = row["comparison_cell_type"]
-    comp_cre = row["comparison_CRE"]
+    Assumes `bundle["counts"]` is a dict:
+        (cell_type, cre_id) -> np.ndarray of umis_mpra_bc
+    built once in _mwu_make_bundle.
+    """
+    counts = bundle["counts"]
+
+    comp_ct  = str(row["comparison_cell_type"])
+    comp_cre = str(row["comparison_CRE"])
     ref_ct   = row.get("reference_cell_type")
     ref_cre  = row.get("reference_CRE")
 
-    # Decide comparison axis: mirror the Wald dispatcher’s rules
+    # Normalize possible NaNs to None for easier checks
+    if pd.isna(ref_ct):
+        ref_ct = None
+    if pd.isna(ref_cre):
+        ref_cre = None
+
+    # helper to grab a group safely
+    empty = np.empty(0, dtype=float)
+
+    def get_group(ct, cre):
+        return counts.get((str(ct), str(cre)), empty)
+
+    # --- Decide comparison axis: mirror the Wald dispatcher’s rules ---
+
     # by-cell-type => compare CREs within the same cell type
-    if pd.isna(ref_ct) or (ref_ct == comp_ct):
-        base_cre = "reference" if pd.isna(ref_cre) else ref_cre
-        g1 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == comp_cre)]["umis_mpra_bc"].to_numpy()
-        g0 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == base_cre)]["umis_mpra_bc"].to_numpy()
+    if (ref_ct is None) or (str(ref_ct) == comp_ct):
+        base_cre = "reference" if ref_cre is None else str(ref_cre)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(comp_ct, base_cre)
 
     # by-CRE => compare cell types within the same CRE
-    elif pd.isna(ref_cre) or (ref_cre == comp_cre):
-        base_ct = "reference" if pd.isna(ref_ct) else ref_ct
-        g1 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == comp_ct)]["umis_mpra_bc"].to_numpy()
-        g0 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == base_ct)]["umis_mpra_bc"].to_numpy()
+    elif (ref_cre is None) or (str(ref_cre) == comp_cre):
+        base_ct = "reference" if ref_ct is None else str(ref_ct)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(base_ct, comp_cre)
 
     else:
         # crossed case not supported in this simple MWU
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "ref_mean": np.nan,
+            "comp_mean": np.nan,
+        }
 
+    # If either side has no observations, MWU is undefined; return NA-ish.
+    if (g1.size == 0) or (g0.size == 0):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "ref_mean": np.nan,
+            "comp_mean": np.nan,
+        }
 
     # Mann–Whitney U (SciPy >=1.7 supports method="auto")
     try:
@@ -3958,18 +4006,20 @@ def _mwu_row_fn(
         # for older SciPy, fall back without 'method'
         stat, p = mannwhitneyu(g1, g0, alternative=alternative)
 
-    # Descriptive FC: ratio of chosen summaries (median by default), with pseudocount
-
+    # Descriptive summary: log1p mean (≈ geometric-ish on counts) with pseudocount FC
     s1 = float(np.exp(np.mean(np.log1p(g1))) - 1.0)
     s0 = float(np.exp(np.mean(np.log1p(g0))) - 1.0)
 
-
     fc = (s1 + pseudocount) / (s0 + pseudocount)
 
-   
-
-    return {"test_statistic": float(stat), "p_value": float(p), "fold_change": float(fc), "flattened": False, 'ref_mean': s0,'comp_mean':s1}
-
+    return {
+        "test_statistic": float(stat),
+        "p_value": float(p),
+        "fold_change": float(fc),
+        "flattened": False,
+        "ref_mean": s0,
+        "comp_mean": s1,
+    }
 # ---- Bootstrap activity measurement ------------------------------------------
 # ---- BOOTSTRAP ACTIVITY (empirical p vs controls) ----------------------------
 # ==============================
