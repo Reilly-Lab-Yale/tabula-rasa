@@ -586,6 +586,10 @@ class Bounds:
     by_cre_zi:float=None
     by_cell_type_zi:float=None
 
+    reference_activity:float=None
+    by_cell_type_reference_activity:float=None
+    by_cre_reference_activity:float=None
+
     cells_per_cell_type:dict=None
 
     excess_tfection:float=None
@@ -691,6 +695,17 @@ class Bounds:
                 current=getattr(inp,var).theta[key].result()
                 thetas.append(current)
             
+            ## reference ##
+            if var=="by_cell_type_parameters":
+                reference_mus=[]
+                for key in getattr(inp,var).nb:
+                    df=getattr(inp,var).nb["Mesoderm"].result()
+                    assert len(df.loc["reference"])==1; "Multi reference"
+                    reference_mus.append(df.loc["reference"]["mu"])
+                ret.by_cell_type_reference_activity=np.mean(reference_mus)
+            elif var=="by_cre_parameters":
+                ret.by_cre_reference_activity=np.mean(getattr(inp,var).nb["reference"].result()["mu"].to_list())
+            
             ## theta means ##
             #we could munge the strings & use setattr but i think this is more readable
             if var=="by_cell_type_parameters":
@@ -736,9 +751,11 @@ class Bounds:
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
+            ret.reference_activity=ret.by_cell_type_reference_activity
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
             ret.theta=ret.by_cre_theta
+            ret.reference_activity=by_cre_reference_activity
         else:
             assert False, "Unrecognized direction."
 
@@ -2115,10 +2132,15 @@ def simulate_from_description(description):
     """
 
     # Simulate NB and ZI in numpy
-    r = description['r'].to_numpy()
-    p = description['p'].to_numpy()
-    zi = description['zi'].to_numpy()
+    r = description['r'].to_numpy(dtype=float)
+    p = description['p'].to_numpy(dtype=float)
+    zi = description['zi'].to_numpy(dtype=float)
 
+    #print(description['r'].map(type).value_counts())
+    #print(description['p'].map(type).value_counts())
+
+    #print(f"type(r):{type(r)}; type(p): {type(p)}; r: {r} ; p:{p}")
+    
     nb = np.random.negative_binomial(n=r, p=p)
     keep_mask = np.random.binomial(n=1, p=1 - zi)
     zinb = nb * keep_mask
@@ -5024,7 +5046,14 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 how="left")
 
         #check to make sure there were no NAs introduced
-        assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+        #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+
+        bad = cells_df[cells_df.isna().any(axis=1)]
+        assert bad.empty, (
+            "DataFrame contains NA values in these rows:\n"
+            f"{bad}\n\n"
+            "Check that cell type & CRE names match across parameters."
+        )
         
         return cells_df
 
