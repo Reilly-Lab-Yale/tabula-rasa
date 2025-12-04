@@ -815,7 +815,7 @@ class scMPRA_data:
             raise ValueError("Can't flatten overtransfection on an emperical dataset.")
         
         if "overtransfection_flattened" in self.operations:
-            scm.logger.warning("Overtransfection flattening already performed. Skipping.")
+            logger.warning("Overtransfection flattening already performed. Skipping.")
             return
         
         groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
@@ -1314,7 +1314,7 @@ def _mom(matricies):
     See [[Fixing zinb initialization]] for math
     """
         # nb portion #
-    undone_nb=scm.undo_one_hot_encoding(matricies["nb_regressors"])
+    undone_nb=undo_one_hot_encoding(matricies["nb_regressors"])
     undone_nb=undone_nb.rename({"cre_id, contr.treatment(base=\'reference\')":'cre_id'},axis=1)
 
     working_nb=pd.DataFrame({
@@ -1346,7 +1346,7 @@ def _mom(matricies):
     
     # estimating ZI #
     ## gross zi : get the total number of zeroes in each replicate ##
-    undone_zi=scm.undo_one_hot_encoding(matricies["zi_regressors"])
+    undone_zi=undo_one_hot_encoding(matricies["zi_regressors"])
     
     working_zi=pd.DataFrame({
         'rep_id':undone_zi["rep_id"],
