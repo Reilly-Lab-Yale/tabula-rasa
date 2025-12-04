@@ -1743,7 +1743,7 @@ class ortho:
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
                                                         split="cell_type",
-                                                        init_method="ones")
+                                                        init_method="mom")
         
         self.training_data=dat.copy()
         self.annotate_models(client)
