@@ -1256,8 +1256,6 @@ def abort_on_failure(future,client):
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def smart_matrix(data,split):
-    return _smart_matrix(data,split)
 
 def _smart_matrix(data,split):
     """
@@ -1296,7 +1294,6 @@ def _smart_matrix(data,split):
     Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
 
     X = X.astype(pd.SparseDtype("int", fill_value=0))
-
     
     return {
         'nb_regressors':X,
@@ -1310,9 +1307,120 @@ def _smart_matrix(data,split):
     }
 
 
+def _mom(matricies):
+    """
+    Helper function for `_tensorzinb_fit` implementing warm start method of moments
+    or parameter initalization.
+    See [[Fixing zinb initialization]] for math
+    """
+        # nb portion #
+    undone_nb=scm.undo_one_hot_encoding(matricies["nb_regressors"])
+    undone_nb=undone_nb.rename({"cre_id, contr.treatment(base=\'reference\')":'cre_id'},axis=1)
+
+    working_nb=pd.DataFrame({
+                'cre_id':undone_nb["cre_id"],
+                'umis_mpra_bc':matricies["regressand"]["umis_mpra_bc"]
+            })
+
+    ## compute mean and n ##
+    working_nb = (
+        working_nb
+        .groupby("cre_id")
+        .agg(
+            mean_umis_mpra_bc=('umis_mpra_bc', 'mean'),
+            var_umis_mpra_bc=('umis_mpra_bc', 'var'),
+            n=('umis_mpra_bc', 'count')
+        )
+    )
+    
+    ## compute nb betas ##
+    
+    ref=working_nb.loc["reference"]["mean_umis_mpra_bc"]
+    working_nb["fc"]=working_nb["mean_umis_mpra_bc"]/ref
+    working_nb["lfc"]=np.log(working_nb["fc"])
+    working_nb["beta"]=working_nb["lfc"]
+    working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
+    
+    nb_betas=working_nb["beta"]#.to_numpy()
+    #obs. note "LFC is beta" has proof
+    
+    # estimating ZI #
+    ## gross zi : get the total number of zeroes in each replicate ##
+    undone_zi=scm.undo_one_hot_encoding(matricies["zi_regressors"])
+    
+    working_zi=pd.DataFrame({
+        'rep_id':undone_zi["rep_id"],
+        'umis_mpra_bc':matricies["regressand"]["umis_mpra_bc"]
+    })
+    #indicator
+    working_zi["ind"]=working_zi["umis_mpra_bc"]==0
+    working_zi=working_zi.drop(columns=["umis_mpra_bc"])
+    #"gross" because we are not estimating zeros contributed from NB
+    zeros=working_zi.groupby("rep_id").agg(
+        gross_zeros=("ind","mean")
+    )
+    
+    ## estimate the number of zeroes from the nb portion ##
+    working_nb["valid_nb"]=working_nb["var_umis_mpra_bc"] > working_nb["mean_umis_mpra_bc"]
+    working_nb["p"]=working_nb["mean_umis_mpra_bc"]/working_nb["var_umis_mpra_bc"]
+    working_nb["r"]=working_nb["mean_umis_mpra_bc"]**2 / (working_nb["var_umis_mpra_bc"] - working_nb["mean_umis_mpra_bc"])
+    #initalize to nan
+    working_nb["zero_prop"]=np.nan
+    #fill out valid nb cases with zero proportion...
+    working_nb.loc[working_nb["valid_nb"],"zero_prop"]=working_nb["p"]**working_nb["r"]
+    #fill out non-valid nb cases with zero portion using poisson
+    working_nb.loc[~working_nb["valid_nb"],"zero_prop"]=np.exp(-working_nb["mean_umis_mpra_bc"])
+
+    assert ~any(working_nb["zero_prop"].isna())
+
+    #now we need to get the representation of each cre in each replicate
+
+    representation=pd.DataFrame({"rep_id":undone_zi["rep_id"],"cre_id":undone_nb["cre_id"]}).value_counts().reset_index()
+    representation=representation.merge(working_nb["zero_prop"].reset_index(),on="cre_id",how="left")
+
+    #computing the number of zeroes we expect for each cre, replicate combination.
+    #could alterantively do this as a weighted average, but I feel like this is more readable.
+
+    representation["expected_nb_zeroes"]=representation["zero_prop"]*representation["count"]
+
+    #now condense to a per-replicate summary
+    nb_zero=representation.groupby("rep_id").agg(
+        total_events=("count","sum"),
+        total_zeroes=("expected_nb_zeroes","sum")
+    ).reset_index()
+
+    nb_zero["nb_zero_fraction"]=nb_zero["total_zeroes"]/nb_zero["total_events"]
+    nb_zero=nb_zero[["rep_id","nb_zero_fraction"]]
+
+    ## subtract zeroes expected from nb portion from actual zeroes to approx the degree of zero inflation##
+    zeros=zeros.reset_index().merge(nb_zero,validate="one_to_one")
+    zeros["zero_inflation"]=zeros["gross_zeros"]-zeros["nb_zero_fraction"]
+    zeros["zero_inflation"]=np.clip(zeros["zero_inflation"],0,1)
+
+    ## compute betas for zi ##
+    
+    #logistic function
+    zi_beta=1/(1 + np.exp(-zeros["zero_inflation"].to_numpy()))
+    
+    # estimate theta #
+    thetas=working_nb["mean_umis_mpra_bc"]**2/(working_nb["var_umis_mpra_bc"]-working_nb["mean_umis_mpra_bc"])
+    thetas=thetas[working_nb["valid_nb"]]
+    beta_theta=np.log(np.mean(thetas))
+    
+    # create & return the initalization values dict #
+    
+    init={}
+    init["x_mu"]=nb_betas.to_numpy()
+    init["x_pi"]=zi_beta
+    init["theta"]=beta_theta
+
+    return init
+
 def _tensorzinb_fit(matricies,name,init_method="nb"):
     """
-    Takes matricies & produces a single tensorzinb model
+    Takes matricies & produces a single tensorzinb model.
+    init_method takes "nb", "ones" or "mom".
+    mom (method of moments) only implemented for by_cell_type models at the moment.
     """
     if init_method=="nb":
         zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
@@ -1320,6 +1428,17 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
                         exog_infl=matricies["zi_regressors"].to_numpy())
         result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
         del zinbo
+    elif init_method=="mom":
+        mom_init=_mom(matricies)
+
+        zinbo_mom = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                    exog=matricies["nb_regressors"].to_numpy(),
+                    exog_infl=matricies["zi_regressors"].to_numpy())
+        
+        result = zinbo_mom.fit(return_history=True,init_weights=mom_init)
+
+        del zinbo_mom
+
     elif init_method=="ones":
         num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
         num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
@@ -1342,8 +1461,6 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
         del zinbo_ones
     else:
         raise ValueError(f"Unrecognized initalization type {init_method}.")
-
-    
     
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
