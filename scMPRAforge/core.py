@@ -162,6 +162,143 @@ def table_type(column_names):
 
     return ret if matches == 1 else 'malformed'
 
+import re
+
+def _extract_square(s):
+    """
+    Utility function which extracts the contents of [T. ] or [ ] brackets from  string `s`
+    Assumes one pair of brackets
+    If no brackets are found, returns `s` untouched.
+    """
+    tm = re.search(r"\[T\.(.*?)\]", s)
+    m = re.search(r"\[(.*?)\]", s)
+    if tm:
+        return tm.group(1)
+    elif m:
+        return m.group(1)
+    else:
+        return s
+    
+
+def _matricies_to_order(matricies):
+    """
+    Helper function. Extracts column index order from matricies for use elsewhere.
+    Replaces `Intercept` with `reference`.
+    """
+    zi_idx=matricies["zi_regressors"].columns.to_list()
+    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_idx]
+
+    nb_idx=matricies["nb_regressors"].columns.to_list()
+    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_idx]
+
+    return {'zi_idx':zi_idx,'nb_idx':nb_idx}
+
+def _mom_from_training_data(data,split,subset,indicies):
+    """
+    Helper function implementing warm start method of moments for parameter initalization.
+    See [[Fixing zinb initialization]] and [[LFC is beta]] for math.
+
+    `indicies` are the return of of `_matricies_to_order`
+    """
+    
+    anti=anti_split(split)
+
+    #clean up raw training data
+    raw=data[["rep_id","cell_type","cre_id","umis_mpra_bc"]]
+    raw=data[data[split]==subset]
+    raw=raw.drop(columns=split)
+
+    #collapse to summary statistics
+    nb_stats = (
+        raw.groupby(anti)
+        .agg(
+            mean_umis_mpra_bc=('umis_mpra_bc', 'mean'),
+            var_umis_mpra_bc=('umis_mpra_bc', 'var')
+        )
+    )
+
+    #get that set which are valid nb
+    nb_stats["valid_nb"]=nb_stats["var_umis_mpra_bc"] > nb_stats["mean_umis_mpra_bc"]
+
+    # compute rep-level counts including zeros
+    zi_stats = (
+        raw.groupby(['rep_id', anti])
+        .agg(
+            n=('umis_mpra_bc', 'count'),
+            n_zero=('umis_mpra_bc', lambda x: (x == 0).sum())
+        )
+    )
+
+    
+    # merge global mean/var into rep-level
+    zi_stats = zi_stats.reset_index().merge(nb_stats, on=anti, how='left')
+
+    #so a row in zi_stats represents 'for replicate [rep_id] 
+    #we see [cre_id] [n] times, of which [n_zero] data points are zero
+    #that cre, across all reps, has a mean of [mean_umis_mpra_bc] and a 
+    #variance of [var_umis_mpra_bc].' 
+    
+    
+    
+    zi_stats["gross_zero_prop"]=zi_stats["n_zero"]/zi_stats["n"]
+    
+    #We now want to figure out how many zeros are expected from the nb portion
+    
+    
+    #compute nb params
+    zi_stats["p"]=zi_stats["mean_umis_mpra_bc"]/zi_stats["var_umis_mpra_bc"]
+    zi_stats["r"]=zi_stats["mean_umis_mpra_bc"]**2 / (zi_stats["var_umis_mpra_bc"] - zi_stats["mean_umis_mpra_bc"])
+    
+    zi_stats["nb_zero_prop"]=np.nan
+    #fill out valid nb cases with zero proportion...
+    zi_stats.loc[zi_stats["valid_nb"],"nb_zero_prop"]=zi_stats["p"]**zi_stats["r"]
+    #fill out non-valid nb cases with zero portion using poisson
+    zi_stats.loc[~zi_stats["valid_nb"],"nb_zero_prop"]=np.exp(-zi_stats["mean_umis_mpra_bc"])
+
+    assert ~any(zi_stats["nb_zero_prop"].isna())
+
+
+    zi_stats["zero_inflation"]=zi_stats["gross_zero_prop"]-zi_stats["nb_zero_prop"]
+    zi_stats["zero_inflation"]=np.clip(zi_stats["zero_inflation"],0,1)
+    
+    zi_stats=zi_stats.groupby("rep_id")["zero_inflation"].mean()
+
+    # now let's reindex
+    zi_stats=zi_stats.reindex(indicies["zi_idx"])
+    #logistic function
+    zi_beta=1/(1 + np.exp(-zi_stats.to_numpy()))
+
+    #now calculate nb betas
+    working_nb=nb_stats.copy()
+    ref=working_nb.loc["reference"]["mean_umis_mpra_bc"]
+    working_nb["fc"]=working_nb["mean_umis_mpra_bc"]/ref
+    working_nb["lfc"]=np.log(working_nb["fc"])
+    working_nb["beta"]=working_nb["lfc"]
+    working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
+    
+    nb_betas=working_nb["beta"]
+
+    
+    #now calculate theta betas
+    working_nb=nb_stats.copy()
+    thetas=working_nb["mean_umis_mpra_bc"]**2/(working_nb["var_umis_mpra_bc"]-working_nb["mean_umis_mpra_bc"])
+    thetas=thetas[working_nb["valid_nb"]]
+    beta_theta=np.log(np.mean(thetas))
+
+    #with our table constructed, we can now extract our actual parameter estimates
+    #first, the betas for the nb portion
+
+    nb_betas=nb_betas.reindex(indicies["nb_idx"])
+
+    init={}
+    init["x_mu"]=nb_betas.to_numpy().reshape(-1, 1)
+    init["x_pi"]=zi_beta.reshape(-1, 1)
+    init["theta"]=np.array([[beta_theta]])
+
+
+    return init
+
+
 
 @unimplemented
 def skew_spread():
@@ -1307,119 +1444,11 @@ def _smart_matrix(data,split):
     }
 
 
-def _mom(matricies):
-    """
-    Helper function for `_tensorzinb_fit` implementing warm start method of moments
-    or parameter initalization.
-    See [[Fixing zinb initialization]] for math
-    """
-        # nb portion #
-    undone_nb=undo_one_hot_encoding(matricies["nb_regressors"])
-    undone_nb=undone_nb.rename({"cre_id, contr.treatment(base=\'reference\')":'cre_id'},axis=1)
 
-    working_nb=pd.DataFrame({
-                'cre_id':undone_nb["cre_id"],
-                'umis_mpra_bc':matricies["regressand"]["umis_mpra_bc"]
-            })
-
-    ## compute mean and n ##
-    working_nb = (
-        working_nb
-        .groupby("cre_id")
-        .agg(
-            mean_umis_mpra_bc=('umis_mpra_bc', 'mean'),
-            var_umis_mpra_bc=('umis_mpra_bc', 'var'),
-            n=('umis_mpra_bc', 'count')
-        )
-    )
-    
-    ## compute nb betas ##
-    
-    ref=working_nb.loc["reference"]["mean_umis_mpra_bc"]
-    working_nb["fc"]=working_nb["mean_umis_mpra_bc"]/ref
-    working_nb["lfc"]=np.log(working_nb["fc"])
-    working_nb["beta"]=working_nb["lfc"]
-    working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
-    
-    nb_betas=working_nb["beta"]#.to_numpy()
-    #obs. note "LFC is beta" has proof
-    
-    # estimating ZI #
-    ## gross zi : get the total number of zeroes in each replicate ##
-    undone_zi=undo_one_hot_encoding(matricies["zi_regressors"])
-    
-    working_zi=pd.DataFrame({
-        'rep_id':undone_zi["rep_id"],
-        'umis_mpra_bc':matricies["regressand"]["umis_mpra_bc"]
-    })
-    #indicator
-    working_zi["ind"]=working_zi["umis_mpra_bc"]==0
-    working_zi=working_zi.drop(columns=["umis_mpra_bc"])
-    #"gross" because we are not estimating zeros contributed from NB
-    zeros=working_zi.groupby("rep_id").agg(
-        gross_zeros=("ind","mean")
-    )
-    
-    ## estimate the number of zeroes from the nb portion ##
-    working_nb["valid_nb"]=working_nb["var_umis_mpra_bc"] > working_nb["mean_umis_mpra_bc"]
-    working_nb["p"]=working_nb["mean_umis_mpra_bc"]/working_nb["var_umis_mpra_bc"]
-    working_nb["r"]=working_nb["mean_umis_mpra_bc"]**2 / (working_nb["var_umis_mpra_bc"] - working_nb["mean_umis_mpra_bc"])
-    #initalize to nan
-    working_nb["zero_prop"]=np.nan
-    #fill out valid nb cases with zero proportion...
-    working_nb.loc[working_nb["valid_nb"],"zero_prop"]=working_nb["p"]**working_nb["r"]
-    #fill out non-valid nb cases with zero portion using poisson
-    working_nb.loc[~working_nb["valid_nb"],"zero_prop"]=np.exp(-working_nb["mean_umis_mpra_bc"])
-
-    assert ~any(working_nb["zero_prop"].isna())
-
-    #now we need to get the representation of each cre in each replicate
-
-    representation=pd.DataFrame({"rep_id":undone_zi["rep_id"],"cre_id":undone_nb["cre_id"]}).value_counts().reset_index()
-    representation=representation.merge(working_nb["zero_prop"].reset_index(),on="cre_id",how="left")
-
-    #computing the number of zeroes we expect for each cre, replicate combination.
-    #could alterantively do this as a weighted average, but I feel like this is more readable.
-
-    representation["expected_nb_zeroes"]=representation["zero_prop"]*representation["count"]
-
-    #now condense to a per-replicate summary
-    nb_zero=representation.groupby("rep_id").agg(
-        total_events=("count","sum"),
-        total_zeroes=("expected_nb_zeroes","sum")
-    ).reset_index()
-
-    nb_zero["nb_zero_fraction"]=nb_zero["total_zeroes"]/nb_zero["total_events"]
-    nb_zero=nb_zero[["rep_id","nb_zero_fraction"]]
-
-    ## subtract zeroes expected from nb portion from actual zeroes to approx the degree of zero inflation##
-    zeros=zeros.reset_index().merge(nb_zero,validate="one_to_one")
-    zeros["zero_inflation"]=zeros["gross_zeros"]-zeros["nb_zero_fraction"]
-    zeros["zero_inflation"]=np.clip(zeros["zero_inflation"],0,1)
-
-    ## compute betas for zi ##
-    
-    #logistic function
-    zi_beta=1/(1 + np.exp(-zeros["zero_inflation"].to_numpy()))
-    
-    # estimate theta #
-    thetas=working_nb["mean_umis_mpra_bc"]**2/(working_nb["var_umis_mpra_bc"]-working_nb["mean_umis_mpra_bc"])
-    thetas=thetas[working_nb["valid_nb"]]
-    beta_theta=np.log(np.mean(thetas))
-    
-    # create & return the initalization values dict #
-    
-    init={}
-    init["x_mu"]=nb_betas.to_numpy()
-    init["x_pi"]=zi_beta
-    init["theta"]=beta_theta
-
-    return init
-
-def _tensorzinb_fit(matricies,name,init_method="nb"):
+def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     """
     Takes matricies & produces a single tensorzinb model.
-    init_method takes "nb", "ones" or "mom".
+    init_method takes "nb", "ones" or "pass".
     mom (method of moments) only implemented for by_cell_type models at the moment.
     """
     if init_method=="nb":
@@ -1428,16 +1457,17 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
                         exog_infl=matricies["zi_regressors"].to_numpy())
         result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
         del zinbo
-    elif init_method=="mom":
-        mom_init=_mom(matricies)
+    elif init_method=="pass":
+        if not init_vals:
+            raise ValueError("init_vals required for init_method=pass")
 
-        zinbo_mom = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
                     exog=matricies["nb_regressors"].to_numpy(),
                     exog_infl=matricies["zi_regressors"].to_numpy())
         
-        result = zinbo_mom.fit(return_history=True,init_weights=mom_init)
+        result = zinbo.fit(return_history=True,init_weights=init_vals)
 
-        del zinbo_mom
+        del zinbo
 
     elif init_method=="ones":
         num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
@@ -1467,7 +1497,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
     
     return result
 
-def standard_fit(client,data,split,init_method):
+def standard_fit(client,data,split):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -1485,12 +1515,28 @@ def standard_fit(client,data,split,init_method):
         for t in levels
     }
 
+    if split=="cell_type":
+        init_method="pass"
+        init_vals={
+            t:client.submit(_mom_from_training_data, 
+                data=data,
+                split="cell_type",
+                subset=t,
+                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
+                )
+            for t in levels
+        }
+    else:
+        init_method="nb"
+        init_vals={t:None for t in levels}
+
     tzinb_futures = {
         t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
                 t,
-                init_method=init_method
+                init_method=init_method,
+                init_vals=init_vals[t]
             )
         for t in levels
     }
@@ -1735,15 +1781,17 @@ class ortho:
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
+        
+        
+        
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
-                                                     split="cre_id",
-                                                     init_method="nb")
+                                                     split="cre_id")
+        
         
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
-                                                        split="cell_type",
-                                                        init_method="mom")
+                                                        split="cell_type")
         
         self.training_data=dat.copy()
         self.annotate_models(client)
