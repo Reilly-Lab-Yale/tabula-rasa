@@ -162,6 +162,143 @@ def table_type(column_names):
 
     return ret if matches == 1 else 'malformed'
 
+import re
+
+def _extract_square(s):
+    """
+    Utility function which extracts the contents of [T. ] or [ ] brackets from  string `s`
+    Assumes one pair of brackets
+    If no brackets are found, returns `s` untouched.
+    """
+    tm = re.search(r"\[T\.(.*?)\]", s)
+    m = re.search(r"\[(.*?)\]", s)
+    if tm:
+        return tm.group(1)
+    elif m:
+        return m.group(1)
+    else:
+        return s
+    
+
+def _matricies_to_order(matricies):
+    """
+    Helper function. Extracts column index order from matricies for use elsewhere.
+    Replaces `Intercept` with `reference`.
+    """
+    zi_idx=matricies["zi_regressors"].columns.to_list()
+    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_idx]
+
+    nb_idx=matricies["nb_regressors"].columns.to_list()
+    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_idx]
+
+    return {'zi_idx':zi_idx,'nb_idx':nb_idx}
+
+def _mom_from_training_data(data,split,subset,indicies):
+    """
+    Helper function implementing warm start method of moments for parameter initalization.
+    See [[Fixing zinb initialization]] and [[LFC is beta]] for math.
+
+    `indicies` are the return of of `_matricies_to_order`
+    """
+    
+    anti=anti_split(split)
+
+    #clean up raw training data
+    raw=data[["rep_id","cell_type","cre_id","umis_mpra_bc"]]
+    raw=data[data[split]==subset]
+    raw=raw.drop(columns=split)
+
+    #collapse to summary statistics
+    nb_stats = (
+        raw.groupby(anti)
+        .agg(
+            mean_umis_mpra_bc=('umis_mpra_bc', 'mean'),
+            var_umis_mpra_bc=('umis_mpra_bc', 'var')
+        )
+    )
+
+    #get that set which are valid nb
+    nb_stats["valid_nb"]=nb_stats["var_umis_mpra_bc"] > nb_stats["mean_umis_mpra_bc"]
+
+    # compute rep-level counts including zeros
+    zi_stats = (
+        raw.groupby(['rep_id', anti])
+        .agg(
+            n=('umis_mpra_bc', 'count'),
+            n_zero=('umis_mpra_bc', lambda x: (x == 0).sum())
+        )
+    )
+
+    
+    # merge global mean/var into rep-level
+    zi_stats = zi_stats.reset_index().merge(nb_stats, on=anti, how='left')
+
+    #so a row in zi_stats represents 'for replicate [rep_id] 
+    #we see [cre_id] [n] times, of which [n_zero] data points are zero
+    #that cre, across all reps, has a mean of [mean_umis_mpra_bc] and a 
+    #variance of [var_umis_mpra_bc].' 
+    
+    
+    
+    zi_stats["gross_zero_prop"]=zi_stats["n_zero"]/zi_stats["n"]
+    
+    #We now want to figure out how many zeros are expected from the nb portion
+    
+    
+    #compute nb params
+    zi_stats["p"]=zi_stats["mean_umis_mpra_bc"]/zi_stats["var_umis_mpra_bc"]
+    zi_stats["r"]=zi_stats["mean_umis_mpra_bc"]**2 / (zi_stats["var_umis_mpra_bc"] - zi_stats["mean_umis_mpra_bc"])
+    
+    zi_stats["nb_zero_prop"]=np.nan
+    #fill out valid nb cases with zero proportion...
+    zi_stats.loc[zi_stats["valid_nb"],"nb_zero_prop"]=zi_stats["p"]**zi_stats["r"]
+    #fill out non-valid nb cases with zero portion using poisson
+    zi_stats.loc[~zi_stats["valid_nb"],"nb_zero_prop"]=np.exp(-zi_stats["mean_umis_mpra_bc"])
+
+    assert ~any(zi_stats["nb_zero_prop"].isna())
+
+
+    zi_stats["zero_inflation"]=zi_stats["gross_zero_prop"]-zi_stats["nb_zero_prop"]
+    zi_stats["zero_inflation"]=np.clip(zi_stats["zero_inflation"],0,1)
+    
+    zi_stats=zi_stats.groupby("rep_id")["zero_inflation"].mean()
+
+    # now let's reindex
+    zi_stats=zi_stats.reindex(indicies["zi_idx"])
+    #logistic function
+    zi_beta=1/(1 + np.exp(-zi_stats.to_numpy()))
+
+    #now calculate nb betas
+    working_nb=nb_stats.copy()
+    ref=working_nb.loc["reference"]["mean_umis_mpra_bc"]
+    working_nb["fc"]=working_nb["mean_umis_mpra_bc"]/ref
+    working_nb["lfc"]=np.log(working_nb["fc"])
+    working_nb["beta"]=working_nb["lfc"]
+    working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
+    
+    nb_betas=working_nb["beta"]
+
+    
+    #now calculate theta betas
+    working_nb=nb_stats.copy()
+    thetas=working_nb["mean_umis_mpra_bc"]**2/(working_nb["var_umis_mpra_bc"]-working_nb["mean_umis_mpra_bc"])
+    thetas=thetas[working_nb["valid_nb"]]
+    beta_theta=np.log(np.mean(thetas))
+
+    #with our table constructed, we can now extract our actual parameter estimates
+    #first, the betas for the nb portion
+
+    nb_betas=nb_betas.reindex(indicies["nb_idx"])
+
+    init={}
+    init["x_mu"]=nb_betas.to_numpy().reshape(-1, 1)
+    init["x_pi"]=zi_beta.reshape(-1, 1)
+    init["theta"]=np.array([[beta_theta]])
+
+
+    return init
+
+
 
 @unimplemented
 def skew_spread():
@@ -815,7 +952,7 @@ class scMPRA_data:
             raise ValueError("Can't flatten overtransfection on an emperical dataset.")
         
         if "overtransfection_flattened" in self.operations:
-            scm.logger.warning("Overtransfection flattening already performed. Skipping.")
+            logger.warning("Overtransfection flattening already performed. Skipping.")
             return
         
         groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
@@ -1256,8 +1393,6 @@ def abort_on_failure(future,client):
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
-def smart_matrix(data,split):
-    return _smart_matrix(data,split)
 
 def _smart_matrix(data,split):
     """
@@ -1296,7 +1431,6 @@ def _smart_matrix(data,split):
     Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
 
     X = X.astype(pd.SparseDtype("int", fill_value=0))
-
     
     return {
         'nb_regressors':X,
@@ -1310,9 +1444,12 @@ def _smart_matrix(data,split):
     }
 
 
-def _tensorzinb_fit(matricies,name,init_method="nb"):
+
+def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     """
-    Takes matricies & produces a single tensorzinb model
+    Takes matricies & produces a single tensorzinb model.
+    init_method takes "nb", "ones" or "pass".
+    mom (method of moments) only implemented for by_cell_type models at the moment.
     """
     if init_method=="nb":
         zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
@@ -1320,6 +1457,18 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
                         exog_infl=matricies["zi_regressors"].to_numpy())
         result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
         del zinbo
+    elif init_method=="pass":
+        if not init_vals:
+            raise ValueError("init_vals required for init_method=pass")
+
+        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                    exog=matricies["nb_regressors"].to_numpy(),
+                    exog_infl=matricies["zi_regressors"].to_numpy())
+        
+        result = zinbo.fit(return_history=True,init_weights=init_vals)
+
+        del zinbo
+
     elif init_method=="ones":
         num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
         num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
@@ -1342,15 +1491,13 @@ def _tensorzinb_fit(matricies,name,init_method="nb"):
         del zinbo_ones
     else:
         raise ValueError(f"Unrecognized initalization type {init_method}.")
-
-    
     
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
     
     return result
 
-def standard_fit(client,data,split,init_method):
+def standard_fit(client,data,split):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -1368,12 +1515,28 @@ def standard_fit(client,data,split,init_method):
         for t in levels
     }
 
+    if split=="cell_type":
+        init_method="pass"
+        init_vals={
+            t:client.submit(_mom_from_training_data, 
+                data=data,
+                split="cell_type",
+                subset=t,
+                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
+                )
+            for t in levels
+        }
+    else:
+        init_method="nb"
+        init_vals={t:None for t in levels}
+
     tzinb_futures = {
         t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
                 t,
-                init_method=init_method
+                init_method=init_method,
+                init_vals=init_vals[t]
             )
         for t in levels
     }
@@ -1618,15 +1781,17 @@ class ortho:
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
+        
+        
+        
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
-                                                     split="cre_id",
-                                                     init_method="nb")
+                                                     split="cre_id")
+        
         
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
-                                                        split="cell_type",
-                                                        init_method="ones")
+                                                        split="cell_type")
         
         self.training_data=dat.copy()
         self.annotate_models(client)
@@ -4724,8 +4889,7 @@ class de_novo_simulation:
         clobber_mkdir(path/"orthos")
         for i, orth in enumerate(self.orthos):
             orth.save(path=path/"orthos",
-                    name=str(i),
-                    strip_training_data=True)
+                    name=str(i))
         
         #dataframes
         for var in self._df_vars:
