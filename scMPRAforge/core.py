@@ -4086,8 +4086,6 @@ def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     else:
         raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
 
-    
-    df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
     df["cell_type"] = df["cell_type"].astype(str)
     df["cre_id"] = df["cre_id"].astype(str)
 
