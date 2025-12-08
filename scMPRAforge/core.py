@@ -4081,7 +4081,7 @@ def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     if hasattr(models_or_counts, "data"):
         df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
         #
-    elif hasattr(model_or_counts, "training_data"):
+    elif hasattr(models_or_counts, "training_data"):
         df = models_or_counts.training_data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
     else:
         raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
