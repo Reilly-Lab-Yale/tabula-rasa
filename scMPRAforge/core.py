@@ -4101,6 +4101,7 @@ def _mwu_row_fn(
     row,
     bundle,
     *,
+    method="auto",
     alternative="two-sided",
     pseudocount=0.01,
 ):
@@ -4670,7 +4671,7 @@ class HypothesisTester:
         if client is not None:
             bundle_f = client.scatter(bundle, broadcast=True)
             # futures = client.map(self._row_fn, recs, repeat(bundle_f), pure=True)
-            futures = [client.submit(self._row_fn, r, bundle_f) for r in recs]
+            futures = [client.submit(self._row_fn, r, bundle_f, **self.kw) for r in recs]
             results = client.gather(futures)
         else:
             results = [self._row_fn(r, bundle, **self.kw) for r in recs]
