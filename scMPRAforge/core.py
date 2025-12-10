@@ -3505,9 +3505,7 @@ def _to_plain(obj):
 
 
 
-def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
-    # expects an ortho object with make_wald_eval_bundle()
-    return models_or_counts.make_wald_eval_bundle()
+
 
 
 # ---- Wald Test -------------------------------------
