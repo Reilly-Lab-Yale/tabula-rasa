@@ -4065,12 +4065,12 @@ def _wald_row_fn(row: dict, bundle: dict):
         "wald_debug": "crossed comparison not supported",
     }
 
-def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+def _wald_make_bundle(hypotheses, models_or_counts, **kw):
     # expects an ortho object with make_wald_eval_bundle()
     return models_or_counts.make_wald_eval_bundle()
 # ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
-def _mwu_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     """
     Build a lookup table of UMI counts keyed by (cell_type, cre_id).
 
@@ -4078,10 +4078,13 @@ def _mwu_make_bundle(hypotheses, models_or_counts, client=None, **kw):
     full counts dataframe for every hypothesis row, which drastically
     reduces overhead when running under Dask.
     """
-    if not hasattr(models_or_counts, "data"):
-        raise TypeError("MWU requires a scMPRA_data object (UMI-wise).")
+    if hasattr(models_or_counts, "data"):
+        df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+    elif hasattr(models_or_counts, "training_data"):
+        df = models_or_counts.training_data.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+    else:
+        raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
 
-    df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
     df["cell_type"] = df["cell_type"].astype(str)
     df["cre_id"] = df["cre_id"].astype(str)
 
@@ -4098,6 +4101,7 @@ def _mwu_row_fn(
     row,
     bundle,
     *,
+    method="auto",
     alternative="two-sided",
     pseudocount=0.01,
 ):
@@ -4661,14 +4665,13 @@ class HypothesisTester:
 
         # build the bundle once
         bundle = self._make_bundle(hypotheses=HypothesisSet.from_dataframe(df_h),
-                                   models_or_counts=models_or_counts,
-                                   client=client, **self.kw)
+                                   models_or_counts=models_or_counts, **self.kw)
 
         recs = df_h.to_dict(orient="records")
         if client is not None:
             bundle_f = client.scatter(bundle, broadcast=True)
             # futures = client.map(self._row_fn, recs, repeat(bundle_f), pure=True)
-            futures = [client.submit(self._row_fn, r, bundle_f) for r in recs]
+            futures = [client.submit(self._row_fn, r, bundle_f, **self.kw) for r in recs]
             results = client.gather(futures)
         else:
             results = [self._row_fn(r, bundle, **self.kw) for r in recs]
