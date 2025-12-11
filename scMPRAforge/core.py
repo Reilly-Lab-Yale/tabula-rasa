@@ -1890,42 +1890,72 @@ class ortho:
             QC[model_level]=ret
         return QC
 
-    def precompute_wald(self, client: Client):
+    def precompute_wald(
+        self,
+        client: Client,
+        *,
+        cov_method: str = "sandwich",
+    ):
         """
         Compute and cache Wald precomputations (SEs, covariances, name maps) for
         every by-cell-type model and every by-CRE model in this ortho.
         Stores results in self.wald_precomp (as Futures); persists with save().
+
+        Parameters
+        ----------
+        client : dask.distributed.Client
+            Dask client for dispatching work.
+        cov_method : {"sandwich", "opg"}
+            - "sandwich": use H^{-1} J H^{-1} covariance (default).
+            - "opg":      use OPG-only covariance J^{-1}.
         """
         if self.training_data is None:
-            raise RuntimeError("precompute_wald requires self.training_data to subset matrices.")
+            raise RuntimeError(
+                "precompute_wald requires self.training_data to subset matrices."
+            )
 
         if (self.by_cell_type is None) or (self.by_cre is None):
-            raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
+            raise RuntimeError(
+                "precompute_wald requires by_cell_type and by_cre models to be present."
+            )
+
+        # Map cov_method -> opg_only flag
+        cov_method = cov_method.lower()
+        if cov_method not in {"sandwich", "opg"}:
+            raise ValueError("cov_method must be 'sandwich' or 'opg'")
+        opg_only = (cov_method == "opg")
 
         by_ct = {}
         by_cr = {}
-        #Very Lame retry hack due to extremely rare failures in _hessian_se
-        #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
-        
+
+        # Very Lame retry hack due to extremely rare failures in covariance estimation
         with dask.annotate(retries=10):
             for ct in self.by_cell_type.model.keys():
                 model_f = self.by_cell_type.model[ct]
                 design_f = self.by_cell_type_design[ct]
-                # subset on the worker to avoid shipping big data repeatedly
-                df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+                df_ct = self.training_data.data[
+                    self.training_data.data["cell_type"] == ct
+                ]
                 by_ct[ct] = client.submit(
                     _build_wald_precomp_for_subset,
-                    model_f, design_f, df_ct
+                    model_f,
+                    design_f,
+                    df_ct,
+                    opg_only=opg_only,   # <-- pass the flag
                 )
 
-            
             for cr in self.by_cre.model.keys():
                 model_f = self.by_cre.model[cr]
                 design_f = self.by_cre_design[cr]
-                df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+                df_cr = self.training_data.data[
+                    self.training_data.data["cre_id"] == cr
+                ]
                 by_cr[cr] = client.submit(
                     _build_wald_precomp_for_subset,
-                    model_f, design_f, df_cr
+                    model_f,
+                    design_f,
+                    df_cr,
+                    opg_only=opg_only,   # <-- pass the flag
                 )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
@@ -3505,9 +3535,7 @@ def _to_plain(obj):
 
 
 
-def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
-    # expects an ortho object with make_wald_eval_bundle()
-    return models_or_counts.make_wald_eval_bundle()
+
 
 
 # ---- Wald Test -------------------------------------
@@ -3630,14 +3658,49 @@ def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
     return (y, X, Z), (endog.astype(np.float64, copy=False), exog.astype(np.float64, copy=False), exog_infl.astype(np.float64, copy=False)) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
-def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, ridge_j=1e-12, batch_size=4096):
+def _estimate_cov_se(
+    params_np,
+    exog_np,
+    infl_np,
+    endog_np,
+    *,
+    ridge_h=1e-8,
+    ridge_j=1e-12,
+    batch_size=4096,
+    opg_only=False,
+):
     """
-    Compute covariance via Sandwich: cov = H^{-1} J H^{-1}, where
-      H = -∂^2 log L / ∂θ∂θᵀ  (observed information)
-      J = Σ_i s_i s_iᵀ        (outer product of per-observation scores)
+    Compute covariance via either:
+      - Sandwich: cov = H^{-1} J H^{-1}, where
+          H = -∂^2 log L / ∂θ∂θᵀ  (observed information)
+          J = Σ_i s_i s_iᵀ        (outer product of per-observation scores)
+      - OPG-only: cov ≈ J^{-1} (Outer Product of Gradients)
+
     Uses TF1 graph mode; float64 throughout. Batches per-observation scores for memory safety.
+
+    Parameters
+    ----------
+    params_np : np.ndarray
+        1D parameter vector θ = concat([x_mu, x_pi, log_theta]).
+    exog_np : np.ndarray
+        NB regressors (N × K_nb).
+    infl_np : np.ndarray
+        ZI regressors (N × K_zi).
+    endog_np : np.ndarray
+        Response counts (N × 1).
+    ridge_h : float
+        Small ridge added to diag(H_info) for stability (sandwich mode).
+    ridge_j : float
+        Small ridge added to diag(J) for stability.
+    batch_size : int
+        Batch size for per-observation score computation.
+    opg_only : bool
+        If True, skip the Hessian and use OPG-only covariance (J^{-1});
+        if False, use full sandwich H^{-1} J H^{-1}.
     """
+    
     g = tf.Graph()
+    
     with g.as_default():
         # Shapes (placeholders accept variable N along axis 0)
         P = int(params_np.size)
@@ -3646,45 +3709,92 @@ def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, 
         infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]],      name="infl")
         endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1],                     name="endog")
 
+        # total + per-observation loglik
         ll_sum, ll_vec = _zinb_loglik_tf(params, exog, infl, endog, return_per_obs=True)
 
-        # H and per-obs scores S
-        H = tf.hessians(ll_sum, params)[0]  # (P,P)
+        # Hessian only if we're not in OPG-only mode
+        if not opg_only:
+            H = tf.hessians(ll_sum, params)[0]  # (P, P)
 
+        # Per-observation score vectors: s_i = ∂ ll_i / ∂ params
         def _grad_one(li):
             gi = tf.gradients(li, params)[0]
+            # Replace NaNs/Infs with 0 in the graph to avoid propagating nastiness
             return tf.where(tf.math.is_finite(gi), gi, tf.zeros_like(gi))
-        S = tf.map_fn(_grad_one, ll_vec, dtype=tf.float64)  # (N,P)
+
+        S = tf.map_fn(_grad_one, ll_vec, dtype=tf.float64)  # shape (N, P)
 
     with tf.compat.v1.Session(graph=g) as sess:
         sess.run(tf.compat.v1.global_variables_initializer())
-        H_np = sess.run(H, feed_dict={params: params_np, exog: exog_np, infl: infl_np, endog: endog_np})
-        if not np.all(np.isfinite(H_np)):
-            raise FloatingPointError("Sandwich path: non-finite Hessian")
+
+        # Hessian evaluation (sandwich mode only)
+        if not opg_only:
+            H_np = sess.run(
+                H,
+                feed_dict={params: params_np, exog: exog_np, infl: infl_np, endog: endog_np},
+            )
+            if not np.all(np.isfinite(H_np)):
+                raise FloatingPointError("Sandwich path: non-finite Hessian")
 
         # Batch J accumulation
         P = params_np.size
         J = np.zeros((P, P), dtype=np.float64)
         N = endog_np.shape[0]
+
         for start in range(0, N, batch_size):
             stop = min(start + batch_size, N)
             S_b = sess.run(
                 S,
-                feed_dict={params: params_np, exog: exog_np[start:stop], infl: infl_np[start:stop], endog: endog_np[start:stop]},
+                feed_dict={
+                    params: params_np,
+                    exog:   exog_np[start:stop],
+                    infl:   infl_np[start:stop],
+                    endog:  endog_np[start:stop],
+                },
             )
+            # Safety: zero out non-finite scores
             S_b[~np.isfinite(S_b)] = 0.0
             J += S_b.T @ S_b
 
-    # HC1 correction and ridge
+    # HC1 correction and ridge on J
     n, p = endog_np.shape[0], P
     if n > p:
         J *= (n / (n - p))
     J[np.diag_indices_from(J)] += ridge_j
 
+    # ---------- OPG-only path ----------
+    if opg_only:
+        used = "inv"
+        try:
+            if not np.all(np.isfinite(J)):
+                raise FloatingPointError("OPG path: non-finite J")
+            cov = np.linalg.inv(J)
+        except (LinAlgError, FloatingPointError):
+            used = "pinv"
+            cov = la.pinvh(J, check_finite=False)
+
+        cov = 0.5 * (cov + cov.T)
+        se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
+        # Compact diagnostics for OPG
+        try:
+            evals_J = la.eigvalsh(J, check_finite=False)
+            jmin    = float(evals_J.min())
+            jmax    = float(evals_J.max())
+            condJ   = (np.inf if jmin <= 0 else jmax / jmin)
+            diag = (
+                f"opg: Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; "
+                f"sol={used}"
+            )
+        except Exception:
+            diag = f"opg: sol={used}"
+
+        return se, cov, diag
+
+    # ---------- Sandwich path (uses H as well) ----------
     H_info = -H_np
     H_info = 0.5 * (H_info + H_info.T)
     H_info[np.diag_indices_from(H_info)] += ridge_h
-
 
     used = "chol"
     try:
@@ -3696,8 +3806,8 @@ def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, 
     except (LinAlgError, ValueError, FloatingPointError):
         used = "solve"
         try:
-            X   = la.solve(H_info, J, assume_a='sym', check_finite=False)
-            cov = la.solve(H_info, X, assume_a='sym', check_finite=False)
+            X   = la.solve(H_info, J, assume_a="sym", check_finite=False)
+            cov = la.solve(H_info, X, assume_a="sym", check_finite=False)
         except (LinAlgError, ValueError):
             used = "pinv"
             H_pinv = la.pinvh(H_info, check_finite=False)
@@ -3706,19 +3816,24 @@ def _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np, *, ridge_h=1e-8, 
     cov = 0.5 * (cov + cov.T)
     se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
 
-        # Compact diagnostics
+    # Compact diagnostics for sandwich
     try:
         evals_H = la.eigvalsh(H_info, check_finite=False)
         evals_J = la.eigvalsh(J,      check_finite=False)
-        condH   = (np.inf if evals_H.min() <= 0 else evals_H.max() / evals_H.min())
-        condJ   = (np.inf if evals_J.min() <= 0 else evals_J.max() / evals_J.min())
-        diag = f"sandwich: Hmin={evals_H.min():.2e},Hmax={evals_H.max():.2e},condH={condH:.2e}; " \
-               f"Jmin={evals_J.min():.2e},Jmax={evals_J.max():.2e},condJ={condJ:.2e}; sol={used}"
+        hmin    = float(evals_H.min())
+        hmax    = float(evals_H.max())
+        jmin    = float(evals_J.min())
+        jmax    = float(evals_J.max())
+        condH   = (np.inf if hmin <= 0 else hmax / hmin)
+        condJ   = (np.inf if jmin <= 0 else jmax / jmin)
+        diag = (
+            f"sandwich: Hmin={hmin:.2e},Hmax={hmax:.2e},condH={condH:.2e}; "
+            f"Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; sol={used}"
+        )
     except Exception:
         diag = f"sandwich: sol={used}"
 
     return se, cov, diag
-
 def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     """
     Graph-mode only:
@@ -3804,86 +3919,94 @@ def _slice_se(standard_errors, exog_cols, infl_cols):
     se_theta = standard_errors[k_nb+k_zi:]
     return se_x_mu, se_x_pi, se_theta
 
-def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPrecompEntry:
+def _build_wald_precomp_for_subset(
+    model_dict,
+    design_dict,
+    df_subset,
+    *,
+    opg_only: bool = False,
+) -> WaldPrecompEntry:
     """
-    Worker-safe function: builds X/Z/y, computes Hessian, splits SE, returns WaldPrecompEntry.
+    Worker-safe function: builds X/Z/y, computes covariance/SEs for the NB
+    block via either sandwich or OPG, splits SE, returns WaldPrecompEntry.
+
+    Parameters
+    ----------
+    opg_only : bool
+        If True, use OPG-only covariance (J^{-1});
+        if False, use full sandwich H^{-1} J H^{-1}.
     """
     _require_tensorflow()
 
-    nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    # (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula)
-    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(df_subset,design_dict, nb_formula, zi_formula)
-    # # _, params_t = _setup_params_from_fit(model_dict)
+    nb_formula, zi_formula = design_dict["nb_formula"], design_dict["zi_formula"]
+    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(
+        df_subset, design_dict, nb_formula, zi_formula
+    )
     params_np = _setup_params_from_fit(model_dict)
 
-
-    # Sandwich in graph mode only
     try:
         # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
-        se_all, cov, diag = _sandwich_cov_graph(params_np, exog_np, infl_np, endog_np,
-                                            ridge_h=1e-8, ridge_j=1e-12)
+        se_all, cov, diag = _estimate_cov_se(
+            params_np,
+            exog_np,
+            infl_np,
+            endog_np,
+            ridge_h=1e-8,
+            ridge_j=1e-12,
+            opg_only=opg_only,
+        )
         se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
-        k_nb  = len(X.columns)
+        k_nb = len(X.columns)
         cov_nb = cov[:k_nb, :k_nb]
 
         # Diagnostics
-        # Zero-variance regressors
         zero_var_cols = [
-            c for c in X.columns
+            c
+            for c in X.columns
             if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)
         ]
 
-        # Covariance pathologies
         cov_has_nan = np.isnan(cov_nb).any()
         cov_has_inf = np.isinf(cov_nb).any()
-
-        # SE pathologies
         se_has_nan = np.isnan(se_all).any()
         se_has_inf = np.isinf(se_all).any()
 
-        # Condition number (only if finite)
         if not (cov_has_nan or cov_has_inf):
             cond_nb = np.linalg.cond(cov_nb)
         else:
             cond_nb = np.inf
 
-        # Collect all issues
         issues = []
-
         if se_has_nan:
             issues.append("NaNs in SEs")
         if se_has_inf:
             issues.append("Infs in SEs")
-
         if cov_has_nan:
             issues.append("NaNs in cov_nb")
         if cov_has_inf:
             issues.append("Infs in cov_nb")
-
         if len(zero_var_cols) > 0:
             issues.append(
                 f"zero-var in X: {zero_var_cols[:3]}"
                 f"{'...' if len(zero_var_cols) > 3 else ''}"
             )
-
         if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
+        # `diag` already encodes "sandwich: ..." or "opg: ..."
         if issues:
-            debug_msg = "; ".join(issues) + f"; H=np.array({repr(H.tolist())}) ; se_all=({repr(se_all)}) ; se_x_mu=({repr(se_x_mu)})"
+            debug_msg = diag + "; " + "; ".join(issues)
         else:
-            debug_msg = "ok"
+            debug_msg = diag
     except Exception as e:
-        # Any failure: fill NaNs and report *sandwich* failure, not hessian
+        # Any failure: fill NaNs and report which path failed
         se_x_mu = np.full(len(X.columns), np.nan)
-        cov_nb  = np.full((len(X.columns), len(X.columns)), np.nan)
-        debug_msg = f"sandwich failure: {type(e).__name__}: {e}"
+        cov_nb = np.full((len(X.columns), len(X.columns)), np.nan)
+        mode = "opg" if opg_only else "sandwich"
+        debug_msg = f"{mode} failure: {type(e).__name__}: {e}"
 
-
-
-    # Add a concise colinearity check for categorical designs
+    # Collinearity check
     try:
-        # Quick rank test for X and Z
         rank_X = np.linalg.matrix_rank(X)
         rank_Z = np.linalg.matrix_rank(Z)
         if rank_X < X.shape[1]:
@@ -3892,8 +4015,8 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
             debug_msg += f"; colinearity in Z (rank {rank_Z}/{Z.shape[1]})"
     except Exception as e:
         debug_msg += f"; colinearity check failed: {e.__class__.__name__}"
-    
-    xmu_names = list(model_dict['weights']['x_mu'].index)
+
+    xmu_names = list(model_dict["weights"]["x_mu"].index)
     return WaldPrecompEntry(
         xmu_names=xmu_names,
         se_x_mu=se_x_mu,
@@ -3901,7 +4024,6 @@ def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPr
         k_nb=len(X.columns),
         debug_msg=debug_msg,
     )
-    
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
