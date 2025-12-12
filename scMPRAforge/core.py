@@ -93,6 +93,7 @@ RESULT_REQUIRED = {
 }
 RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
 
+THREADS_DEFAULT = 5
 
 #functions
 @unimplemented
@@ -4722,8 +4723,105 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
     return runner.run(hypotheses)
 
-    
+
 class de_novo_simulation:
+    """
+    Class for simulating new datasets.
+
+    A single instance of this object should be used to 
+    represent n simulated replicates of one experimental setup.
+    For different parameters, initalize multiple objects.
+
+    Initalized over a directory, where it reads and writes...
+    Remembers state in a one row `state` dataframe.
+
+    The directory name, get_metadata and save_metadata functions
+    can be used to store arbitrary information about the simulation.
+
+    The general workflow is:
+    - initalize_gt; sets the ground truth from which simulation will be performed
+    - gamut; runs:
+        - _simulate_transfection
+        - _simulate_transcription
+        - _realize_simulations
+    Then optionally
+    - fit_orthos
+    - precompute_wald (OPG or )
+    
+    Progress is automatically saved. You only need to manually call `save()`
+    if you manually modify the object in some way, like modifying the `state` dataframe.
+
+    Efficiency could be improved by avoiding saving information multiple times,
+    but we sacrifice a little disc space to enhance reproducability & debugging
+    (e.g. saving twice allows us to keep both the filtered and unfiltered 
+    versions of the datasets, e.g. saving the ground-truth locally instead of a reference
+    to another location keeps the object self-contained...) 
+    """
+    
+    def __init__(self,location,name):
+        self.location = Path(location)
+        self.name = Path(name)
+        
+        fullp=(self.location/name)
+        fullp.mkdir(parents=True, exist_ok=True)
+
+        statep=fullp/"state.parquet"
+
+        if statep.exists():
+            logger.info(f"'state.parquet' found for '{name}', loading.")
+            self.state=pd.read_parquet(statep)
+        else:
+            logger.info(f"No 'state.parquet' found for '{name}'. Initalizing empty object.")
+            self.state=pd.DataFrame()
+            self.set_metadata({})
+            self.set_threads(THREADS_DEFAULT)
+
+    def set_metadata(self,meta:dict):
+        """
+        Sets metadata dict.
+        This is just for little scalars describing the simulation batch,
+        don't save serious data here.
+        """
+        self.state["metadata"]=[meta]
+        self.save()
+    
+    def get_metadata(self):
+        """
+        Returns the metadata dict.
+        """
+        return self.state["metadata"][0]
+    
+    def initalize_gt(experiment_bounds:Bounds,
+                 ground_truth:pd.DataFrame,
+                 library:pd.DataFrame):
+        #load in 
+        self.save()
+    
+    def set_threads(self,threads:int):
+        self.state["threads"]=[threads]
+        self.save()
+    
+    def save(self):
+        state_path=self.location/self.name/Path("state.parquet")
+        self.state.to_parquet(state_path)
+
+    @unimplemented
+    def get_status(self):
+        """
+        Prints a human-readable description of the status of this batch of simulations. 
+        """
+        #_get_status_hypothesis_test
+        pass
+    
+    @unimplemented
+    def _get_status_hypothesis_test(self,hypo):
+        pass
+
+    @unimplemented
+    def check_sync(self):
+        pass
+
+class de_novo_simulation_old:
     """
     TODO: rework to hold no state
     - once complete, the class will just be a wrapper for functions
