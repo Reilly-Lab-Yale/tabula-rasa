@@ -1,0 +1,4 @@
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+/apps/custom/lmod/8.7.48/init/bash: line 248: conda: command not found
+status	in_reads	in_bp	too_short	too_long	too_many_n	out_reads	w/adapters	qualtrim_bp	out_bp	w/adapters2	qualtrim2_bp	out2_bp
+OK	339016160	43394068480	0	0	0	313744483	0	0	8784845524	0	0	31374448300

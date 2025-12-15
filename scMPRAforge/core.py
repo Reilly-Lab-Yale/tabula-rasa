@@ -57,9 +57,14 @@ import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
 try:
-    import tensorflow as tf  # optional dep
+    import tensorflow as tf
+    tf.compat.v1.disable_eager_execution()  # single source of truth: graph mode only
 except Exception as _tf_err:
     tf = None
+
+import scipy.linalg as la
+from numpy.linalg import LinAlgError
+import uuid
 
 #internal imports
 from .utils import unimplemented
@@ -156,6 +161,143 @@ def table_type(column_names):
         matches += 1
 
     return ret if matches == 1 else 'malformed'
+
+import re
+
+def _extract_square(s):
+    """
+    Utility function which extracts the contents of [T. ] or [ ] brackets from  string `s`
+    Assumes one pair of brackets
+    If no brackets are found, returns `s` untouched.
+    """
+    tm = re.search(r"\[T\.(.*?)\]", s)
+    m = re.search(r"\[(.*?)\]", s)
+    if tm:
+        return tm.group(1)
+    elif m:
+        return m.group(1)
+    else:
+        return s
+    
+
+def _matricies_to_order(matricies):
+    """
+    Helper function. Extracts column index order from matricies for use elsewhere.
+    Replaces `Intercept` with `reference`.
+    """
+    zi_idx=matricies["zi_regressors"].columns.to_list()
+    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_idx]
+
+    nb_idx=matricies["nb_regressors"].columns.to_list()
+    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_idx]
+
+    return {'zi_idx':zi_idx,'nb_idx':nb_idx}
+
+def _mom_from_training_data(data,split,subset,indicies):
+    """
+    Helper function implementing warm start method of moments for parameter initalization.
+    See [[Fixing zinb initialization]] and [[LFC is beta]] for math.
+
+    `indicies` are the return of of `_matricies_to_order`
+    """
+    
+    anti=anti_split(split)
+
+    #clean up raw training data
+    raw=data[["rep_id","cell_type","cre_id","umis_mpra_bc"]]
+    raw=data[data[split]==subset]
+    raw=raw.drop(columns=split)
+
+    #collapse to summary statistics
+    nb_stats = (
+        raw.groupby(anti)
+        .agg(
+            mean_umis_mpra_bc=('umis_mpra_bc', 'mean'),
+            var_umis_mpra_bc=('umis_mpra_bc', 'var')
+        )
+    )
+
+    #get that set which are valid nb
+    nb_stats["valid_nb"]=nb_stats["var_umis_mpra_bc"] > nb_stats["mean_umis_mpra_bc"]
+
+    # compute rep-level counts including zeros
+    zi_stats = (
+        raw.groupby(['rep_id', anti])
+        .agg(
+            n=('umis_mpra_bc', 'count'),
+            n_zero=('umis_mpra_bc', lambda x: (x == 0).sum())
+        )
+    )
+
+    
+    # merge global mean/var into rep-level
+    zi_stats = zi_stats.reset_index().merge(nb_stats, on=anti, how='left')
+
+    #so a row in zi_stats represents 'for replicate [rep_id] 
+    #we see [cre_id] [n] times, of which [n_zero] data points are zero
+    #that cre, across all reps, has a mean of [mean_umis_mpra_bc] and a 
+    #variance of [var_umis_mpra_bc].' 
+    
+    
+    
+    zi_stats["gross_zero_prop"]=zi_stats["n_zero"]/zi_stats["n"]
+    
+    #We now want to figure out how many zeros are expected from the nb portion
+    
+    
+    #compute nb params
+    zi_stats["p"]=zi_stats["mean_umis_mpra_bc"]/zi_stats["var_umis_mpra_bc"]
+    zi_stats["r"]=zi_stats["mean_umis_mpra_bc"]**2 / (zi_stats["var_umis_mpra_bc"] - zi_stats["mean_umis_mpra_bc"])
+    
+    zi_stats["nb_zero_prop"]=np.nan
+    #fill out valid nb cases with zero proportion...
+    zi_stats.loc[zi_stats["valid_nb"],"nb_zero_prop"]=zi_stats["p"]**zi_stats["r"]
+    #fill out non-valid nb cases with zero portion using poisson
+    zi_stats.loc[~zi_stats["valid_nb"],"nb_zero_prop"]=np.exp(-zi_stats["mean_umis_mpra_bc"])
+
+    assert ~any(zi_stats["nb_zero_prop"].isna())
+
+
+    zi_stats["zero_inflation"]=zi_stats["gross_zero_prop"]-zi_stats["nb_zero_prop"]
+    zi_stats["zero_inflation"]=np.clip(zi_stats["zero_inflation"],0,1)
+    
+    zi_stats=zi_stats.groupby("rep_id")["zero_inflation"].mean()
+
+    # now let's reindex
+    zi_stats=zi_stats.reindex(indicies["zi_idx"])
+    #logistic function
+    zi_beta=1/(1 + np.exp(-zi_stats.to_numpy()))
+
+    #now calculate nb betas
+    working_nb=nb_stats.copy()
+    ref=working_nb.loc["reference"]["mean_umis_mpra_bc"]
+    working_nb["fc"]=working_nb["mean_umis_mpra_bc"]/ref
+    working_nb["lfc"]=np.log(working_nb["fc"])
+    working_nb["beta"]=working_nb["lfc"]
+    working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
+    
+    nb_betas=working_nb["beta"]
+
+    
+    #now calculate theta betas
+    working_nb=nb_stats.copy()
+    thetas=working_nb["mean_umis_mpra_bc"]**2/(working_nb["var_umis_mpra_bc"]-working_nb["mean_umis_mpra_bc"])
+    thetas=thetas[working_nb["valid_nb"]]
+    beta_theta=np.log(np.mean(thetas))
+
+    #with our table constructed, we can now extract our actual parameter estimates
+    #first, the betas for the nb portion
+
+    nb_betas=nb_betas.reindex(indicies["nb_idx"])
+
+    init={}
+    init["x_mu"]=nb_betas.to_numpy().reshape(-1, 1)
+    init["x_pi"]=zi_beta.reshape(-1, 1)
+    init["theta"]=np.array([[beta_theta]])
+
+
+    return init
+
 
 
 @unimplemented
@@ -581,6 +723,10 @@ class Bounds:
     by_cre_zi:float=None
     by_cell_type_zi:float=None
 
+    reference_activity:float=None
+    by_cell_type_reference_activity:float=None
+    by_cre_reference_activity:float=None
+
     cells_per_cell_type:dict=None
 
     excess_tfection:float=None
@@ -686,6 +832,17 @@ class Bounds:
                 current=getattr(inp,var).theta[key].result()
                 thetas.append(current)
             
+            ## reference ##
+            if var=="by_cell_type_parameters":
+                reference_mus=[]
+                for key in getattr(inp,var).nb:
+                    df=getattr(inp,var).nb["Mesoderm"].result()
+                    assert len(df.loc["reference"])==1; "Multi reference"
+                    reference_mus.append(df.loc["reference"]["mu"])
+                ret.by_cell_type_reference_activity=np.mean(reference_mus)
+            elif var=="by_cre_parameters":
+                ret.by_cre_reference_activity=np.mean(getattr(inp,var).nb["reference"].result()["mu"].to_list())
+            
             ## theta means ##
             #we could munge the strings & use setattr but i think this is more readable
             if var=="by_cell_type_parameters":
@@ -731,9 +888,11 @@ class Bounds:
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
+            ret.reference_activity=ret.by_cell_type_reference_activity
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
             ret.theta=ret.by_cre_theta
+            ret.reference_activity=by_cre_reference_activity
         else:
             assert False, "Unrecognized direction."
 
@@ -793,7 +952,7 @@ class scMPRA_data:
             raise ValueError("Can't flatten overtransfection on an emperical dataset.")
         
         if "overtransfection_flattened" in self.operations:
-            scm.logger.warning("Overtransfection flattening already performed. Skipping.")
+            logger.warning("Overtransfection flattening already performed. Skipping.")
             return
         
         groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
@@ -1234,6 +1393,7 @@ def abort_on_failure(future,client):
 #        1         2         3         4         5         6         7         8
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
+
 def _smart_matrix(data,split):
     """
     Takes data and split column & produces design matricies
@@ -1271,7 +1431,6 @@ def _smart_matrix(data,split):
     Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
 
     X = X.astype(pd.SparseDtype("int", fill_value=0))
-
     
     return {
         'nb_regressors':X,
@@ -1285,18 +1444,56 @@ def _smart_matrix(data,split):
     }
 
 
-def _tensorzinb_fit(matricies,name):
+
+def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     """
-    Takes matricies & produces a single tensorzinb model
+    Takes matricies & produces a single tensorzinb model.
+    init_method takes "nb", "ones" or "pass".
+    mom (method of moments) only implemented for by_cell_type models at the moment.
     """
-    zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+    if init_method=="nb":
+        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                        exog=matricies["nb_regressors"].to_numpy(),
+                        exog_infl=matricies["zi_regressors"].to_numpy())
+        result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
+        del zinbo
+    elif init_method=="pass":
+        if not init_vals:
+            raise ValueError("init_vals required for init_method=pass")
+
+        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
                     exog=matricies["nb_regressors"].to_numpy(),
                     exog_infl=matricies["zi_regressors"].to_numpy())
+        
+        result = zinbo.fit(return_history=True,init_weights=init_vals)
+
+        del zinbo
+
+    elif init_method=="ones":
+        num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
+        num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
+        if matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze().ndim == 1:
+            num_out = 1
+        else:
+            num_out = y.shape[1]
+        
+        ones_init = {}
+        ones_init["x_mu"] = np.ones((num_feat_nb, num_out), dtype=np.float32)
+        ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
+        ones_init["theta"] = np.ones((1, num_out), dtype=np.float32)
+        
+        zinbo_ones = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
+                    exog=matricies["nb_regressors"].to_numpy(),
+                    exog_infl=matricies["zi_regressors"].to_numpy())
+        
+        result = zinbo_ones.fit(return_history=True,init_weights=ones_init)
+
+        del zinbo_ones
+    else:
+        raise ValueError(f"Unrecognized initalization type {init_method}.")
     
-
-    result = zinbo.fit(init_method="nb")
-
-    del zinbo
+    if pd.isnull(result["llf_total"]):
+        logger.warning(f"Unconverged model in {name}.")
     
     return result
 
@@ -1318,11 +1515,28 @@ def standard_fit(client,data,split):
         for t in levels
     }
 
+    if split=="cell_type":
+        init_method="pass"
+        init_vals={
+            t:client.submit(_mom_from_training_data, 
+                data=data,
+                split="cell_type",
+                subset=t,
+                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
+                )
+            for t in levels
+        }
+    else:
+        init_method="nb"
+        init_vals={t:None for t in levels}
+
     tzinb_futures = {
         t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
-                t
+                t,
+                init_method=init_method,
+                init_vals=init_vals[t]
             )
         for t in levels
     }
@@ -1567,9 +1781,13 @@ class ortho:
         retain_metadata will keep some information 'dat' in self.training_data
         The actual MPRA data will be stripped to save space, but metadata will be retained
         """
+        
+        
+        
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
                                                      split="cre_id")
+        
         
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
@@ -1672,17 +1890,40 @@ class ortho:
             QC[model_level]=ret
         return QC
 
-    def precompute_wald(self, client: Client):
+    def precompute_wald(
+        self,
+        client: Client,
+        *,
+        cov_method: str = "sandwich",
+    ):
         """
         Compute and cache Wald precomputations (SEs, covariances, name maps) for
         every by-cell-type model and every by-CRE model in this ortho.
         Stores results in self.wald_precomp (as Futures); persists with save().
+
+        Parameters
+        ----------
+        client : dask.distributed.Client
+            Dask client for dispatching work.
+        cov_method : {"sandwich", "opg"}
+            - "sandwich": use H^{-1} J H^{-1} covariance (default).
+            - "opg":      use OPG-only covariance J^{-1}.
         """
         if self.training_data is None:
-            raise RuntimeError("precompute_wald requires self.training_data to subset matrices.")
+            raise RuntimeError(
+                "precompute_wald requires self.training_data to subset matrices."
+            )
 
         if (self.by_cell_type is None) or (self.by_cre is None):
-            raise RuntimeError("precompute_wald requires by_cell_type and by_cre models to be present.")
+            raise RuntimeError(
+                "precompute_wald requires by_cell_type and by_cre models to be present."
+            )
+
+        # Map cov_method -> opg_only flag
+        cov_method = cov_method.lower()
+        if cov_method not in {"sandwich", "opg"}:
+            raise ValueError("cov_method must be 'sandwich' or 'opg'")
+        opg_only = (cov_method == "opg")
 
         by_ct = {}
         by_cr = {}
@@ -1692,21 +1933,29 @@ class ortho:
             for ct in self.by_cell_type.model.keys():
                 model_f = self.by_cell_type.model[ct]
                 design_f = self.by_cell_type_design[ct]
-                # subset on the worker to avoid shipping big data repeatedly
-                df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+                df_ct = self.training_data.data[
+                    self.training_data.data["cell_type"] == ct
+                ]
                 by_ct[ct] = client.submit(
                     _build_wald_precomp_for_subset,
-                    model_f, design_f, df_ct
+                    model_f,
+                    design_f,
+                    df_ct,
+                    opg_only=opg_only,   # <-- pass the flag
                 )
 
-            
             for cr in self.by_cre.model.keys():
                 model_f = self.by_cre.model[cr]
                 design_f = self.by_cre_design[cr]
-                df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+                df_cr = self.training_data.data[
+                    self.training_data.data["cre_id"] == cr
+                ]
                 by_cr[cr] = client.submit(
                     _build_wald_precomp_for_subset,
-                    model_f, design_f, df_cr
+                    model_f,
+                    design_f,
+                    df_cr,
+                    opg_only=opg_only,   # <-- pass the flag
                 )
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
@@ -1932,6 +2181,11 @@ def describe_parameters(parameters,dat,split):
     cell_counts=cell_counts.dropna()
 
     working=flattened_param.join(cell_counts,how="inner")
+    dense = working.copy()
+    for col in dense.columns:
+        if pd.api.types.is_sparse(dense[col].dtype):
+            dense[col] = dense[col].sparse.to_dense()
+    working=dense
     working["r"]=working["theta"]
     working["sigmasquare"]=working["mu"]**2/working["r"]+working["mu"]
     working["p"]=working["mu"]/working["sigmasquare"]
@@ -2073,10 +2327,15 @@ def simulate_from_description(description):
     """
 
     # Simulate NB and ZI in numpy
-    r = description['r'].to_numpy()
-    p = description['p'].to_numpy()
-    zi = description['zi'].to_numpy()
+    r = description['r'].to_numpy(dtype=float)
+    p = description['p'].to_numpy(dtype=float)
+    zi = description['zi'].to_numpy(dtype=float)
 
+    #print(description['r'].map(type).value_counts())
+    #print(description['p'].map(type).value_counts())
+
+    #print(f"type(r):{type(r)}; type(p): {type(p)}; r: {r} ; p:{p}")
+    
     nb = np.random.negative_binomial(n=r, p=p)
     keep_mask = np.random.binomial(n=1, p=1 - zi)
     zinb = nb * keep_mask
@@ -2639,13 +2898,14 @@ class WaldPrecompEntry:
     Minimal payload needed to evaluate Wald tests quickly for a single fitted model.
     All numpy; safe to pickle.
     """
-    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb")
+    __slots__ = ("xmu_names", "se_x_mu", "cov_nb", "k_nb", "debug_msg")
 
-    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb):
+    def __init__(self, xmu_names, se_x_mu, cov_nb, k_nb, debug_msg=None):
         self.xmu_names = list(map(str, xmu_names))
         self.se_x_mu   = np.asarray(se_x_mu, dtype=float)
         self.cov_nb    = np.asarray(cov_nb, dtype=float)
         self.k_nb      = int(k_nb)
+        self.debug_msg = debug_msg  # string or None
 
     def name_to_idx(self):
         # build lazily to keep pickle small
@@ -2653,7 +2913,6 @@ class WaldPrecompEntry:
 
 
 class WaldPrecomp:
-
     """
     Mirrors the shape of `parameters`: dicts keyed by split level.
     Values are WaldPrecompEntry objects (or Futures thereof when live on a cluster).
@@ -2837,7 +3096,7 @@ def make_by_celltype_hypotheses(
                 comparison_cell_type="NeuroectodermBrain",
                 counts=shendure,
                 comparison_cres="all",
-                reference_cre="reference",   # your flattened minP/noP
+                reference_cre="reference",   # flattened minP/noP
                 meta="emvar_screen")
 
     Notes:
@@ -3276,36 +3535,54 @@ def _to_plain(obj):
 
 
 
-def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
-    # expects an ortho object with make_wald_eval_bundle()
-    return models_or_counts.make_wald_eval_bundle()
+
 
 
 # ---- Wald Test -------------------------------------
-def _zinb_loglik_tf(params, exog, exog_infl, endog):
+def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
     """
-    TF implementation of the ZINB log-likelihood works for arbitrary exog / exog_infl shapes.
+    TF implementation of the ZINB log-likelihood.
 
     params = concat([x_mu, x_pi, log_theta])
-    """
-    N = tf.cast(tf.shape(endog)[0], tf.float32)
 
-    num_features = tf.shape(exog)[1]
+    If return_per_obs=False (default):
+        returns a scalar total log-likelihood (previous existing behavior).
+
+    If return_per_obs=True:
+        returns (ll_sum, ll_vec), where:
+          - ll_vec is shape (N,)   per-observation log-likelihoods (up to const.)
+          - ll_sum is scalar sum(ll_vec)
+    """
+    N = tf.cast(tf.shape(endog)[0], tf.float64)
+
+    num_features      = tf.shape(exog)[1]
     num_infl_features = tf.shape(exog_infl)[1]
 
-    x_mu = params[:num_features]
-    x_pi = params[num_features:num_features + num_infl_features]
-    log_theta = params[-1]
-    theta = tf.exp(log_theta)
+    # Split parameter vector
+    x_mu      = params[:num_features]
+    x_pi      = params[num_features:num_features + num_infl_features]
+    raw_log_theta = params[-1]
 
-    mu = tf.exp(tf.matmul(exog, tf.expand_dims(x_mu, axis=-1)))
+    # --- CLIPPED linear predictors and dispersion (same as prev. current version) ---
+
+    # μ part: η_mu = X β_mu, clipped before exp
+    eta_mu = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
+    eta_mu = tf.clip_by_value(eta_mu, -20.0, 20.0)
+    mu     = tf.exp(eta_mu)
+
+    # π logits for ZI part
     pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+    pi_logits = tf.clip_by_value(pi_logits, -20.0, 20.0)
 
-    # zero-inflation logits -> log(q0), log(q1) as in your code
+    # θ (dispersion) bounded away from 0/∞ in log-space
+    log_theta = tf.clip_by_value(raw_log_theta, -10.0, 10.0)
+    theta     = tf.exp(log_theta)
+
+    # zero-inflation logits -> log(q0), log(q1)
     log_q0 = -tf.nn.softplus(-pi_logits)
     log_q1 = log_q0 - pi_logits
 
-    y = tf.cast(endog, tf.float32)
+    y = tf.cast(endog, tf.float64)
 
     # NB log-likelihood (for y>0)
     t1 = tf.math.lgamma(y + theta)
@@ -3317,21 +3594,28 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog):
     nb_case = t1 + t2 + t3 + t4 + t5 + log_q1
 
     # Zero case
-    p1 = theta * (log_theta - ty) + log_q1
+    p1        = theta * (log_theta - ty) + log_q1
     zero_case = tf.reduce_logsumexp(tf.stack([log_q0, p1], axis=0), axis=0)
 
-    ll = tf.where(y < 1e-8, zero_case, nb_case)
+    # ll per observation (up to the log-factorial constant)
+    ll = tf.where(y < 1e-8, zero_case, nb_case)   # shape (N, 1)
 
-    # 3-step reduction (mean neg LL per output, add back log-factorial, sum)
-    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                      # (num_outputs,)
-    log_fact = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)    # ∑ ln(y!)
-    llfs = -(mean_neg_ll * N + log_fact)                           # (num_outputs,)
+    if return_per_obs:
+        # Per-observation loglik (we don't include log(y!) since it drops out of scores)
+        ll_vec = tf.reshape(ll, [-1])           # (N,)
+        ll_sum = tf.reduce_sum(ll_vec)          # scalar
+        return ll_sum, ll_vec
+
+    # ---- existing “total log-likelihood” reduction for compatibility ----
+    mean_neg_ll = -tf.reduce_mean(ll, axis=0)                   # (num_outputs,)
+    log_fact    = tf.reduce_sum(tf.math.lgamma(endog + 1), axis=0)
+    llfs        = -(mean_neg_ll * N + log_fact)                 # (num_outputs,)
     log_likelihood = tf.reduce_sum(llfs)
     return log_likelihood
 
 def _setup_params_from_fit(zinb_model_fit):
     """
-    Extract params vector and TF variable (x_mu, x_pi, theta) from a single
+    Extract params vector and [ optional, commented out for now TF variable] (x_mu, x_pi, theta) from a single
     fitted TensorZINB result dict with labeled weights.
     """
     x_mu = zinb_model_fit['weights']['x_mu']
@@ -3342,8 +3626,8 @@ def _setup_params_from_fit(zinb_model_fit):
     params = np.concatenate([np.asarray(x_mu).ravel(),
                              np.asarray(x_pi).ravel(),
                              np.asarray(log_theta).ravel()])
-    params_tensor = tf.Variable(params, dtype=tf.float32)
-    return params, params_tensor
+    # params_tensor = tf.Variable(params, dtype=tf64)
+    return params.astype(np.float64, copy=False) #, params_tensor
 
 def _pack_model_block(model_dict, entry):
     # model_dict['weights']['x_mu'] is a Series with names
@@ -3354,87 +3638,275 @@ def _pack_model_block(model_dict, entry):
         "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
         "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
         "k_nb":     int(entry.k_nb),
+        "debug_msg": entry.debug_msg,   # NEW carry through debugging messages to make Erin's life easier
     }
 
-def _model_matrices_for_subset(df_subset, nb_formula, zi_formula):
+def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     """
     Build endog/exog/exog_infl as numpy and their TF constants for a given subset.
     """
-    y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
-    Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+    # y, X = Formula(nb_formula).get_model_matrix(df_subset, output='pandas')
+    # Z = Formula(zi_formula).get_model_matrix(df_subset, output='pandas')
+    X, y, Z = design_dict['nb_regressors'], design_dict['regressand'], design_dict['zi_regressors']
 
     endog = y.to_numpy().reshape((-1, 1))
     exog = X.to_numpy()
     exog_infl = Z.to_numpy()
 
-    exog_tensor = tf.constant(exog, dtype=tf.float32)
-    endog_tensor = tf.constant(endog, dtype=tf.float32)
-    exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float32)
-    return (y, X, Z), (endog, exog, exog_infl), (endog_tensor, exog_tensor, exog_infl_tensor)
-import uuid
-#def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-#    """
-#    Compute Hessian-based SEs of the ZINB parameters.
-#    Works in both TF2 eager and TF1 graph modes.
-#    """
-#    # Build Hessian with nested GradientTapes
-#    scope = f"wald_{uuid.uuid4().hex}"
-#    with tf.name_scope(scope):
-#        with tf.GradientTape() as tape2:
-#            with tf.GradientTape() as tape1:
-#                ll = _zinb_loglik_tf(params_tensor, exog_t, infl_t, endog_t)
-#            grad = tape1.gradient(ll, params_tensor)
-#        hess = tape2.jacobian(grad, params_tensor)  # shape [P, P]
-#
-#        # Evaluate to numpy depending on execution mode
-#        if tf.executing_eagerly():
-#            H = hess.numpy()
-#        else:
-#            # Graph mode
-#            sess = tf.compat.v1.Session()
-#            with sess.as_default():
-#                sess.run(tf.compat.v1.global_variables_initializer())
-#                H = sess.run(hess)
-#
-#    # Wald covariance = inverse observed information = (-H)^{-1}
-#    cov = np.linalg.inv(-H)
-#    se = np.sqrt(np.diag(cov))
-#    return se, cov
+    # exog_tensor = tf.constant(exog, dtype=tf.float64)
+    # endog_tensor = tf.constant(endog, dtype=tf.float64)
+    # exog_infl_tensor = tf.constant(exog_infl, dtype=tf.float64)
+    return (y, X, Z), (endog.astype(np.float64, copy=False), exog.astype(np.float64, copy=False), exog_infl.astype(np.float64, copy=False)) # , (endog_tensor, exog_tensor, exog_infl_tensor)
 
-def _hessian_se(params_tensor, exog_t, infl_t, endog_t):
-    scope = f"wald_{uuid.uuid4().hex}"
-    with tf.name_scope(scope):
-        x       = tf.convert_to_tensor(params_tensor)
-        exog_t  = tf.convert_to_tensor(exog_t)
-        infl_t  = tf.convert_to_tensor(infl_t)
-        endog_t = tf.convert_to_tensor(endog_t)
+def _estimate_cov_se(
+    params_np,
+    exog_np,
+    infl_np,
+    endog_np,
+    *,
+    ridge_h=1e-8,
+    ridge_j=1e-12,
+    batch_size=4096,
+    opg_only=False,
+):
+    """
+    Compute covariance via either:
+      - Sandwich: cov = H^{-1} J H^{-1}, where
+          H = -∂^2 log L / ∂θ∂θᵀ  (observed information)
+          J = Σ_i s_i s_iᵀ        (outer product of per-observation scores)
+      - OPG-only: cov ≈ J^{-1} (Outer Product of Gradients)
 
-        with tf.GradientTape() as tape2:
-            tape2.watch(x)
-            with tf.GradientTape() as tape1:
-                tape1.watch(x)
-                ll = _zinb_loglik_tf(x, exog_t, infl_t, endog_t)
-            grad = tape1.gradient(ll, x)
-        hess = tape2.jacobian(grad, x)
+    Uses TF1 graph mode; float64 throughout. Batches per-observation scores for memory safety.
 
-    if tf.executing_eagerly():
-        H = hess.numpy()
-    else:
-        # Graph mode
-        sess = tf.compat.v1.Session()
-        with sess.as_default():
+    Parameters
+    ----------
+    params_np : np.ndarray
+        1D parameter vector θ = concat([x_mu, x_pi, log_theta]).
+    exog_np : np.ndarray
+        NB regressors (N × K_nb).
+    infl_np : np.ndarray
+        ZI regressors (N × K_zi).
+    endog_np : np.ndarray
+        Response counts (N × 1).
+    ridge_h : float
+        Small ridge added to diag(H_info) for stability (sandwich mode).
+    ridge_j : float
+        Small ridge added to diag(J) for stability.
+    batch_size : int
+        Batch size for per-observation score computation.
+    opg_only : bool
+        If True, skip the Hessian and use OPG-only covariance (J^{-1});
+        if False, use full sandwich H^{-1} J H^{-1}.
+    """
+    
+    g = tf.Graph()
+    
+    with g.as_default():
+        # Shapes (placeholders accept variable N along axis 0)
+        P = int(params_np.size)
+        params = tf.compat.v1.placeholder(tf.float64, shape=[P],                           name="params")
+        exog   = tf.compat.v1.placeholder(tf.float64, shape=[None, exog_np.shape[1]],      name="exog")
+        infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]],      name="infl")
+        endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1],                     name="endog")
+
+        # total + per-observation loglik
+        ll_sum, ll_vec = _zinb_loglik_tf(params, exog, infl, endog, return_per_obs=True)
+
+        # Hessian only if we're not in OPG-only mode
+        if not opg_only:
+            H = tf.hessians(ll_sum, params)[0]  # (P, P)
+
+        # Per-observation score vectors: s_i = ∂ ll_i / ∂ params
+        def _grad_one(li):
+            gi = tf.gradients(li, params)[0]
+            # Replace NaNs/Infs with 0 in the graph to avoid propagating nastiness
+            return tf.where(tf.math.is_finite(gi), gi, tf.zeros_like(gi))
+
+        S = tf.map_fn(_grad_one, ll_vec, dtype=tf.float64)  # shape (N, P)
+
+    with tf.compat.v1.Session(graph=g) as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
+
+        # Hessian evaluation (sandwich mode only)
+        if not opg_only:
+            H_np = sess.run(
+                H,
+                feed_dict={params: params_np, exog: exog_np, infl: infl_np, endog: endog_np},
+            )
+            if not np.all(np.isfinite(H_np)):
+                raise FloatingPointError("Sandwich path: non-finite Hessian")
+
+        # Batch J accumulation
+        P = params_np.size
+        J = np.zeros((P, P), dtype=np.float64)
+        N = endog_np.shape[0]
+
+        for start in range(0, N, batch_size):
+            stop = min(start + batch_size, N)
+            S_b = sess.run(
+                S,
+                feed_dict={
+                    params: params_np,
+                    exog:   exog_np[start:stop],
+                    infl:   infl_np[start:stop],
+                    endog:  endog_np[start:stop],
+                },
+            )
+            # Safety: zero out non-finite scores
+            S_b[~np.isfinite(S_b)] = 0.0
+            J += S_b.T @ S_b
+
+    # HC1 correction and ridge on J
+    n, p = endog_np.shape[0], P
+    if n > p:
+        J *= (n / (n - p))
+    J[np.diag_indices_from(J)] += ridge_j
+
+    # ---------- OPG-only path ----------
+    if opg_only:
+        used = "inv"
+        try:
+            if not np.all(np.isfinite(J)):
+                raise FloatingPointError("OPG path: non-finite J")
+            cov = np.linalg.inv(J)
+        except (LinAlgError, FloatingPointError):
+            used = "pinv"
+            cov = la.pinvh(J, check_finite=False)
+
+        cov = 0.5 * (cov + cov.T)
+        se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
+        # Compact diagnostics for OPG
+        try:
+            evals_J = la.eigvalsh(J, check_finite=False)
+            jmin    = float(evals_J.min())
+            jmax    = float(evals_J.max())
+            condJ   = (np.inf if jmin <= 0 else jmax / jmin)
+            diag = (
+                f"opg: Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; "
+                f"sol={used}"
+            )
+        except Exception:
+            diag = f"opg: sol={used}"
+
+        return se, cov, diag
+
+    # ---------- Sandwich path (uses H as well) ----------
+    H_info = -H_np
+    H_info = 0.5 * (H_info + H_info.T)
+    H_info[np.diag_indices_from(H_info)] += ridge_h
+
+    used = "chol"
+    try:
+        if not np.all(np.isfinite(H_info)):
+            raise FloatingPointError("non-finite H_info")
+        c, low = la.cho_factor(H_info, check_finite=False)
+        X   = la.cho_solve((c, low), J, check_finite=False)
+        cov = la.cho_solve((c, low), X, check_finite=False)
+    except (LinAlgError, ValueError, FloatingPointError):
+        used = "solve"
+        try:
+            X   = la.solve(H_info, J, assume_a="sym", check_finite=False)
+            cov = la.solve(H_info, X, assume_a="sym", check_finite=False)
+        except (LinAlgError, ValueError):
+            used = "pinv"
+            H_pinv = la.pinvh(H_info, check_finite=False)
+            cov    = H_pinv @ J @ H_pinv
+
+    cov = 0.5 * (cov + cov.T)
+    se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
+    # Compact diagnostics for sandwich
+    try:
+        evals_H = la.eigvalsh(H_info, check_finite=False)
+        evals_J = la.eigvalsh(J,      check_finite=False)
+        hmin    = float(evals_H.min())
+        hmax    = float(evals_H.max())
+        jmin    = float(evals_J.min())
+        jmax    = float(evals_J.max())
+        condH   = (np.inf if hmin <= 0 else hmax / hmin)
+        condJ   = (np.inf if jmin <= 0 else jmax / jmin)
+        diag = (
+            f"sandwich: Hmin={hmin:.2e},Hmax={hmax:.2e},condH={condH:.2e}; "
+            f"Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; sol={used}"
+        )
+    except Exception:
+        diag = f"sandwich: sol={used}"
+
+    return se, cov, diag
+def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
+    """
+    Graph-mode only:
+      - builds a self-contained graph,
+      - evaluates gradients/Hessian in a local Session,
+      - adds tiny ridge to stabilize inversion.
+    """
+    g = tf.Graph()
+    with g.as_default():
+        P = int(params_np.size)
+        params = tf.compat.v1.placeholder(tf.float64, shape=[P], name="params")
+        exog   = tf.compat.v1.placeholder(tf.float64, shape=[None, exog_np.shape[1]], name="exog")
+        infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]], name="infl")
+        endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1], name="endog")
+
+        ll = _zinb_loglik_tf(params, exog, infl, endog)   
+
+        grad = tf.gradients(ll, params)[0]                # (P,)
+        # Build Hessian by differentiating each grad component
+        hcols = [tf.gradients(grad[i], params)[0] for i in range(P)]
+        hess  = tf.stack(hcols, axis=1)                   # (P, P)
+
+        # cfg = tf.compat.v1.ConfigProto(
+        #     intra_op_parallelism_threads=1,
+        #     inter_op_parallelism_threads=1,
+        #     allow_soft_placement=True,
+        # )
+        with tf.compat.v1.Session(graph=g) as sess: # , config=cfg
             sess.run(tf.compat.v1.global_variables_initializer())
-            H = sess.run(hess)
+            G, H = sess.run(
+                [grad, hess],
+                feed_dict={
+                    params: params_np,
+                    exog:   exog_np,
+                    infl:   infl_np,
+                    endog:  endog_np,
+                },
+            )
 
-    # drop cached graphs in long-lived workers
-    #try: tf.keras.backend.clear_session()
-    #except: pass
+    # Check for NaNs in gradient or Hessian
+    if np.isnan(G).any():
+        uid = str(uuid.uuid4())
+        for name, arr in [
+            ("G", G),
+            ("params", params_np),
+            ("exog", exog_np),
+            ("infl", infl_np),
+            ("endog", endog_np),
+        ]:
+            np.save(f"{uid}_{name}.npy", arr)
 
-    cov = np.linalg.inv(-H)
-    se  = np.sqrt(np.diag(cov))
+        raise FloatingPointError(
+            f"NaNs detected in gradient; dumped arrays to disk with prefix {uid}"
+        )
+    if np.isnan(H).any():
+        raise FloatingPointError("NaNs detected in Hessian")
 
-    del hess, H, grad, ll, x, exog_t, infl_t, endog_t
-    return se, cov
+    # Check for non-finite values (Inf / -Inf)
+    if not np.all(np.isfinite(G)):
+        raise FloatingPointError("non-finite gradient")
+    if not np.all(np.isfinite(H)):
+        raise FloatingPointError("non-finite Hessian")
+
+    H_info = -H
+    H_info[np.diag_indices_from(H_info)] += ridge
+
+    try:
+        cov = np.linalg.inv(H_info)
+    except LinAlgError:
+        cov = la.pinvh(H_info)
+
+    se = np.sqrt(np.diag(cov))
+    return se, cov, H
 
 def _slice_se(standard_errors, exog_cols, infl_cols):
     """
@@ -3447,79 +3919,252 @@ def _slice_se(standard_errors, exog_cols, infl_cols):
     se_theta = standard_errors[k_nb+k_zi:]
     return se_x_mu, se_x_pi, se_theta
 
-def _build_wald_precomp_for_subset(model_dict, design_dict, df_subset) -> WaldPrecompEntry:
+def _build_wald_precomp_for_subset(
+    model_dict,
+    design_dict,
+    df_subset,
+    *,
+    opg_only: bool = False,
+) -> WaldPrecompEntry:
     """
-    Worker-safe function: builds X/Z/y, computes Hessian, splits SE, returns WaldPrecompEntry.
+    Worker-safe function: builds X/Z/y, computes covariance/SEs for the NB
+    block via either sandwich or OPG, splits SE, returns WaldPrecompEntry.
+
+    Parameters
+    ----------
+    opg_only : bool
+        If True, use OPG-only covariance (J^{-1});
+        if False, use full sandwich H^{-1} J H^{-1}.
     """
     _require_tensorflow()
 
-    nb_formula, zi_formula = design_dict['nb_formula'], design_dict['zi_formula']
-    (_, X, Z), _, (endog_t, exog_t, infl_t) = _model_matrices_for_subset(df_subset, nb_formula, zi_formula)
+    nb_formula, zi_formula = design_dict["nb_formula"], design_dict["zi_formula"]
+    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(
+        df_subset, design_dict, nb_formula, zi_formula
+    )
+    params_np = _setup_params_from_fit(model_dict)
 
-    # Params var
-    _, params_t = _setup_params_from_fit(model_dict)
+    try:
+        # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
+        se_all, cov, diag = _estimate_cov_se(
+            params_np,
+            exog_np,
+            infl_np,
+            endog_np,
+            ridge_h=1e-8,
+            ridge_j=1e-12,
+            opg_only=opg_only,
+        )
+        se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+        k_nb = len(X.columns)
+        cov_nb = cov[:k_nb, :k_nb]
 
-    # Hessian and covariance
-    se_all, cov = _hessian_se(params_t, exog_t, infl_t, endog_t)
-    se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
+        # Diagnostics
+        zero_var_cols = [
+            c
+            for c in X.columns
+            if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)
+        ]
 
-    k_nb  = len(X.columns)
-    cov_nb = cov[:k_nb, :k_nb]
+        cov_has_nan = np.isnan(cov_nb).any()
+        cov_has_inf = np.isinf(cov_nb).any()
+        se_has_nan = np.isnan(se_all).any()
+        se_has_inf = np.isinf(se_all).any()
 
-    xmu_names = list(model_dict['weights']['x_mu'].index)
-    return WaldPrecompEntry(xmu_names=xmu_names, se_x_mu=se_x_mu, cov_nb=cov_nb, k_nb=k_nb)
+        if not (cov_has_nan or cov_has_inf):
+            cond_nb = np.linalg.cond(cov_nb)
+        else:
+            cond_nb = np.inf
 
+        issues = []
+        if se_has_nan:
+            issues.append("NaNs in SEs")
+        if se_has_inf:
+            issues.append("Infs in SEs")
+        if cov_has_nan:
+            issues.append("NaNs in cov_nb")
+        if cov_has_inf:
+            issues.append("Infs in cov_nb")
+        if len(zero_var_cols) > 0:
+            issues.append(
+                f"zero-var in X: {zero_var_cols[:3]}"
+                f"{'...' if len(zero_var_cols) > 3 else ''}"
+            )
+        if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
+            issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
+
+        # `diag` already encodes "sandwich: ..." or "opg: ..."
+        if issues:
+            debug_msg = diag + "; " + "; ".join(issues)
+        else:
+            debug_msg = diag
+    except Exception as e:
+        # Any failure: fill NaNs and report which path failed
+        se_x_mu = np.full(len(X.columns), np.nan)
+        cov_nb = np.full((len(X.columns), len(X.columns)), np.nan)
+        mode = "opg" if opg_only else "sandwich"
+        debug_msg = f"{mode} failure: {type(e).__name__}: {e}"
+
+    # Collinearity check
+    try:
+        rank_X = np.linalg.matrix_rank(X)
+        rank_Z = np.linalg.matrix_rank(Z)
+        if rank_X < X.shape[1]:
+            debug_msg += f"; colinearity in X (rank {rank_X}/{X.shape[1]})"
+        if rank_Z < Z.shape[1]:
+            debug_msg += f"; colinearity in Z (rank {rank_Z}/{Z.shape[1]})"
+    except Exception as e:
+        debug_msg += f"; colinearity check failed: {e.__class__.__name__}"
+
+    xmu_names = list(model_dict["weights"]["x_mu"].index)
+    return WaldPrecompEntry(
+        xmu_names=xmu_names,
+        se_x_mu=se_x_mu,
+        cov_nb=cov_nb,
+        k_nb=len(X.columns),
+        debug_msg=debug_msg,
+    )
 
 def _wald_by_celltype_row(row: dict, bundle: dict):
     ct  = row["comparison_cell_type"]
     cre = row["comparison_CRE"]
     blk = bundle["by_cell_type"].get(ct)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "no precomp block for cell_type",
+        }
+
+    debug_base = blk.get("debug_msg", "ok")
 
     if cre == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": debug_base,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cre_id", cre)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no contrast term for {cre}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    # sanity / failure modes
+    if not np.isfinite(se):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; non-finite se for {cre}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {cre}",
+        }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": debug_base,
+    }
 
 def _wald_by_cre_row(row: dict, bundle: dict):
     cre = row["comparison_CRE"]
     ct  = row["comparison_cell_type"]
     blk = bundle["by_cre"].get(cre)
+
     if blk is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "no precomp block for cre",
+        }
+
+    debug_base = blk.get("debug_msg", "ok")
 
     if ct == "reference":
-        return {"test_statistic": 0.0, "p_value": 1.0, "fold_change": 1.0, "flattened": False}
+        return {
+            "test_statistic": 0.0,
+            "p_value": 1.0,
+            "fold_change": 1.0,
+            "flattened": False,
+            "wald_debug": debug_base,
+        }
 
     col = find_treatment_column(blk["xmu_names"], "cell_type", ct)
     if col is None:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"no contrast term for {ct}",
+        }
 
-    j   = blk["xmu_names"].index(col)
+    j    = blk["xmu_names"].index(col)
     beta = float(blk["xmu"][j])
     se   = float(blk["se_x_mu"][j])
-    if not np.isfinite(se) or se == 0:
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+
+    if not np.isfinite(se):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; non-finite se for {ct}",
+        }
+
+    if se == 0.0:
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": f"{debug_base}; se==0 for {ct}",
+        }
 
     z = beta / se
-    p = 1.0 - chi2.cdf(z*z, 1)
-    return {"test_statistic": z, "p_value": p, "fold_change": float(np.exp(beta)), "flattened": False}
+    eps = np.finfo(float).tiny  # ~1e-308
+    p = max(chi2.sf(z*z, 1) , eps) # survival function instead of cdf should be more stable with regard to tiny values
+
+    return {
+        "test_statistic": z,
+        "p_value": p,
+        "fold_change": float(np.exp(beta)),
+        "flattened": False,
+        "wald_debug": debug_base,
+    }
 
 def _wald_row_fn(row: dict, bundle: dict):
-    # We assume hypotheses were canonicalized already (labels normalized).
     ref_ct  = row.get("reference_cell_type")
     ref_cre = row.get("reference_CRE")
     comp_ct  = row["comparison_cell_type"]
@@ -3528,62 +4173,122 @@ def _wald_row_fn(row: dict, bundle: dict):
     # by-cell-type if reference cell type missing or equals the comparison
     if pd.isna(ref_ct) or (ref_ct == comp_ct):
         return _wald_by_celltype_row(row, bundle)
+
     # by-CRE if reference CRE missing or equals the comparison
     if pd.isna(ref_cre) or (ref_cre == comp_cre):
         return _wald_by_cre_row(row, bundle)
-    # crossed case not supported here
-    return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
-def _wald_make_bundle(hypotheses, models_or_counts, client=None, **kw):
+    # crossed case not supported
+    return {
+        "test_statistic": np.nan,
+        "p_value": np.nan,
+        "fold_change": np.nan,
+        "flattened": False,
+        "wald_debug": "crossed comparison not supported",
+    }
+
+def _wald_make_bundle(hypotheses, models_or_counts, **kw):
     # expects an ortho object with make_wald_eval_bundle()
     return models_or_counts.make_wald_eval_bundle()
 # ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
-def _mwu_make_bundle(hypotheses, models_or_counts, client=None, **kw):
-    # expects scMPRA_data (UMI-wise) so we can sample the raw counts
-    if not hasattr(models_or_counts, "data"):
-        raise TypeError("MWU requires a scMPRA_data object (UMI-wise).")
-    df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
+    """
+    Build a lookup table of UMI counts keyed by (cell_type, cre_id).
+
+    This lets the row_fn do O(1) dict lookups instead of re-filtering the
+    full counts dataframe for every hypothesis row, which drastically
+    reduces overhead when running under Dask.
+    """
+    if hasattr(models_or_counts, "data"):
+        df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+    elif hasattr(models_or_counts, "training_data"):
+        df = models_or_counts.training_data.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+    else:
+        raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
+
     df["cell_type"] = df["cell_type"].astype(str)
     df["cre_id"] = df["cre_id"].astype(str)
-    return {"counts": df}
+
+    # Group once: (cell_type, cre_id) → np.array of counts
+    grouped = (
+        df.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
+          .apply(lambda s: s.to_numpy())
+    )
+    counts_dict = {key: arr for key, arr in grouped.items()}
+
+    return {"counts": counts_dict}
 
 def _mwu_row_fn(
     row,
     bundle,
     *,
+    method="auto",
     alternative="two-sided",
     pseudocount=0.01,
 ):
     """
     Compute Mann–Whitney U p-value for the appropriate within-cell / within-CRE
-    comparison, and a descriptive fold change based on the chosen summary stat
-    (median by default) with a small pseudocount to handle zeros.
-    """
-    df = bundle["counts"]
+    comparison, and a descriptive fold change based on a log1p-mean summary.
 
-    comp_ct  = row["comparison_cell_type"]
-    comp_cre = row["comparison_CRE"]
+    Assumes `bundle["counts"]` is a dict:
+        (cell_type, cre_id) -> np.ndarray of umis_mpra_bc
+    built once in _mwu_make_bundle.
+    """
+    counts = bundle["counts"]
+
+    comp_ct  = str(row["comparison_cell_type"])
+    comp_cre = str(row["comparison_CRE"])
     ref_ct   = row.get("reference_cell_type")
     ref_cre  = row.get("reference_CRE")
 
-    # Decide comparison axis: mirror the Wald dispatcher’s rules
+    # Normalize possible NaNs to None for easier checks
+    if pd.isna(ref_ct):
+        ref_ct = None
+    if pd.isna(ref_cre):
+        ref_cre = None
+
+    # helper to grab a group safely
+    empty = np.empty(0, dtype=float)
+
+    def get_group(ct, cre):
+        return counts.get((str(ct), str(cre)), empty)
+
+    # --- Decide comparison axis: mirror the Wald dispatcher’s rules ---
+
     # by-cell-type => compare CREs within the same cell type
-    if pd.isna(ref_ct) or (ref_ct == comp_ct):
-        base_cre = "reference" if pd.isna(ref_cre) else ref_cre
-        g1 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == comp_cre)]["umis_mpra_bc"].to_numpy()
-        g0 = df[(df["cell_type"] == comp_ct) & (df["cre_id"] == base_cre)]["umis_mpra_bc"].to_numpy()
+    if (ref_ct is None) or (str(ref_ct) == comp_ct):
+        base_cre = "reference" if ref_cre is None else str(ref_cre)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(comp_ct, base_cre)
 
     # by-CRE => compare cell types within the same CRE
-    elif pd.isna(ref_cre) or (ref_cre == comp_cre):
-        base_ct = "reference" if pd.isna(ref_ct) else ref_ct
-        g1 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == comp_ct)]["umis_mpra_bc"].to_numpy()
-        g0 = df[(df["cre_id"] == comp_cre) & (df["cell_type"] == base_ct)]["umis_mpra_bc"].to_numpy()
+    elif (ref_cre is None) or (str(ref_cre) == comp_cre):
+        base_ct = "reference" if ref_ct is None else str(ref_ct)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(base_ct, comp_cre)
 
     else:
         # crossed case not supported in this simple MWU
-        return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "ref_mean": np.nan,
+            "comp_mean": np.nan,
+        }
 
+    # If either side has no observations, MWU is undefined; return NA-ish.
+    if (g1.size == 0) or (g0.size == 0):
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "ref_mean": np.nan,
+            "comp_mean": np.nan,
+        }
 
     # Mann–Whitney U (SciPy >=1.7 supports method="auto")
     try:
@@ -3592,18 +4297,20 @@ def _mwu_row_fn(
         # for older SciPy, fall back without 'method'
         stat, p = mannwhitneyu(g1, g0, alternative=alternative)
 
-    # Descriptive FC: ratio of chosen summaries (median by default), with pseudocount
-
+    # Descriptive summary: log1p mean (≈ geometric-ish on counts) with pseudocount FC
     s1 = float(np.exp(np.mean(np.log1p(g1))) - 1.0)
     s0 = float(np.exp(np.mean(np.log1p(g0))) - 1.0)
 
-
     fc = (s1 + pseudocount) / (s0 + pseudocount)
 
-   
-
-    return {"test_statistic": float(stat), "p_value": float(p), "fold_change": float(fc), "flattened": False, 'ref_mean': s0,'comp_mean':s1}
-
+    return {
+        "test_statistic": float(stat),
+        "p_value": float(p),
+        "fold_change": float(fc),
+        "flattened": False,
+        "ref_mean": s0,
+        "comp_mean": s1,
+    }
 # ---- Bootstrap activity measurement ------------------------------------------
 # ---- BOOTSTRAP ACTIVITY (empirical p vs controls) ----------------------------
 # ==============================
@@ -3764,10 +4471,10 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     controls = set(bundle["controls"])
 
     # We ignore comparison_cell_type when max_over_celltypes=True (match old behavior)
-    # If user explicitly disabled max_over_celltypes, we fall back to your previous per-CT logic.
+    # If user explicitly disabled max_over_celltypes, we fall back to  previous per-CT logic.
     if not max_over_ct:
-        # fall back to your prior per-CT implementation (the version you posted last)
-        return _bootstrap_row_fn_per_ct(row, bundle, **kw)  # you can keep your previous function under this name
+        # fall back to  prior per-CT implementation 
+        return _bootstrap_row_fn_per_ct(row, bundle, **kw)  # can keep previous function under this name
 
     # Prepare RNG stable per CRE
     rng = np.random.default_rng(None if seed is None else (hash(("BOOTMAX", seed, comp_cre)) % (2**32 - 1)))
@@ -3802,9 +4509,9 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
         ct_union = ct_levels.categories
         ct_map = {ct: i for i, ct in enumerate(ct_union)}
 
-        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        A_ct = A_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         A_v  = A_df["value"].to_numpy(dtype=float)
-        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int32)
+        C_ct = C_df["cell_type"].astype(str).map(ct_map).to_numpy(dtype=np.int64)
         C_v  = C_df["value"].to_numpy(dtype=float)
 
         nA = A_v.size
@@ -3874,7 +4581,7 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     A_bar = A_mat.mean(axis=0)                 # (B,)
     C_bar = C_mat.mean(axis=0)                 # (B,)
 
-    # Observed difference = medians of CRE and Control boot max (matches your summary centering)
+    # Observed difference = medians of CRE and Control boot max (matches summary centering)
     obs_diff = float(np.median(A_bar) - np.median(C_bar))
     
     # NEW ⬇︎ Build combined NULL distribution (average per-rep null diffs across reps)
@@ -3884,7 +4591,7 @@ def _bootstrap_row_fn(row: dict, bundle: dict, **kw):
     # NEW ⬇︎ Two-sided empirical p-value against null
     p = float((np.sum(np.abs(NULL_bar) >= np.abs(obs_diff)) + 1) / (NULL_bar.size + 1))
 
-    # Reportables (matching your old summaries)
+    # Reportables (matching old summaries)
     test_statistic = float(np.median(A_bar))                       # q50 of CRE bootstrap max across CTs
     fold_change    = float((np.median(A_bar) + pc) / (np.median(C_bar) + pc))
 
@@ -4080,14 +4787,13 @@ class HypothesisTester:
 
         # build the bundle once
         bundle = self._make_bundle(hypotheses=HypothesisSet.from_dataframe(df_h),
-                                   models_or_counts=models_or_counts,
-                                   client=client, **self.kw)
+                                   models_or_counts=models_or_counts, **self.kw)
 
         recs = df_h.to_dict(orient="records")
         if client is not None:
             bundle_f = client.scatter(bundle, broadcast=True)
             # futures = client.map(self._row_fn, recs, repeat(bundle_f), pure=True)
-            futures = [client.submit(self._row_fn, r, bundle_f) for r in recs]
+            futures = [client.submit(self._row_fn, r, bundle_f, **self.kw) for r in recs]
             results = client.gather(futures)
         else:
             results = [self._row_fn(r, bundle, **self.kw) for r in recs]
@@ -4305,11 +5011,10 @@ class de_novo_simulation:
             json.dump(normal_dump,f,indent=4)
         
         # orthos
-        #clobber_mkdir(path/"orthos")
-        #for i, orth in enumerate(self.orthos):
-        #    orth.save(path=path/"orthos",
-        #            name=str(i),
-        #            strip_training_data=True)
+        clobber_mkdir(path/"orthos")
+        for i, orth in enumerate(self.orthos):
+            orth.save(path=path/"orthos",
+                    name=str(i))
         
         #dataframes
         for var in self._df_vars:
@@ -4630,7 +5335,14 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 how="left")
 
         #check to make sure there were no NAs introduced
-        assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+        #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
+
+        bad = cells_df[cells_df.isna().any(axis=1)]
+        assert bad.empty, (
+            "DataFrame contains NA values in these rows:\n"
+            f"{bad}\n\n"
+            "Check that cell type & CRE names match across parameters."
+        )
         
         return cells_df
 

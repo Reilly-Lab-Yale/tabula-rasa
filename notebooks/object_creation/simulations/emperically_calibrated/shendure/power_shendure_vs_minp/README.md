@@ -1,0 +1,1 @@
+This directory contains notebooks required to run power analysis for "minP vs cre of interest" comparisons for the shendure dataset. This provides conetxt to "is this a CRE" tests.
