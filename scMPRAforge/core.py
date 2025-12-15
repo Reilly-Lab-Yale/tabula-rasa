@@ -1927,8 +1927,8 @@ class ortho:
 
         by_ct = {}
         by_cr = {}
-
-        # Very Lame retry hack due to extremely rare failures in covariance estimation
+        #Very Lame retry hack due to extremely rare failures in _hessian_se
+        #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         with dask.annotate(retries=10):
             for ct in self.by_cell_type.model.keys():
                 model_f = self.by_cell_type.model[ct]
