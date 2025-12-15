@@ -4738,18 +4738,30 @@ class de_novo_simulation:
     The directory name, get_metadata and save_metadata functions
     can be used to store arbitrary information about the simulation.
 
+    'de_novo_simulation' does not enforce a metadata structure, but other
+    code can access it progrematically & enforce whatever standard.
+
     The general workflow is:
     - initalize_gt; sets the ground truth from which simulation will be performed
-    - gamut; runs:
+    - gamut; automatically runs:
         - _simulate_transfection
         - _simulate_transcription
         - _realize_simulations
     Then optionally
     - fit_orthos
-    - precompute_wald (OPG or )
+    - precompute_wald (OPG or sandwitch)
+    Then, for each hypothesis test / method
+    - test
+    Summarization can be performed & saved with
+    - PRC_aggregated
+        - Also saves AUPRC and other metrics to state
+    - volcano
+    - p_value_calibration
+    - gt_vs_p
     
-    Progress is automatically saved. You only need to manually call `save()`
-    if you manually modify the object in some way, like modifying the `state` dataframe.
+    Plots are lightweight to generate and are not saved.
+
+    Progress is automatically saved.
 
     Efficiency could be improved by avoiding saving information multiple times,
     but we sacrifice a little disc space to enhance reproducability & debugging
@@ -4773,49 +4785,59 @@ class de_novo_simulation:
         else:
             logger.info(f"No 'state.parquet' found for '{name}'. Initalizing empty object.")
             self.state=pd.DataFrame()
-            self.set_metadata({})
-            self.set_threads(THREADS_DEFAULT)
+            
+            self.set_state_field("threads",THREADS_DEFAULT)
 
-    def set_metadata(self,meta:dict):
-        """
-        Sets metadata dict.
-        This is just for little scalars describing the simulation batch,
-        don't save serious data here.
-        """
-        self.state["metadata"]=[meta]
+    def set_state_field(self,field,value):
+        self.state[field]=[value]
         self.save()
     
-    def get_metadata(self):
-        """
-        Returns the metadata dict.
-        """
-        return self.state["metadata"][0]
+    def get_state_field(self,key,value):
+        return self.state[field][0]
     
     def initalize_gt(experiment_bounds:Bounds,
                  ground_truth:pd.DataFrame,
-                 library:pd.DataFrame):
-        #load in 
+                 libraries:pd.DataFrame):
+        self.experiment_bounds
         self.save()
     
-    def set_threads(self,threads:int):
-        self.state["threads"]=[threads]
-        self.save()
+    @unimplemented
+    def gamut(self,library_mapping="one_library"):
+        """
+        library_mapping takes one of
+        - 'one_library': all replicates are simulated from one library
+            - e.g. simulating from a real library
+        - 'corresponding': all replicates are simulated from a corresponding library
+            - e.g. prospectively evaluating theoretical performace under some experimental setup
+        - A list of ints: this is just passed through. The list should be of length of the
+          number of simulations, and each element is an int pointing to a library.
+        """
+        if library_mapping=="one_library":
+            pass
+        elif library_mapping=="corresponding":
+            pass
+        elif isinstance(library_mapping, list) and all(isinstance(x, int) for x in library_mapping):
+            #check if length is correcr
+            #check if any ints fall outside the appropriate range 
+            pass
+        else:
+            raise ValueError(f"Unrecognized library mapping {library_mapping}")
+    
+    @unimplemented
+    def _simulate_transfection(self,library_mapping):
+        pass
+
+    @unimplemented
+    def _simulate_transcription(self):
+        pass
+
+    @unimplemented
+    def _realize_simulations(self):
+        pass
     
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
-
-    @unimplemented
-    def get_status(self):
-        """
-        Prints a human-readable description of the status of this batch of simulations. 
-        """
-        #_get_status_hypothesis_test
-        pass
-    
-    @unimplemented
-    def _get_status_hypothesis_test(self,hypo):
-        pass
 
     @unimplemented
     def check_sync(self):
