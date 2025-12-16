@@ -4770,7 +4770,33 @@ class de_novo_simulation:
     to another location keeps the object self-contained...) 
     """
     
-    def __init__(self,location,name):
+    def __init__(self,location,name,
+        libraries:list[pd.DataFrame]=None,
+        library_mapping:str | list[int]=None,
+        n_sims:int=None,
+        experiment_bounds:Bounds=None,
+        ground_truth:pd.DataFrame=None):
+        """
+        'location' and 'name' are always mandatory. 
+        The rest of the parameters are optional iff loading a previously initalized simulation batch.
+        Otherwise they are also mandatory.
+
+        'libraries' takes a list of 1+ MPRA libraries in standard format.
+
+        'experiment_bounds' takes a 'Bounds' object describing the experiment. You may wish to use one of the
+        presets extracted from emperical data...
+        
+        'library_mapping' takes one of
+        - the string 'one_library': all replicates are simulated from one library
+            - e.g. simulating from a real library
+        - the string 'corresponding': all replicates are simulated from a corresponding library
+            - e.g. prospectively evaluating theoretical performace under some experimental setup
+        - A list of ints: this is just passed through. The list should be of length of the
+          number of simulations, and each element is an int pointing to a library.
+
+        'n_sims'
+        - number of sims.
+        """
         self.location = Path(location)
         self.name = Path(name)
         
@@ -4782,11 +4808,68 @@ class de_novo_simulation:
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
             self.state=pd.read_parquet(statep)
+
         else:
-            logger.info(f"No 'state.parquet' found for '{name}'. Initalizing empty object.")
-            self.state=pd.DataFrame()
+            logger.info(f"No 'state.parquet' found for '{name}'. Initalizing new object.")
             
+            required = ("libraries", 
+                        "library_mapping",
+                        "n_sims",
+                        "experiment_bounds",
+                        "ground_truth")
+            
+            
+            #if any(locals()[k] is None for k in required):
+            #    raise TypeError(
+            #        f"All of {required} are required when initalizing a new object."
+            #    )
+            
+            self.state=pd.DataFrame()
             self.set_state_field("threads",THREADS_DEFAULT)
+
+            #if `libraries` is a single dataframe, put it in a one-element list. 
+            if isinstance(libraries, pd.DataFrame):
+                libraries=[libraries]
+
+            #sanity checks on, and setting of library mapping 
+
+            if library_mapping=="one_library" or library_mapping == "corresponding":
+                self.set_state_field("library_mapping",library_mapping)
+            elif isinstance(library_mapping, list):
+                if all(isinstance(x, int) for x in library_mapping):
+                    #check if length is correct
+                    if len(library_mapping)!=n_sims:
+                        raise ValueError(f"n_sims={n_sims}, =/= len(library_mapping)={len(library_mapping)}")
+                    #check if any ints fall outside the appropriate range 
+                    for i in library_mapping:
+                        if i<0 or i>len(libraries)+1:
+                            raise ValueError("At least one of the ints in your library mapping refers to a library you do not have")
+                    #all the checks passed!
+                    self.set_state_field("library_mapping",library_mapping)
+                else:
+                    raise ValueError(f"Library mapping {library_mapping}, does not contain ints.")
+            else:
+                raise ValueError(f"Unrecognized library mapping {library_mapping}")
+            
+            
+            
+            #save the passed libraries
+            libp=fullp/"libraries"
+            libp.mkdir(parents=True, exist_ok=True)
+
+            for idx,lib in enumerate(libraries):
+                lib.to_csv(libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+            
+            #saved the passed bounds object
+            experiment_bounds.to_tgz(fullp/"experiment_bounds.tgz")
+
+            #save the ground truth
+            ground_truth.to_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+
+            #save the state
+            self.save()
+
+            
 
     def set_state_field(self,field,value):
         self.state[field]=[value]
@@ -4803,25 +4886,8 @@ class de_novo_simulation:
     
     @unimplemented
     def gamut(self,library_mapping="one_library"):
-        """
-        library_mapping takes one of
-        - 'one_library': all replicates are simulated from one library
-            - e.g. simulating from a real library
-        - 'corresponding': all replicates are simulated from a corresponding library
-            - e.g. prospectively evaluating theoretical performace under some experimental setup
-        - A list of ints: this is just passed through. The list should be of length of the
-          number of simulations, and each element is an int pointing to a library.
-        """
-        if library_mapping=="one_library":
-            pass
-        elif library_mapping=="corresponding":
-            pass
-        elif isinstance(library_mapping, list) and all(isinstance(x, int) for x in library_mapping):
-            #check if length is correcr
-            #check if any ints fall outside the appropriate range 
-            pass
-        else:
-            raise ValueError(f"Unrecognized library mapping {library_mapping}")
+        pass
+        
     
     @unimplemented
     def _simulate_transfection(self,library_mapping):
