@@ -4833,25 +4833,27 @@ class de_novo_simulation:
 
             #sanity checks on, and setting of library mapping 
 
-            if library_mapping=="one_library" or library_mapping == "corresponding":
-                self.set_state_field("library_mapping",library_mapping)
+            if library_mapping=="one_library":
+                if not len(libraries)==1: raise ValueError(f"Specified one_library, but passed {len(libraries)} libraries.")
+                self.set_state_field("library_mapping",[0 for i in range(0,n_sims)])
+            
+            elif library_mapping == "corresponding":
+                if not len(libraries)==n_sims: raise ValueError(f"Corresponding library mapping requires n_sims to be the same as the number of libraries.")
+                self.set_state_field("library_mapping",[i for i in range(0,n_sims)])
+
             elif isinstance(library_mapping, list):
                 if all(isinstance(x, int) for x in library_mapping):
                     #check if length is correct
-                    if len(library_mapping)!=n_sims:
-                        raise ValueError(f"n_sims={n_sims}, =/= len(library_mapping)={len(library_mapping)}")
+                    if len(library_mapping)!=n_sims: raise ValueError(f"n_sims={n_sims}, =/= len(library_mapping)={len(library_mapping)}")
                     #check if any ints fall outside the appropriate range 
                     for i in library_mapping:
-                        if i<0 or i>len(libraries)+1:
-                            raise ValueError("At least one of the ints in your library mapping refers to a library you do not have")
+                        if i<0 or i>len(libraries)+1: raise ValueError("At least one of the ints in your library mapping refers to a library you do not have")
                     #all the checks passed!
                     self.set_state_field("library_mapping",library_mapping)
                 else:
                     raise ValueError(f"Library mapping {library_mapping}, does not contain ints.")
             else:
                 raise ValueError(f"Unrecognized library mapping {library_mapping}")
-            
-            
             
             #save the passed libraries
             libp=fullp/"libraries"
