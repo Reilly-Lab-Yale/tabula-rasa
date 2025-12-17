@@ -4732,17 +4732,15 @@ class de_novo_simulation:
     represent n simulated replicates of one experimental setup.
     For different parameters, initalize multiple objects.
 
-    Initalized over a directory, where it reads and writes...
-    Remembers state in a one row `state` dataframe.
-
-    The directory name, get_metadata and save_metadata functions
-    can be used to store arbitrary information about the simulation.
-
-    'de_novo_simulation' does not enforce a metadata structure, but other
-    code can access it progrematically & enforce whatever standard.
+    Initalized over a directory, where it reads and writes.
+    Directory is specififed by 'location', 'name' pair (pointing to directory
+    location/name). 'location', 'name' and derived paths are stored 
+    in self object but never saved to disc, so you can rename or move
+    the simulation as you please.
 
     The general workflow is:
-    - initalize_gt; sets the ground truth from which simulation will be performed
+    - __init__; sets the initial simulation parameters
+        OR loads a simulation previously initalized.
     - gamut; automatically runs:
         - _simulate_transfection
         - _simulate_transcription
@@ -4759,15 +4757,16 @@ class de_novo_simulation:
     - p_value_calibration
     - gt_vs_p
     
-    Plots are lightweight to generate and are not saved.
-
     Progress is automatically saved.
+    
+    Plots are lightweight to generate and are not saved.
 
     Efficiency could be improved by avoiding saving information multiple times,
     but we sacrifice a little disc space to enhance reproducability & debugging
     (e.g. saving twice allows us to keep both the filtered and unfiltered 
     versions of the datasets, e.g. saving the ground-truth locally instead of a reference
-    to another location keeps the object self-contained...) 
+    to another location keeps the object self-contained...) Disc is cheap and compression 
+    makes it cheaper.
     """
     
     def __init__(self,location,name,
@@ -4802,8 +4801,15 @@ class de_novo_simulation:
         
         fullp=(self.location/name)
         fullp.mkdir(parents=True, exist_ok=True)
-
         statep=fullp/"state.parquet"
+        
+        
+        #save in object so other functions can access
+        self.fullp=fullp
+        self.statep=statep
+        self.descripd=fullp/"descriptions"
+        libp=fullp/"libraries"
+        self.libp=libp
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
@@ -4812,16 +4818,23 @@ class de_novo_simulation:
         else:
             logger.info(f"No 'state.parquet' found for '{name}'. Initalizing new object.")
             
+            self.state=pd.DataFrame()
+            
             required = ("libraries", 
                         "library_mapping",
                         "n_sims",
                         "experiment_bounds",
                         "ground_truth")
             
-            if None in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]:
+            #lightweight, just save.
+            self.set_state_field("n_sims",n_sims)
+            
+            if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
                 raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
             
-            self.state=pd.DataFrame()
+            #no parameter for threads, since user will probably want to set this as
+            #a global default. Unlikely they will want different thread counts for
+            #different objects, and if they do, they can just use `set_state_field`.
             self.set_state_field("threads",THREADS_DEFAULT)
 
             #if `libraries` is a single dataframe, put it in a one-element list. 
@@ -4853,7 +4866,6 @@ class de_novo_simulation:
                 raise ValueError(f"Unrecognized library mapping {library_mapping}.")
             
             #save the passed libraries
-            libp=fullp/"libraries"
             libp.mkdir(parents=True, exist_ok=True)
 
             for idx,lib in enumerate(libraries):
@@ -4870,11 +4882,65 @@ class de_novo_simulation:
 
             
 
+    def _simulate_transfection(self,client):
+        """
+        Simulates transfection. Most of the logic
+        offloaded to non-method function _simulate_transfection.
+        """
+        n_sims=self.get_state_field("n_sims")
+
+        #load ground truth
+        ground_truth=pd.read_csv(self.fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+
+        #load the experiment bounds
+        experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
+
+        #create an output directory for the descriptions
+        self.descripd.mkdir(parents=True, exist_ok=True)
+        
+        def _simulate_transfection_helper(experiment_bounds,
+                    ground_truth,
+                    library,
+                    pth):
+            """
+            Little wrappper for _simulate_transfection
+            which handles output to disc and returns a `True` boolean when writing is done
+            """
+            transfected=_simulate_transfection(
+                    experiment_bounds=experiment_bounds,
+                    ground_truth=ground_truth,
+                    library=lib)
+            
+            transfected.to_csv(pth,
+                    sep="\t",
+                    compression="gzip")
+            
+            return True
+
+        self.transfection_tracker=[]
+        
+        for idx in range(0,n_sims):
+            #load the corresponding library
+            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+
+            #simulate transfection using the helper function
+            ret=client.submit(_simulate_transfection_helper,
+                experiment_bounds=experiment_bounds,
+                ground_truth=ground_truth,
+                library=lib,
+                pth=self.descripd/f"{idx}.tsv.gz")
+            
+            self.transfection_tracker.append(ret)
+
+            
+            
+            
+
     def set_state_field(self,field,value):
         self.state[field]=[value]
         self.save()
     
-    def get_state_field(self,key,value):
+    def get_state_field(self,field):
         return self.state[field][0]
     
     def initalize_gt(experiment_bounds:Bounds,
@@ -4884,12 +4950,7 @@ class de_novo_simulation:
         self.save()
     
     @unimplemented
-    def gamut(self,library_mapping="one_library"):
-        pass
-        
-    
-    @unimplemented
-    def _simulate_transfection(self,library_mapping):
+    def gamut(self):
         pass
 
     @unimplemented
@@ -4903,10 +4964,6 @@ class de_novo_simulation:
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
-
-    @unimplemented
-    def check_sync(self):
-        pass
 
 class de_novo_simulation_old:
     """
@@ -5435,7 +5492,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     #handle case where mu is zero
     ret.loc[ret["mu"]==0.0,"p"]=0.0
 
-    #finally, we convert to a dask dataframe & return 
     return ret
 
 
