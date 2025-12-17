@@ -4818,11 +4818,8 @@ class de_novo_simulation:
                         "experiment_bounds",
                         "ground_truth")
             
-            
-            #if any(locals()[k] is None for k in required):
-            #    raise TypeError(
-            #        f"All of {required} are required when initalizing a new object."
-            #    )
+            if None in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]:
+                raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
             
             self.state=pd.DataFrame()
             self.set_state_field("threads",THREADS_DEFAULT)
@@ -4853,7 +4850,7 @@ class de_novo_simulation:
                 else:
                     raise ValueError(f"Library mapping {library_mapping}, does not contain ints.")
             else:
-                raise ValueError(f"Unrecognized library mapping {library_mapping}")
+                raise ValueError(f"Unrecognized library mapping {library_mapping}.")
             
             #save the passed libraries
             libp=fullp/"libraries"
