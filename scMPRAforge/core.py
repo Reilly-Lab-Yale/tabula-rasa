@@ -4732,6 +4732,9 @@ class de_novo_simulation:
     represent n simulated replicates of one experimental setup.
     For different parameters, initalize multiple objects.
 
+    Takes an MPRA library. To generate a synthetic library, create
+    a ground_truth and use simulate_library.
+
     Initalized over a directory, where it reads and writes.
     Directory is specififed by 'location', 'name' pair (pointing to directory
     location/name). 'location', 'name' and derived paths are stored 
@@ -4756,8 +4759,13 @@ class de_novo_simulation:
     - volcano
     - p_value_calibration
     - gt_vs_p
-    
-    Progress is automatically saved.
+    Once you are done you can 
+    - save
+
+    Note that saving is blocking, but generally the object is written
+    to dump data to disc as it goes, avoiding keeping too much data in memory. So 
+    if you are running many simulations, you can queue them all up, then
+    just call save on all of them in a loop or similar.
     
     Plots are lightweight to generate and are not saved.
 
@@ -4769,7 +4777,7 @@ class de_novo_simulation:
     makes it cheaper.
     """
     
-    def __init__(self,location,name,
+    def __init__(self,location,name,client,
         libraries:list[pd.DataFrame]=None,
         library_mapping:str | list[int]=None,
         n_sims:int=None,
@@ -4798,6 +4806,7 @@ class de_novo_simulation:
         """
         self.location = Path(location)
         self.name = Path(name)
+        self.client = client
         
         fullp=(self.location/name)
         fullp.mkdir(parents=True, exist_ok=True)
@@ -4813,12 +4822,26 @@ class de_novo_simulation:
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
+
+            #load state
             self.state=pd.read_parquet(statep)
 
+            #load futures tracker
+            rawfut=pd.read_csv(fullp/"futures.tsv.gz",sep="\t",compression="gzip", index_col=0)
+            flat=rawfut.to_numpy().ravel()
+
+            futures = [client.submit(lambda x: x, v, pure=False) for v in flat]
+            arr = pd.array(futures, dtype="object").to_numpy().reshape(rawfut.shape)
+            
+            self.futures=pd.DataFrame(arr,
+                                      index=rawfut.index,
+                                      columns=rawfut.columns)
         else:
             logger.info(f"No 'state.parquet' found for '{name}'. Initalizing new object.")
             
-            self.state=pd.DataFrame()
+            self.state = pd.DataFrame()
+            
+            self.futures = pd.DataFrame(index=range(n_sims))
             
             required = ("libraries", 
                         "library_mapping",
@@ -4880,9 +4903,7 @@ class de_novo_simulation:
             #save the state
             self.save()
 
-            
-
-    def _simulate_transfection(self,client):
+    def _simulate_transfection(self):
         """
         Simulates transfection. Most of the logic
         offloaded to non-method function _simulate_transfection.
@@ -4917,24 +4938,22 @@ class de_novo_simulation:
             
             return True
 
-        self.transfection_tracker=[]
+        transfection_tracker=[]
         
         for idx in range(0,n_sims):
             #load the corresponding library
             lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
 
-            #simulate transfection using the helper function
-            ret=client.submit(_simulate_transfection_helper,
+            #submit a job to simulate transfection using the helper function
+            ret=self.client.submit(_simulate_transfection_helper,
                 experiment_bounds=experiment_bounds,
                 ground_truth=ground_truth,
                 library=lib,
                 pth=self.descripd/f"{idx}.tsv.gz")
             
-            self.transfection_tracker.append(ret)
-
-            
-            
-            
+            transfection_tracker.append(ret)
+        
+        self.futures["transfection"]=transfection_tracker
 
     def set_state_field(self,field,value):
         self.state[field]=[value]
@@ -4943,11 +4962,6 @@ class de_novo_simulation:
     def get_state_field(self,field):
         return self.state[field][0]
     
-    def initalize_gt(experiment_bounds:Bounds,
-                 ground_truth:pd.DataFrame,
-                 libraries:pd.DataFrame):
-        self.experiment_bounds
-        self.save()
     
     @unimplemented
     def gamut(self):
@@ -4964,6 +4978,18 @@ class de_novo_simulation:
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
+
+        #wait until all queued steps are done
+        fut=self.futures.to_numpy().ravel()
+        dask.distributed.wait(fut)
+        
+        results = [f.result() for f in fut]
+        
+        arr = pd.array(results, dtype="bool").to_numpy().reshape(self.futures.shape)
+        resolved = pd.DataFrame(arr, index=self.futures.index, columns=self.futures.columns)
+
+        resolved.to_csv(self.fullp/"futures.tsv.gz",sep="\t",compression="gzip")
+
 
 class de_novo_simulation_old:
     """
