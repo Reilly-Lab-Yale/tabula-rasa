@@ -4782,9 +4782,12 @@ class de_novo_simulation:
         library_mapping:str | list[int]=None,
         n_sims:int=None,
         experiment_bounds:Bounds=None,
-        ground_truth:pd.DataFrame=None):
+        ground_truth:pd.DataFrame=None,
+        negative_controls=["reference"],
+        reference_cell_type="reference"
+        ):
         """
-        'location' and 'name' are always mandatory. 
+        'location', 'name' and 'client' are always mandatory. 
         The rest of the parameters are optional iff loading a previously initalized simulation batch.
         Otherwise they are also mandatory.
 
@@ -4804,6 +4807,7 @@ class de_novo_simulation:
         'n_sims'
         - number of sims.
         """
+
         self.location = Path(location)
         self.name = Path(name)
         self.client = client
@@ -4812,13 +4816,13 @@ class de_novo_simulation:
         fullp.mkdir(parents=True, exist_ok=True)
         statep=fullp/"state.parquet"
         
-        
         #save in object so other functions can access
         self.fullp=fullp
         self.statep=statep
         self.descripd=fullp/"descriptions"
         libp=fullp/"libraries"
         self.libp=libp
+        self.scmpradatp=fullp/"simulated_scmpra"
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
@@ -4848,9 +4852,12 @@ class de_novo_simulation:
                         "n_sims",
                         "experiment_bounds",
                         "ground_truth")
+                        
             
             #lightweight, just save.
             self.set_state_field("n_sims",n_sims)
+            self.set_state_field("reference_cell_type",reference_cell_type)
+            self.set_state_field("negative_controls",negative_controls)
             
             if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
                 raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
@@ -4962,14 +4969,69 @@ class de_novo_simulation:
     def get_state_field(self,field):
         return self.state[field][0]
     
-    
-    @unimplemented
-    def gamut(self):
-        pass
 
-    @unimplemented
+    def gamut(self):
+        self._simulate_transfection()
+        self._simulate_transcription()
+
     def _simulate_transcription(self):
-        pass
+        """
+        Simulates transcription.
+        Most of the logic is offloaded to the non-method simulate_from_description.
+        """
+        #check to make sure previous step has at least been queued...
+        if "transfection" not in self.futures.columns:
+                raise RuntimeError("Tried to simulate transcription, but transfection has not yet been simulated!")
+        
+        tfection_futures=self.futures["transfection"].to_list()
+
+        #make output directory
+        self.scmpradatp.mkdir(exist_ok=True)
+        
+        n_sims=self.get_state_field("n_sims")
+
+        #helper function to be submitted to the cluster...
+        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type):
+            
+            #load a description
+            description=pd.read_csv(description_path,
+                                    sep="\t",
+                                    compression="gzip")
+
+            working=simulate_from_description(description)
+            working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
+            scd=scMPRA_data()
+    
+            scd.data=working
+            
+            scd.set_negative_controls(negative_controls)
+            scd.set_reference_cell(reference_cell_type)
+            scd.flag_synthetic()
+            scd.overtransfected()
+            scd.flatten_overtransfection()
+
+            ###to disc
+            scd.to_parquet(path)
+
+            return True
+            
+        
+        transcription_tracker=[]
+        #main loop
+        for idx in range(0,n_sims):
+            #compute the output path
+            path=self.scmpradatp/f"{idx}.scmpra"
+            #submit the job
+            r=self.client.submit(_simulate_transcription_helper,
+                               tfection_fut=tfection_futures[idx],
+                               description_path=self.descripd/f"{idx}.tsv.gz",
+                               path=path,
+                               negative_controls=self.get_state_field("negative_controls"),
+                               reference_cell_type=self.get_state_field("reference_cell_type"))
+            #append the 
+            transcription_tracker.append(r)
+        
+        self.futures["transcription"]=transcription_tracker
 
     @unimplemented
     def _realize_simulations(self):
@@ -4988,7 +5050,9 @@ class de_novo_simulation:
         arr = pd.array(results, dtype="bool").to_numpy().reshape(self.futures.shape)
         resolved = pd.DataFrame(arr, index=self.futures.index, columns=self.futures.columns)
 
-        resolved.to_csv(self.fullp/"futures.tsv.gz",sep="\t",compression="gzip")
+        resolved.to_csv(self.fullp/"futures.tsv.gz",
+                sep="\t",
+                compression="gzip")
 
 
 class de_novo_simulation_old:
@@ -5371,15 +5435,7 @@ def _wrap_helper(df,negative_controls,reference_cell_type):
     Helper function for class de_novo_simulation.
     Converts a simulated DF to an scMPRA object.
     """
-    ret=scMPRA_data()
     
-    ret.data=df
-    
-    ret.set_negative_controls(negative_controls)
-    ret.set_reference_cell(reference_cell_type)
-    ret.flag_synthetic()
-    ret.overtransfected()
-    ret.flatten_overtransfection()
     return ret
 
 def _ortho_helper(data:scMPRA_data):
