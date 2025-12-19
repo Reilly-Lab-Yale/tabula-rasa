@@ -5055,31 +5055,6 @@ class de_novo_simulation:
                 compression="gzip")
 
 
-
-def _wrap_helper(df,negative_controls,reference_cell_type):
-    """
-    Helper function for class de_novo_simulation.
-    Converts a simulated DF to an scMPRA object.
-    """
-    
-    return ret
-
-def _ortho_helper(data:scMPRA_data):
-    """
-    Helper function for de_novo_simulation._create_ortho_for_replicate
-    """
-    client=get_client()
-    data=data.result()
-    data.ortho_filter()
-    primordial=ortho()
-    primordial.criss_cross(client=client,
-                            dat=data)
-    primordial.extract_params(client)
-    return primordial
-    
-
-
-
 def _test_helper(test,
         hypothesis_set,
         test_data=None,
