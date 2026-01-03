@@ -4732,7 +4732,7 @@ class de_novo_simulation:
     represent n simulated replicates of one experimental setup.
     For different parameters, initalize multiple objects.
 
-    Takes an MPRA library. To generate a synthetic library, create
+    Takes MPRA libraries in standard form. To generate a synthetic libraries, create
     a ground_truth and use simulate_library.
 
     Initalized over a directory, where it reads and writes.
@@ -4773,8 +4773,8 @@ class de_novo_simulation:
     but we sacrifice a little disc space to enhance reproducability & debugging
     (e.g. saving twice allows us to keep both the filtered and unfiltered 
     versions of the datasets, e.g. saving the ground-truth locally instead of a reference
-    to another location keeps the object self-contained...) Disc is cheap and compression 
-    makes it cheaper.
+    to another location keeps the object self-contained...) I try to keep things 
+    gzip compressed to offset this.
     """
     
     def __init__(self,location,name,client,
@@ -4788,6 +4788,7 @@ class de_novo_simulation:
         ):
         """
         'location', 'name' and 'client' are always mandatory. 
+        (client *can* be set to None, but only for summary functions: graphing PRC, computing confusion matricies, etc...)
         The rest of the parameters are optional iff loading a previously initalized simulation batch.
         Otherwise they are also mandatory.
 
@@ -4823,6 +4824,7 @@ class de_novo_simulation:
         libp=fullp/"libraries"
         self.libp=libp
         self.scmpradatp=fullp/"simulated_scmpra"
+        self.orthod=fullp/"orthos"
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
@@ -4861,11 +4863,6 @@ class de_novo_simulation:
             
             if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
                 raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
-            
-            #no parameter for threads, since user will probably want to set this as
-            #a global default. Unlikely they will want different thread counts for
-            #different objects, and if they do, they can just use `set_state_field`.
-            self.set_state_field("threads",THREADS_DEFAULT)
 
             #if `libraries` is a single dataframe, put it in a one-element list. 
             if isinstance(libraries, pd.DataFrame):
@@ -4969,11 +4966,60 @@ class de_novo_simulation:
     def get_state_field(self,field):
         return self.state[field][0]
     
-
     def gamut(self):
         self._simulate_transfection()
         self._simulate_transcription()
 
+    def fit_orthos(self):
+        """
+        Applies ortho filtering fits & saves orthos for all simulated replicates.
+        Note that this can spawn some very heavy functions.
+        """
+        #check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError("Tried to fit orthos, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
+        
+        #pull out the futures tracking 
+        tscription_futures=self.futures["transcription"].to_list()
+
+        #make output directory
+        self.orthod.mkdir(exist_ok=True)
+
+        #function to submit
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output,name_output):
+            
+            #data=data.result()
+            #load data
+            data=scMPRA_data.from_parquet(path_scmpradat)
+            #filter
+            data.ortho_filter()
+            #create an ortho
+            client=get_client()
+            primordial=ortho()
+            primordial.criss_cross(client=client,
+                                    dat=data)
+            primordial.extract_params(client)
+
+            #write the ortho to disc
+            #could save space with strip_training_data=True
+            primordial.save(path=path_output,
+                            name=name_output)
+            
+            return True
+        
+        #loop over
+        ortho_tracker=[]
+        #main loop
+        for idx in range(0,self.get_state_field("n_sims")):
+            
+            r=self.client.submit(_fit_ortho_helper,
+                            tscription_future=tscription_futures[idx],
+                            path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
+                            path_output=self.orthod,
+                            name_output=str(idx))
+            ortho_tracker.append(r)
+        self.futures["ortho"]=ortho_tracker
+    
     def _simulate_transcription(self):
         """
         Simulates transcription.
@@ -5010,12 +5056,10 @@ class de_novo_simulation:
             scd.overtransfected()
             scd.flatten_overtransfection()
 
-            ###to disc
             scd.to_parquet(path)
 
             return True
             
-        
         transcription_tracker=[]
         #main loop
         for idx in range(0,n_sims):
@@ -5033,9 +5077,6 @@ class de_novo_simulation:
         
         self.futures["transcription"]=transcription_tracker
 
-    @unimplemented
-    def _realize_simulations(self):
-        pass
     
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
