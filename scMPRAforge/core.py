@@ -4970,6 +4970,10 @@ class de_novo_simulation:
         self._simulate_transfection()
         self._simulate_transcription()
 
+    def precompute_wald(self,variant):
+        if variant !="OPG" and variant !="sandwitch":
+            raise ValueError(f"Unrecognized variant {variant}")
+
     def fit_orthos(self):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
@@ -5077,7 +5081,6 @@ class de_novo_simulation:
         
         self.futures["transcription"]=transcription_tracker
 
-    
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
