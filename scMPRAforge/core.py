@@ -4872,7 +4872,7 @@ class de_novo_simulation:
         - _realize_simulations
     Then optionally
     - fit_orthos
-    - precompute_wald (OPG or sandwitch)
+    - precompute_wald (OPG or sandwich)
     Then, for each hypothesis test / method
     - test
     Summarization can be performed & saved with
@@ -4947,6 +4947,8 @@ class de_novo_simulation:
         self.libp=libp
         self.scmpradatp=fullp/"simulated_scmpra"
         self.orthod=fullp/"orthos"
+        self.sandwichd=fullp/"sandwich"
+        self.opgd=fullp/"opg"
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
@@ -5092,14 +5094,62 @@ class de_novo_simulation:
         self._simulate_transfection()
         self._simulate_transcription()
 
-    def precompute_wald(self,variant):
-        if variant !="OPG" and variant !="sandwitch":
-            raise ValueError(f"Unrecognized variant {variant}")
+    def precompute_wald(self,cov_method="sandwich"):
+        """
+        cov_method : {"sandwich", "opg"}
+        - See ortho.precompute_wald for more information.
+        """
+        
+        if "ortho" not in self.futures.columns:
+            raise RuntimeError("Cannot precompute wald if orthos have not been fit. You want to call `fit_orthos`.")
+
+        #pull out the futures tracking 
+        ortho_futures=self.futures["ortho"].to_list()
+
+        #pick output dir destination based on covariance matrix estimation procedure
+        if cov_method =="opg":
+            precompd=self.opgd
+        if cov_method =="sandwich":
+            precompd=self.sandwichd
+        else:
+            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
+        
+        #make output directory
+        precompd.mkdir(exist_ok=True)
+
+        #function to submit
+        def _precomp_wald_helper(ortho_future, path_input, path_output, name):
+            client=get_client()
+            #load the ortho
+            orth=ortho.load(client,
+                path=path_input,
+                name=name
+            )
+            #perform precompute
+            orth.precompute_wald(client,cov_method=cov_method)
+            #save to disc
+            orth.save(path=path_output,
+                    name=name)
+            
+            return True
+
+        precomp_tracker=[]
+
+        for idx in range(0,self.get_state_field("n_sims")):
+            
+            r=self.client.submit(_precomp_wald_helper,
+                                ortho_future=ortho_futures[idx],
+                                path_input=self.orthod,
+                                path_output=precompd,
+                                name=str(idx))
+            precomp_tracker.append(r)
+        
+        self.futures[cov_method]=precomp_tracker
 
     def fit_orthos(self):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
-        Note that this can spawn some very heavy functions.
+        Note that this can spawn some very heavy functions!
         """
         #check to make sure previous step has at least been queued.
         if "transcription" not in self.futures.columns:
@@ -5112,7 +5162,7 @@ class de_novo_simulation:
         self.orthod.mkdir(exist_ok=True)
 
         #function to submit
-        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output,name_output):
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output):
             
             #data=data.result()
             #load data
