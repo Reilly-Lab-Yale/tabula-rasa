@@ -5109,7 +5109,7 @@ class de_novo_simulation:
         #pick output dir destination based on covariance matrix estimation procedure
         if cov_method =="opg":
             precompd=self.opgd
-        if cov_method =="sandwich":
+        elif cov_method =="sandwich":
             precompd=self.sandwichd
         else:
             raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
