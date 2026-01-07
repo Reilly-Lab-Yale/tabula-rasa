@@ -4935,7 +4935,7 @@ class de_novo_simulation:
         self.location = Path(location)
         self.name = Path(name)
         self.client = client
-        self.test_queue = []
+        self.testqueue = []
         
         fullp=(self.location/name)
         fullp.mkdir(parents=True, exist_ok=True)
@@ -5264,7 +5264,10 @@ class de_novo_simulation:
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
 
-        #wait until all queued steps are done
+        #block until all tests are done running
+        dummy = [f.result() for f in self.testqueue]
+        
+        #block until all queued steps are done
         fut=self.futures.to_numpy().ravel()
         dask.distributed.wait(fut)
         
@@ -5291,17 +5294,40 @@ class de_novo_simulation:
             raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
         
         hypotheses=HypothesisSet.from_tsv(hypof)
+
+        testd=hypod/"mwu"
+
+        testd.mkdir()
         
-        def _mwu_helper(tscription_future):
+        #pull out the futures tracking 
+        tscription_futures=self.futures["transcription"].to_list()
+        
+        #little helper function to shuttle to workers
+        def _mwu_helper(tscription_future,
+                        path_scmpradat,
+                        path_output,
+                        hypothesis_set):
+            #load the data
+            dat = scMPRA_data.from_parquet(path_scmpradat)
             tester = HypothesisTester("mwu")
-            results = tester.run(hypothesis_set, test_data)
+            results = tester.run(hypothesis_set, dat)
+            results.to_tsv(path_output)
         
-        #temp: iterate. change to job submission
+        #submit jobs
         for idx in range(0,self.get_state_field("n_sims")):
-            r=client.submit(_mwu_helper,
-                    tscription_future=tscription_futures[idx])
+            r=self.client.submit(_mwu_helper,
+                    tscription_future=tscription_futures[idx],
+                    path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
+                    path_output=testd/f"{idx}_results.tsv",
+                    hypothesis_set=hypotheses)
             
-    
+            self.testqueue.append(r)
+            
+    def wald():
+        """
+        """
+        pass
+
     def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
         """
         Function adds a hypothesis set to the object for testing.
