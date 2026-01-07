@@ -4883,13 +4883,14 @@ class de_novo_simulation:
     - gt_vs_p
     Once you are done you can 
     - save
+    NOTE: You really want to call `save` when you are done!
 
     Note that saving is blocking, but generally the object is written
     to dump data to disc as it goes, avoiding keeping too much data in memory. So 
     if you are running many simulations, you can queue them all up, then
     just call save on all of them in a loop or similar.
     
-    Plots are lightweight to generate and are not saved.
+    Plots are lightweight to generate and so are not saved.
 
     Efficiency could be improved by avoiding saving information multiple times,
     but we sacrifice a little disc space to enhance reproducability & debugging
@@ -4934,6 +4935,7 @@ class de_novo_simulation:
         self.location = Path(location)
         self.name = Path(name)
         self.client = client
+        self.test_queue = []
         
         fullp=(self.location/name)
         fullp.mkdir(parents=True, exist_ok=True)
@@ -4949,12 +4951,16 @@ class de_novo_simulation:
         self.orthod=fullp/"orthos"
         self.sandwichd=fullp/"sandwich"
         self.opgd=fullp/"opg"
+        self.testd=fullp/"tests"
 
         if statep.exists():
             logger.info(f"'state.parquet' found for '{name}', loading.")
 
             #load state
             self.state=pd.read_parquet(statep)
+
+            #load ground_truth
+            self.ground_truth= pd.read_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip",index_col=0)
 
             #load futures tracker
             rawfut=pd.read_csv(fullp/"futures.tsv.gz",sep="\t",compression="gzip", index_col=0)
@@ -5026,6 +5032,7 @@ class de_novo_simulation:
             experiment_bounds.to_tgz(fullp/"experiment_bounds.tgz")
 
             #save the ground truth
+            self.ground_truth=ground_truth
             ground_truth.to_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
 
             #save the state
@@ -5270,32 +5277,57 @@ class de_novo_simulation:
                 sep="\t",
                 compression="gzip")
 
+    def mwu(self,name):
+        """
+        Takes a name of a hypotheses set added previously with 
+        `add_hypothesis_set` and runs mann whitney u tests.
+        NOTE: Tests are performed directly on simulated data.
+        This means that ortho filtering is not applied!
+        """
+        #init & load relevant hypothesis set...
+        hypod=self.testd/name
+        hypof=hypod/"hypotheses.tsv"
+        if not hypof.is_file():
+            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
+        
+        hypotheses=HypothesisSet.from_tsv(hypof)
+        
+        def _mwu_helper(tscription_future):
+            tester = HypothesisTester("mwu")
+            results = tester.run(hypothesis_set, test_data)
+        
+        #temp: iterate. change to job submission
+        for idx in range(0,self.get_state_field("n_sims")):
+            r=client.submit(_mwu_helper,
+                    tscription_future=tscription_futures[idx])
+            
+    
+    def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
+        """
+        Function adds a hypothesis set to the object for testing.
+        'name' will be the name of a directory, so usual caveats apply based on your filesystem
+        (avoid special characters, spaces...)
+        To run the actual tests, call one of the associated functions (test_wald, test_mwu).
+        """
+        hypod=self.testd/name
+        
+        try:
+            hypod.mkdir(parents=True)
+        except FileExistsError as e:
+            raise FileExistsError(
+                    f"Hypothesis test with name {name} already exists"
+                ) from e
+        
+        hypotheses.to_tsv(hypod/"hypotheses.tsv")
+        
+    @unimplemented
+    def list_tests(self):
+        """
+        Lists all hypothesis sets and the tests which have been run on them.
+        """
+        pass
 
-def _test_helper(test,
-        hypothesis_set,
-        test_data=None,
-        test_ortho=None):
-    """
-    Helper function for de_novo_simulation._test_all_replicates
-    """
-    client=get_client()
-    if test == "wald" and not test_ortho:
-        raise ValueError("Precomputed ortho required for wald test.")
-    if not test_data:
-        raise ValueError("Test data required") 
 
-    if test=="wald":
-        test_ortho.training_data=test_data
-        test_ortho.precompute_wald(client)
-        tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, test_ortho, client)
-        return results
-    elif test=="mwu":
-        tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, test_data, client)
-        return results
-    else:
-        assert 1==2; "Test not yet implemented yet in this context."
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
