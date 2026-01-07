@@ -5101,6 +5101,16 @@ class de_novo_simulation:
         self._simulate_transfection()
         self._simulate_transcription()
 
+    def _switch_cov_method(self,cov_method):
+        if cov_method =="opg":
+            precompd=self.opgd
+        elif cov_method =="sandwich":
+            precompd=self.sandwichd
+        else:
+            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
+        return precompd
+
+    
     def precompute_wald(self,cov_method="sandwich"):
         """
         cov_method : {"sandwich", "opg"}
@@ -5114,12 +5124,7 @@ class de_novo_simulation:
         ortho_futures=self.futures["ortho"].to_list()
 
         #pick output dir destination based on covariance matrix estimation procedure
-        if cov_method =="opg":
-            precompd=self.opgd
-        elif cov_method =="sandwich":
-            precompd=self.sandwichd
-        else:
-            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
+        precompd=self._switch_cov_method(cov_method)
         
         #make output directory
         precompd.mkdir(exist_ok=True)
@@ -5299,6 +5304,10 @@ class de_novo_simulation:
 
         testd.mkdir()
         
+        #check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError("Tried to fit perfrom mwu testing, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
+        
         #pull out the futures tracking 
         tscription_futures=self.futures["transcription"].to_list()
         
@@ -5309,9 +5318,13 @@ class de_novo_simulation:
                         hypothesis_set):
             #load the data
             dat = scMPRA_data.from_parquet(path_scmpradat)
+            #test
             tester = HypothesisTester("mwu")
             results = tester.run(hypothesis_set, dat)
+            #save
             results.to_tsv(path_output)
+            
+            return True
         
         #submit jobs
         for idx in range(0,self.get_state_field("n_sims")):
@@ -5323,10 +5336,71 @@ class de_novo_simulation:
             
             self.testqueue.append(r)
             
-    def wald():
+    def wald(self,
+            name,
+            cov_method="sandwich"):
         """
+        Takes a name of a hypotheses set added previously with 
+        `add_hypothesis_set` and runs wald tests.
+        Requires that `precompute_wald` have been computed previously.
+        cov_method : {"sandwich", "opg"}
+        - See ortho.precompute_wald for more information.
         """
-        pass
+        #pick input dir destination based on covariance matrix estimation procedure
+        precompd=self._switch_cov_method(cov_method)
+
+        #check to make sure previous step has at least been queued.
+        if cov_method not in self.futures.columns:
+            raise RuntimeError(f"wald precompute with coariance estimation method \'{cov_method}\' not yet run.")
+
+        #extract precomp
+        precomp_futures=self.futures[cov_method]
+        
+        #init & load relevant hypothesis set...
+        hypod=self.testd/name
+        hypof=hypod/"hypotheses.tsv"
+        if not hypof.is_file():
+            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
+        
+        hypotheses=HypothesisSet.from_tsv(hypof)
+
+        testd=hypod/f"wald_{cov_method}"
+
+        testd.mkdir()
+
+        #define helper function to submit
+        def _wald_helper(precomp_future,
+                    input_dir,
+                    name,
+                    path_output,
+                    hypothesis_set):
+            #load the relevant_ortho
+            test_ortho=ortho.load(client=get_client(),
+                        path=input_dir,
+                        name=name)
+            
+            #run the tests
+            tester = HypothesisTester("wald")
+            results  = tester.run(hypothesis_set,
+                    test_ortho,
+                    client=get_client())
+            
+            #save
+            results.to_tsv(path_output)
+
+            return True
+        
+        #submit jobs
+        for idx in range(0,self.get_state_field("n_sims")):
+            r=self.client.submit(_wald_helper,
+                                precomp_future=precomp_futures[idx],
+                                input_dir=precompd,
+                                name=str(idx),
+                                path_output=testd/f"{idx}_results.tsv",
+                                hypothesis_set=hypotheses)
+
+            self.testqueue.append(r)
+        
 
     def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
         """
@@ -5346,12 +5420,19 @@ class de_novo_simulation:
         
         hypotheses.to_tsv(hypod/"hypotheses.tsv")
         
-    @unimplemented
     def list_tests(self):
         """
         Lists all hypothesis sets and the tests which have been run on them.
         """
-        pass
+        root = self.testd
+        tree = {}
+
+        for level1 in sorted(p for p in root.iterdir() if p.is_dir()):
+            tree[level1.name] = sorted(
+                p.name for p in level1.iterdir() if p.is_dir()
+            )
+
+        return tree
 
 
 
