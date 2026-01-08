@@ -1679,10 +1679,10 @@ class ortho:
         else:
             self.by_cre.save(full_path/"by_cre.pkl")
         
-        if self.by_cell_type is None:
-            simple_write(self.by_cell_type,"by_cell_type.pkl")
-        else:
-            self.by_cell_type.save(full_path/"by_cell_type.pkl")
+        #if self.by_cell_type is None:
+        #    simple_write(self.by_cell_type,"by_cell_type.pkl")
+        #else:
+        #    self.by_cell_type.save(full_path/"by_cell_type.pkl")
 
         
         ## Parameters
@@ -1789,9 +1789,11 @@ class ortho:
                                                      split="cre_id")
         
         
-        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
-                                                        dat,
-                                                        split="cell_type")
+        self.by_cell_type=None
+        self.by_cell_type_design=None
+        #self.by_cell_type, self.by_cell_type_design=standard_fit(client,
+        #                                                dat,
+        #                                                split="cell_type")
         
         self.training_data=dat.copy()
         self.annotate_models(client)
@@ -1801,7 +1803,7 @@ class ortho:
         Adds regressor names to each model
         """
         self.by_cre.label_regressors(client,self.by_cre_design)
-        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+        #self.by_cell_type.label_regressors(client,self.by_cell_type_design)
     
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
@@ -1813,12 +1815,12 @@ class ortho:
                 self.by_cre_design,
                 "cre_id")
         
-        if not self.by_cell_type is None:
-            self.by_cell_type_parameters=extract_parameters(
-                client,
-                self.by_cell_type,
-                self.by_cell_type_design,
-                "cell_type")
+        #if not self.by_cell_type is None:
+        #    self.by_cell_type_parameters=extract_parameters(
+        #        client,
+        #        self.by_cell_type,
+        #        self.by_cell_type_design,
+        #        "cell_type")
         
     def compute_model_qc(self):
         """
@@ -1829,9 +1831,9 @@ class ortho:
 
         Meant for debugging / manual inspection.
         """
-        self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
-            design_matricies=dict_unwrap(self.by_cell_type_design),
-            scMPRAdat=self.training_data)
+        #self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
+        #    design_matricies=dict_unwrap(self.by_cell_type_design),
+        #    scMPRAdat=self.training_data)
         self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters,
             design_matricies=dict_unwrap(self.by_cre_design),
             scMPRAdat=self.training_data)
