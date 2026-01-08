@@ -5401,7 +5401,6 @@ class de_novo_simulation:
 
             self.testqueue.append(r)
         
-
     def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
         """
         Function adds a hypothesis set to the object for testing.
@@ -5434,6 +5433,10 @@ class de_novo_simulation:
 
         return tree
 
+    def median_PRC(self,name,test):
+        """
+
+        """
 
 
 def _simulate_transfection(experiment_bounds:Bounds,
