@@ -80,6 +80,9 @@ logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
+DEFAULT_SIGNIFICANCE_THRESHOLD=0.05
+#If (a-b) < FLOATING_POINT_DIFF, we conclude a=b.
+FLOATING_POINT_DIFF=1e-8
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
 HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
@@ -4990,6 +4993,7 @@ class de_novo_simulation:
             self.set_state_field("n_sims",n_sims)
             self.set_state_field("reference_cell_type",reference_cell_type)
             self.set_state_field("negative_controls",negative_controls)
+            self.set_state_field("alpha",DEFAULT_SIGNIFICANCE_THRESHOLD)
             
             if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
                 raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
@@ -5101,7 +5105,64 @@ class de_novo_simulation:
         self._simulate_transfection()
         self._simulate_transcription()
 
+    
+    def _merge_in_ground_truth(self,hypothesis_set_name,test_type,index):
+        """
+        Returns a dataframe which a merge of the data of a results object
+        (of a test and particular index)
+        and the ground-truth. 
+        Used as part of test evaluations.
+
+        Note that function is a collector and WILL hang if ANY tests are not completed.
+        """
+        self._block_until_all_tests_are_done()
+
+        #init & load relevant hypothesis set...
+        hypod=self.testd/hypothesis_set_name
+
+        testd=hypod/test_type
+
+        if not testd.is_dir():
+            raise FileNotFoundError(f"Could not find test {test_type} for hypothesis set \'{name}\'.")
+
+        index=int(index)
+        if index<0 or index>self.get_state_field("n_sims")-1:
+            raise RuntimeError(f"Invalid index {index}, out of range [{0},{self.get_state_field('n_sims')-1}]")
+
+        results=ResultSet.from_tsv(testd/f"{index}_results.tsv").df
+
+        merged=results.merge(self.ground_truth,
+            left_on=["comparison_CRE","comparison_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+
+        #merge in `reference` ground truth
+        merged=merged.merge(self.ground_truth,
+            left_on=["reference_CRE","reference_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+
+        #ground truth effect size
+        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
+        #ground truth null hypothesis that the CREs are the same : true or false?
+        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<FLOATING_POINT_DIFF
+
+        merged["reject_null"]=merged["bh_p"]<self.get_state_field("alpha")
+
+        return merged
+
+
+
+    
     def _switch_cov_method(self,cov_method):
+        """
+        Helper function which validates passed cov method.
+        """
         if cov_method =="opg":
             precompd=self.opgd
         elif cov_method =="sandwich":
@@ -5265,12 +5326,15 @@ class de_novo_simulation:
         
         self.futures["transcription"]=transcription_tracker
 
+    def _block_until_all_tests_are_done(self):
+        dummy = [f.result() for f in self.testqueue]
+    
     def save(self):
         state_path=self.location/self.name/Path("state.parquet")
         self.state.to_parquet(state_path)
 
-        #block until all tests are done running
-        dummy = [f.result() for f in self.testqueue]
+        self._block_until_all_tests_are_done()
+        
         
         #block until all queued steps are done
         fut=self.futures.to_numpy().ravel()
