@@ -51,7 +51,7 @@ import json
 import tarfile
 import tempfile
 
-from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score, confusion_matrix
 
 import warnings
 
@@ -5217,7 +5217,7 @@ class de_novo_simulation:
 
         return pd.concat(ret)
     
-    def median_performance_curve(self,hypothesis_set_name,test_types,performance_type,include_alpha=True):
+    def median_performance_curve(self,hypothesis_set_name,performance_type,test_types=None,include_alpha=True):
         """
         Plots the ROC curve for the replicate with the median auROC or the PRC curve for the replicate with the median auPRC.
         - hypothesis_set_name: string of hypothesis set name.
@@ -5227,24 +5227,143 @@ class de_novo_simulation:
         Note that function is a collector and WILL hang if ANY tests are not completed.
         """
         if performance_type not in ["ROC","PRC"]:
-            raise 
+            raise ValueError("Invalid choice for performance_type. Valid choices are 'ROC' and 'PRC'")
+
+        if performance_type=="ROC":
+            relevant_au="auroc"
+        else:
+            relevant_au="auprc"
 
         #For each test, find the median replicate
+        def replicate_with_median(group):
+            med = group[relevant_au].median()
+            idx = (group[relevant_au] - med).abs().idxmin()
+            return group.loc[idx, "replicate"]
 
-        #Now, for each test/median replicate
-        ## get the performance table
-        ## use sklearn to compute 
+        all_summary=self._all_classifier_summary(hypothesis_set_name=hypothesis_set_name)
+        if not test_types is None:
+            all_summary = all_summary[all_summary["test"].isin(test_types)]
 
+        median_reps = (
+            all_summary.groupby("test", group_keys=False)
+            .apply(replicate_with_median)
+            .to_dict()
+        )
         
-        
-    
-    @unimplemented
-    def median_PRC():
-        """
-        Plots the ...
+        #makes a dict of test:median_rep_index
 
-        Note that function is a collector and WILL hang if ANY tests are not completed.
-        """
+        def plot_curves(curves, kind="roc", ax=None, title=None, p_value=None, point_kwargs=None):
+            """
+            Plot multiple ROC or PR curves on the same axes, optionally marking a point
+            corresponding to a fixed p-value cutoff.
+
+            Assumes y_score = 1.0 - p_value.
+
+            Parameters
+            ----------
+            curves : list of dicts
+                Each dict must have:
+                    {
+                    "name": "Test A",
+                    "y_true": array-like (0/1),
+                    "y_score": array-like (1 - p_value)
+                    }
+            kind : {"roc", "prc"}
+            ax : matplotlib Axes, optional
+            title : str, optional
+            p_value : float or None
+                If provided, plot a point corresponding to p_value <= this cutoff.
+                If None, no point is plotted.
+            point_kwargs : dict, optional
+                Passed to ax.scatter for the threshold point.
+            """
+            kind = kind.lower()
+            if kind not in {"roc", "prc"}:
+                raise ValueError("kind must be 'roc' or 'prc'")
+
+            if ax is None:
+                fig, ax = plt.subplots()
+
+            if point_kwargs is None:
+                point_kwargs = dict(s=60, zorder=5)
+
+            score_threshold = None
+            if p_value is not None:
+                score_threshold = 1.0 - p_value
+
+            for c in curves:
+                y_true = np.asarray(c["y_true"])
+                y_score = np.asarray(c["y_score"])
+                name = c.get("name", "model")
+
+                if kind == "roc":
+                    fpr, tpr, _ = roc_curve(y_true, y_score)
+                    auc = roc_auc_score(y_true, y_score)
+                    ax.plot(fpr, tpr, label=f"{name} (AUC={auc:.3f})")
+
+                else:  # PRC
+                    precision, recall, _ = precision_recall_curve(y_true, y_score)
+                    ap = average_precision_score(y_true, y_score)
+                    ax.plot(recall, precision, label=f"{name} (AP={ap:.3f})")
+
+                # ----- threshold point -----
+                if score_threshold is not None:
+                    y_pred = (y_score >= score_threshold).astype(int)
+
+                    n_pos = np.sum(y_pred)
+                    n_total = len(y_pred)
+
+                    print(f"Called positive: {n_pos} / {n_total} ({n_pos/n_total:.4%})")
+
+                    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+
+                    if kind == "roc":
+                        fpr_pt = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+                        tpr_pt = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                        ax.scatter(fpr_pt, tpr_pt, **point_kwargs)
+
+                    else:  # PRC
+                        recall_pt = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                        precision_pt = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+                        ax.scatter(recall_pt, precision_pt, **point_kwargs)
+
+            # ----- baselines + labels -----
+            if kind == "roc":
+                ax.plot([0, 1], [0, 1], linestyle="--", linewidth=1, label="chance")
+                ax.set_xlabel("False Positive Rate")
+                ax.set_ylabel("True Positive Rate")
+                ax.set_title(title or "ROC Curve")
+            else:
+                base = np.mean(np.asarray(curves[0]["y_true"]))
+                ax.hlines(base, 0, 1, linestyles="--", linewidth=1, label=f"baseline={base:.3f}")
+                ax.set_xlabel("Recall")
+                ax.set_ylabel("Precision")
+                ax.set_title(title or "Precision–Recall Curve")
+
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            return ax
+        
+
+        curves=[]
+        #Now, for each test/median replicate...
+        for test in median_reps.keys():
+            eval_df=self._merge_in_ground_truth(hypothesis_set_name=hypothesis_set_name,
+                                    test_type=test,
+                                    index=median_reps[test])
+            eval_df["meta"] = eval_df["meta"].fillna(0)
+            eval_df=eval_df.dropna()
+
+            y_true = np.asarray((~eval_df["gt_null"]).astype(int))
+            y_score = np.asarray(1.0 - eval_df["p_value"])
+
+            curves.append({"name":test,"y_true":y_true,"y_score":y_score})
+        
+        p_value=None
+        if include_alpha:
+            p_value=self.get_state_field("alpha")
+
+        plot_curves(curves,kind=performance_type,p_value=p_value)
 
     
     def _switch_cov_method(self,cov_method):
