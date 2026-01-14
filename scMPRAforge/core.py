@@ -51,7 +51,7 @@ import json
 import tarfile
 import tempfile
 
-from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score, confusion_matrix
 
 import warnings
 
@@ -80,6 +80,9 @@ logger = logging.getLogger("scMPRAforge")
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
+DEFAULT_SIGNIFICANCE_THRESHOLD=0.05
+#If (a-b) < FLOATING_POINT_DIFF, we conclude a=b.
+FLOATING_POINT_DIFF=1e-8
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
 HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
@@ -88,11 +91,14 @@ HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
 
 WARN_MULTI_TRANSFECTION_PERCENT=2.0
 
+ERROR_TEST_NAN_PERCENT=5
+
 RESULT_REQUIRED = {
     "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
 }
 RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
 
+THREADS_DEFAULT = 5
 
 #functions
 @unimplemented
@@ -4844,439 +4850,860 @@ def hypothesis_tester(scmpra_models_or_data, hypotheses: HypothesisSet, flavor="
     runner = HypothesisTester(test_fn=test_fn, test_type_name=flavor)
     return runner.run(hypotheses)
 
-    
+
 class de_novo_simulation:
     """
-    TODO: rework to hold no state
-    - once complete, the class will just be a wrapper for functions
-    - processing will occur w/ concurrency
-    - concurrent functions for procesing, helpers to wait until done...
-    - "over a directory"
+    Class for simulating new datasets.
 
-    Class for simulating datasets anew.
-    
     A single instance of this object should be used to 
     represent n simulated replicates of one experimental setup.
     For different parameters, initalize multiple objects.
-    
-    Simulated replicates are addressed only by zero-based index.
-    Discontinuious indicies are technically possible (to allow re-runs of failed steps)
-    but not recommended / supported.
 
-    Presently, simulated data is stored outside of orthos, and not saved within them,
-    But is populated within orthos when necessary for some computation. 
-    TODO: don't do that.
+    Takes MPRA libraries in standard form. To generate a synthetic libraries, create
+    a ground_truth and use simulate_library.
+
+    Initalized over a directory, where it reads and writes.
+    Directory is specififed by 'location', 'name' pair (pointing to directory
+    location/name). 'location', 'name' and derived paths are stored 
+    in self object but never saved to disc, so you can rename or move
+    the simulation as you please.
+
+    The general workflow is:
+    - __init__; sets the initial simulation parameters
+        OR loads a simulation previously initalized.
+    - gamut; automatically runs:
+        - _simulate_transfection
+        - _simulate_transcription
+        - _realize_simulations
+    Then optionally
+    - fit_orthos
+    - precompute_wald (OPG or sandwich)
+    Then, for each hypothesis test / method
+    - test
+    Summarization can be performed & saved with
+    - PRC_aggregated
+        - Also saves AUPRC and other metrics to state
+    - volcano
+    - p_value_calibration
+    - gt_vs_p
+    Once you are done you can 
+    - save
+    NOTE: You really want to call `save` when you are done!
+
+    Note that saving is blocking, but generally the object is written
+    to dump data to disc as it goes, avoiding keeping too much data in memory. So 
+    if you are running many simulations, you can queue them all up, then
+    just call save on all of them in a loop or similar.
+    
+    Plots are lightweight to generate and so are not saved.
+
+    Efficiency could be improved by avoiding saving information multiple times,
+    but we sacrifice a little disc space to enhance reproducability & debugging
+    (e.g. saving twice allows us to keep both the filtered and unfiltered 
+    versions of the datasets, e.g. saving the ground-truth locally instead of a reference
+    to another location keeps the object self-contained...) I try to keep things 
+    gzip compressed to offset this.
     """
-    def __init__(self,
-                 simulation_replicates:int,
-                 experiment_bounds:Bounds,
-                 ground_truth:pd.DataFrame,
-                 library:pd.DataFrame,
-                 negative_controls:list[str]=["reference"],
-                 reference_cell_type:str="reference"):
-        """
-        See readme for formatting of ground_truth & library dataframes
-        """
-        
-        self.simulation_replicates=simulation_replicates
-        self.experiment_bounds=experiment_bounds
-        self.ground_truth=ground_truth
-        self.library=library
-        self.negative_controls=negative_controls
-        self.reference_cell_type=reference_cell_type
-
-        #init vars which will be computed but are not taken from input.
-        self.descriptions=[]
-        self.simulated=[]
-        self.simulated_scMPRA=[]
-        self.orthos=[]
-        self.results={}
-
     
-    def gamut(self, client):
+    def __init__(self,location,name,client,
+        libraries:list[pd.DataFrame]=None,
+        library_mapping:str | list[int]=None,
+        n_sims:int=None,
+        experiment_bounds:Bounds=None,
+        ground_truth:pd.DataFrame=None,
+        negative_controls=["reference"],
+        reference_cell_type="reference"
+        ):
         """
-        Run the full simulation: transfection->transcription->realization
+        'location', 'name' and 'client' are always mandatory. 
+        (client *can* be set to None, but only for summary functions: graphing PRC, computing confusion matricies, etc...)
+        The rest of the parameters are optional iff loading a previously initalized simulation batch.
+        Otherwise they are also mandatory.
+
+        'libraries' takes a list of 1+ MPRA libraries in standard format.
+
+        'experiment_bounds' takes a 'Bounds' object describing the experiment. You may wish to use one of the
+        presets extracted from emperical data...
         
-        Probably the only method you will ever need to call on de_novo_simulation
+        'library_mapping' takes one of
+        - the string 'one_library': all replicates are simulated from one library
+            - e.g. simulating from a real library
+        - the string 'corresponding': all replicates are simulated from a corresponding library
+            - e.g. prospectively evaluating theoretical performace under some experimental setup
+        - A list of ints: this is just passed through. The list should be of length of the
+          number of simulations, and each element is an int pointing to a library.
+
+        'n_sims'
+        - number of sims.
         """
-        self._simulate_transfection()
-        self._simulate_transcription()
-        self._realize_simulations(client)
-    
+
+        self.location = Path(location)
+        self.name = Path(name)
+        self.client = client
+        self.testqueue = []
+        
+        fullp=(self.location/name)
+        fullp.mkdir(parents=True, exist_ok=True)
+        statep=fullp/"state.parquet"
+        
+        #save in object so other functions can access
+        self.fullp=fullp
+        self.statep=statep
+        self.descripd=fullp/"descriptions"
+        libp=fullp/"libraries"
+        self.libp=libp
+        self.scmpradatp=fullp/"simulated_scmpra"
+        self.orthod=fullp/"orthos"
+        self.sandwichd=fullp/"sandwich"
+        self.opgd=fullp/"opg"
+        self.testd=fullp/"tests"
+
+        if statep.exists():
+            logger.info(f"'state.parquet' found for '{name}', loading.")
+
+            #load state
+            self.state=pd.read_parquet(statep)
+
+            #load ground_truth
+            self.ground_truth= pd.read_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip",index_col=0)
+
+            #load futures tracker
+            rawfut=pd.read_csv(fullp/"futures.tsv.gz",sep="\t",compression="gzip", index_col=0)
+            flat=rawfut.to_numpy().ravel()
+
+            futures = [client.submit(lambda x: x, v, pure=False) for v in flat]
+            arr = pd.array(futures, dtype="object").to_numpy().reshape(rawfut.shape)
+            
+            self.futures=pd.DataFrame(arr,
+                                      index=rawfut.index,
+                                      columns=rawfut.columns)
+        else:
+            logger.info(f"No 'state.parquet' found for '{name}'. Initalizing new object.")
+            
+            self.state = pd.DataFrame()
+            
+            self.futures = pd.DataFrame(index=range(n_sims))
+            
+            required = ("libraries", 
+                        "library_mapping",
+                        "n_sims",
+                        "experiment_bounds",
+                        "ground_truth")
+                        
+            
+            #lightweight, just save.
+            self.set_state_field("n_sims",n_sims)
+            self.set_state_field("reference_cell_type",reference_cell_type)
+            self.set_state_field("negative_controls",negative_controls)
+            self.set_state_field("alpha",DEFAULT_SIGNIFICANCE_THRESHOLD)
+            
+            if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
+                raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
+
+            #if `libraries` is a single dataframe, put it in a one-element list. 
+            if isinstance(libraries, pd.DataFrame):
+                libraries=[libraries]
+
+            #sanity checks on, and setting of library mapping 
+
+            if library_mapping=="one_library":
+                if not len(libraries)==1: raise ValueError(f"Specified one_library, but passed {len(libraries)} libraries.")
+                self.set_state_field("library_mapping",[0 for i in range(0,n_sims)])
+            
+            elif library_mapping == "corresponding":
+                if not len(libraries)==n_sims: raise ValueError(f"Corresponding library mapping requires n_sims to be the same as the number of libraries.")
+                self.set_state_field("library_mapping",[i for i in range(0,n_sims)])
+
+            elif isinstance(library_mapping, list):
+                if all(isinstance(x, int) for x in library_mapping):
+                    #check if length is correct
+                    if len(library_mapping)!=n_sims: raise ValueError(f"n_sims={n_sims}, =/= len(library_mapping)={len(library_mapping)}")
+                    #check if any ints fall outside the appropriate range 
+                    for i in library_mapping:
+                        if i<0 or i>len(libraries)+1: raise ValueError("At least one of the ints in your library mapping refers to a library you do not have")
+                    #all the checks passed!
+                    self.set_state_field("library_mapping",library_mapping)
+                else:
+                    raise ValueError(f"Library mapping {library_mapping}, does not contain ints.")
+            else:
+                raise ValueError(f"Unrecognized library mapping {library_mapping}.")
+            
+            #save the passed libraries
+            libp.mkdir(parents=True, exist_ok=True)
+
+            for idx,lib in enumerate(libraries):
+                lib.to_csv(libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+            
+            #saved the passed bounds object
+            experiment_bounds.to_tgz(fullp/"experiment_bounds.tgz")
+
+            #save the ground truth
+            self.ground_truth=ground_truth
+            ground_truth.to_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+
+            #save the state
+            self.save()
+
     def _simulate_transfection(self):
         """
-        Simulates transfection. Most of the heavy lifting is 
-        offloaded to `_simulate_transfection`
+        Simulates transfection. Most of the logic
+        offloaded to non-method function _simulate_transfection.
         """
-        for i in range(0,self.simulation_replicates):
+        n_sims=self.get_state_field("n_sims")
+
+        #load ground truth
+        ground_truth=pd.read_csv(self.fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+
+        #load the experiment bounds
+        experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
+
+        #create an output directory for the descriptions
+        self.descripd.mkdir(parents=True, exist_ok=True)
+        
+        def _simulate_transfection_helper(experiment_bounds,
+                    ground_truth,
+                    library,
+                    pth):
+            """
+            Little wrappper for _simulate_transfection
+            which handles output to disc and returns a `True` boolean when writing is done
+            """
             transfected=_simulate_transfection(
-                    experiment_bounds=self.experiment_bounds,
-                    ground_truth=self.ground_truth,
-                    library=self.library)
-            self.descriptions.append(transfected)
+                    experiment_bounds=experiment_bounds,
+                    ground_truth=ground_truth,
+                    library=lib)
+            
+            transfected.to_csv(pth,
+                    sep="\t",
+                    compression="gzip")
+            
+            return True
+
+        transfection_tracker=[]
+        
+        for idx in range(0,n_sims):
+            #load the corresponding library
+            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+
+            #submit a job to simulate transfection using the helper function
+            ret=self.client.submit(_simulate_transfection_helper,
+                experiment_bounds=experiment_bounds,
+                ground_truth=ground_truth,
+                library=lib,
+                pth=self.descripd/f"{idx}.tsv.gz")
+            
+            transfection_tracker.append(ret)
+        
+        self.futures["transfection"]=transfection_tracker
+
+    def set_state_field(self,field,value):
+        self.state[field]=[value]
+        self.save()
+    
+    def get_state_field(self,field):
+        return self.state[field][0]
+    
+    def gamut(self):
+        self._simulate_transfection()
+        self._simulate_transcription()
+    
+    def _merge_in_ground_truth(self,hypothesis_set_name,test_type,index):
+        """
+        Returns a dataframe which a merge of the data of a results object
+        (of a test and particular index)
+        and the ground-truth. 
+        Used as part of test evaluations.
+
+        Note that function is a collector and WILL hang if ANY tests are not completed.
+        """
+        self._block_until_all_tests_are_done()
+
+        #init & load relevant hypothesis set...
+        hypod=self.testd/hypothesis_set_name
+
+        testd=hypod/test_type
+
+        if not testd.is_dir():
+            raise FileNotFoundError(f"Could not find test {test_type} for hypothesis set \'{name}\'.")
+
+        index=int(index)
+        if index<0 or index>self.get_state_field("n_sims")-1:
+            raise RuntimeError(f"Invalid index {index}, out of range [{0},{self.get_state_field('n_sims')-1}]")
+
+        results=ResultSet.from_tsv(testd/f"{index}_results.tsv").df
+
+        merged=results.merge(self.ground_truth,
+            left_on=["comparison_CRE","comparison_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+
+        #merge in `reference` ground truth
+        merged=merged.merge(self.ground_truth,
+            left_on=["reference_CRE","reference_cell_type"],
+            right_on=["cre_id","cell_type"]
+        )
+        merged=merged.drop(columns=["cre_id","cell_type"])
+        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+
+        #ground truth effect size
+        merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
+        #ground truth null hypothesis that the CREs are the same : true or false?
+        merged["gt_null"]=abs(merged["gt_effect_size"]-1)<FLOATING_POINT_DIFF
+
+        merged["reject_null"]=merged["bh_p"]<self.get_state_field("alpha")
+
+        return merged
+
+
+    def _classifier_summary(self,hypothesis_set_name,test_type):
+        """
+        Treating the given test as a classifier, function computes AUROC, AUPRC for all replicates. 
+        """
+        self._block_until_all_tests_are_done()
+
+        ret={'replicate':[],'auroc':[],'auprc':[]}
+
+        for idx in range(0,self.get_state_field("n_sims")):
+            df=self._merge_in_ground_truth(hypothesis_set_name,
+                    test_type,
+                    index=idx)
+
+            df["meta"] = df["meta"].fillna(0)
+            
+            #df drop nans
+            nona=df.copy()
+            nona=nona.dropna()
+
+            if len(nona)!=len(df):
+                percent=(len(df)-len(nona))/len(df)*100
+                logger.info(f"Dropped {len(df)-len(nona)} or {percent:.1f}% of tests with NA values for test:{test_type}, rep:{idx}.")
+                if percent>ERROR_TEST_NAN_PERCENT:
+                    raise RuntimeError("Percent of dropped tests greater than threshold, aborting.")
+
+            
+            df=nona
+            
+            y_true = (~df["gt_null"]).astype(int)
+            y_score = 1.0 - df["p_value"]
+
+            auroc = roc_auc_score(y_true, y_score)
+            auprc = average_precision_score(y_true, y_score)
+
+            ret['replicate'].append(idx)
+            ret['auroc'].append(auroc)
+            ret['auprc'].append(auprc)
+        
+        return pd.DataFrame(ret)
+           
+    def _all_classifier_summary(self,hypothesis_set_name):
+        """
+        Function computes AUROC, AUPRC, for all tests.
+        """
+        tests=self.list_tests()
+        if not hypothesis_set_name in tests.keys():
+            raise RuntimeError(f"Unable to find hypothesis set '{hypothesis_set_name}.'")
+        
+        tests=tests[hypothesis_set_name]
+
+        ret=[]
+        
+        for test in tests:
+            df=self._classifier_summary(hypothesis_set_name,test_type=test)
+            df["test"]=test
+            ret.append(df)
+
+        return pd.concat(ret)
+    
+    def median_performance_curve(self,hypothesis_set_name,performance_type,test_types=None,include_alpha=True):
+        """
+        Plots the ROC curve for the replicate with the median auROC or the PRC curve for the replicate with the median auPRC.
+        - hypothesis_set_name: string of hypothesis set name.
+        - test_types: list of strings of tests you want to plot
+        - performance_type: ROC or PRC
+        
+        Note that function is a collector and WILL hang if ANY tests are not completed.
+        """
+        if performance_type not in ["ROC","PRC"]:
+            raise ValueError("Invalid choice for performance_type. Valid choices are 'ROC' and 'PRC'")
+
+        if performance_type=="ROC":
+            relevant_au="auroc"
+        else:
+            relevant_au="auprc"
+
+        #For each test, find the median replicate
+        def replicate_with_median(group):
+            med = group[relevant_au].median()
+            idx = (group[relevant_au] - med).abs().idxmin()
+            return group.loc[idx, "replicate"]
+
+        all_summary=self._all_classifier_summary(hypothesis_set_name=hypothesis_set_name)
+        if not test_types is None:
+            all_summary = all_summary[all_summary["test"].isin(test_types)]
+
+        median_reps = (
+            all_summary.groupby("test", group_keys=False)
+            .apply(replicate_with_median)
+            .to_dict()
+        )
+        
+        #makes a dict of test:median_rep_index
+
+        def plot_curves(curves, kind="roc", ax=None, title=None, p_value=None, point_kwargs=None):
+            """
+            Plot multiple ROC or PR curves on the same axes, optionally marking a point
+            corresponding to a fixed p-value cutoff.
+
+            Assumes y_score = 1.0 - p_value.
+
+            Parameters
+            ----------
+            curves : list of dicts
+                Each dict must have:
+                    {
+                    "name": "Test A",
+                    "y_true": array-like (0/1),
+                    "y_score": array-like (1 - p_value)
+                    }
+            kind : {"roc", "prc"}
+            ax : matplotlib Axes, optional
+            title : str, optional
+            p_value : float or None
+                If provided, plot a point corresponding to p_value <= this cutoff.
+                If None, no point is plotted.
+            point_kwargs : dict, optional
+                Passed to ax.scatter for the threshold point.
+            """
+            kind = kind.lower()
+            if kind not in {"roc", "prc"}:
+                raise ValueError("kind must be 'roc' or 'prc'")
+
+            if ax is None:
+                fig, ax = plt.subplots()
+
+            if point_kwargs is None:
+                point_kwargs = dict(s=60, zorder=5)
+
+            score_threshold = None
+            if p_value is not None:
+                score_threshold = 1.0 - p_value
+
+            for c in curves:
+                y_true = np.asarray(c["y_true"])
+                y_score = np.asarray(c["y_score"])
+                name = c.get("name", "model")
+
+                if kind == "roc":
+                    fpr, tpr, _ = roc_curve(y_true, y_score)
+                    auc = roc_auc_score(y_true, y_score)
+                    ax.plot(fpr, tpr, label=f"{name} (AUC={auc:.3f})")
+
+                else:  # PRC
+                    precision, recall, _ = precision_recall_curve(y_true, y_score)
+                    ap = average_precision_score(y_true, y_score)
+                    ax.plot(recall, precision, label=f"{name} (AP={ap:.3f})")
+
+                # ----- threshold point -----
+                if score_threshold is not None:
+                    y_pred = (y_score >= score_threshold).astype(int)
+
+                    n_pos = np.sum(y_pred)
+                    n_total = len(y_pred)
+
+                    print(f"Called positive: {n_pos} / {n_total} ({n_pos/n_total:.4%})")
+
+                    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+
+                    if kind == "roc":
+                        fpr_pt = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+                        tpr_pt = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                        ax.scatter(fpr_pt, tpr_pt, **point_kwargs)
+
+                    else:  # PRC
+                        recall_pt = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                        precision_pt = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+                        ax.scatter(recall_pt, precision_pt, **point_kwargs)
+
+            # ----- baselines + labels -----
+            if kind == "roc":
+                ax.plot([0, 1], [0, 1], linestyle="--", linewidth=1, label="chance")
+                ax.set_xlabel("False Positive Rate")
+                ax.set_ylabel("True Positive Rate")
+                ax.set_title(title or "ROC Curve")
+            else:
+                base = np.mean(np.asarray(curves[0]["y_true"]))
+                ax.hlines(base, 0, 1, linestyles="--", linewidth=1, label=f"baseline={base:.3f}")
+                ax.set_xlabel("Recall")
+                ax.set_ylabel("Precision")
+                ax.set_title(title or "Precision–Recall Curve")
+
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            return ax
+        
+
+        curves=[]
+        #Now, for each test/median replicate...
+        for test in median_reps.keys():
+            eval_df=self._merge_in_ground_truth(hypothesis_set_name=hypothesis_set_name,
+                                    test_type=test,
+                                    index=median_reps[test])
+            eval_df["meta"] = eval_df["meta"].fillna(0)
+            eval_df=eval_df.dropna()
+
+            y_true = np.asarray((~eval_df["gt_null"]).astype(int))
+            y_score = np.asarray(1.0 - eval_df["p_value"])
+
+            curves.append({"name":test,"y_true":y_true,"y_score":y_score})
+        
+        p_value=None
+        if include_alpha:
+            p_value=self.get_state_field("alpha")
+
+        plot_curves(curves,kind=performance_type,p_value=p_value)
+
+    
+    def _switch_cov_method(self,cov_method):
+        """
+        Helper function which validates passed cov method.
+        """
+        if cov_method =="opg":
+            precompd=self.opgd
+        elif cov_method =="sandwich":
+            precompd=self.sandwichd
+        else:
+            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
+        return precompd
+    
+    def precompute_wald(self,cov_method="sandwich"):
+        """
+        cov_method : {"sandwich", "opg"}
+        - See ortho.precompute_wald for more information.
+        """
+        
+        if "ortho" not in self.futures.columns:
+            raise RuntimeError("Cannot precompute wald if orthos have not been fit. You want to call `fit_orthos`.")
+
+        #pull out the futures tracking 
+        ortho_futures=self.futures["ortho"].to_list()
+
+        #pick output dir destination based on covariance matrix estimation procedure
+        precompd=self._switch_cov_method(cov_method)
+        
+        #make output directory
+        precompd.mkdir(exist_ok=True)
+
+        #function to submit
+        def _precomp_wald_helper(ortho_future, path_input, path_output, name):
+            client=get_client()
+            #load the ortho
+            orth=ortho.load(client,
+                path=path_input,
+                name=name
+            )
+            #perform precompute
+            orth.precompute_wald(client,cov_method=cov_method)
+            #save to disc
+            orth.save(path=path_output,
+                    name=name)
+            
+            return True
+
+        precomp_tracker=[]
+
+        for idx in range(0,self.get_state_field("n_sims")):
+            
+            r=self.client.submit(_precomp_wald_helper,
+                                ortho_future=ortho_futures[idx],
+                                path_input=self.orthod,
+                                path_output=precompd,
+                                name=str(idx))
+            precomp_tracker.append(r)
+        
+        self.futures[cov_method]=precomp_tracker
+
+    def fit_orthos(self):
+        """
+        Applies ortho filtering fits & saves orthos for all simulated replicates.
+        Note that this can spawn some very heavy functions!
+        """
+        #check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError("Tried to fit orthos, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
+        
+        #pull out the futures tracking 
+        tscription_futures=self.futures["transcription"].to_list()
+
+        #make output directory
+        self.orthod.mkdir(exist_ok=True)
+
+        #function to submit
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output):
+            
+            #data=data.result()
+            #load data
+            data=scMPRA_data.from_parquet(path_scmpradat)
+            #filter
+            data.ortho_filter()
+            #create an ortho
+            client=get_client()
+            primordial=ortho()
+            primordial.criss_cross(client=client,
+                                    dat=data)
+            primordial.extract_params(client)
+
+            #write the ortho to disc
+            #could save space with strip_training_data=True
+            primordial.save(path=path_output,
+                            name=name_output)
+            
+            return True
+        
+        #loop over
+        ortho_tracker=[]
+        #main loop
+        for idx in range(0,self.get_state_field("n_sims")):
+            
+            r=self.client.submit(_fit_ortho_helper,
+                            tscription_future=tscription_futures[idx],
+                            path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
+                            path_output=self.orthod,
+                            name_output=str(idx))
+            ortho_tracker.append(r)
+        self.futures["ortho"]=ortho_tracker
     
     def _simulate_transcription(self):
-        for description in self.descriptions:
+        """
+        Simulates transcription.
+        Most of the logic is offloaded to the non-method simulate_from_description.
+        """
+        #check to make sure previous step has at least been queued...
+        if "transfection" not in self.futures.columns:
+                raise RuntimeError("Tried to simulate transcription, but transfection has not yet been simulated!")
+        
+        tfection_futures=self.futures["transfection"].to_list()
+
+        #make output directory
+        self.scmpradatp.mkdir(exist_ok=True)
+        
+        n_sims=self.get_state_field("n_sims")
+
+        #helper function to be submitted to the cluster...
+        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type):
+            
+            #load a description
+            description=pd.read_csv(description_path,
+                                    sep="\t",
+                                    compression="gzip")
+
             working=simulate_from_description(description)
             working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
-            self.simulated.append(working)
-
-
-    def _realize_simulations(self,client):
-        """
-        Populates `self.simulated_scMPRA` with future-wrapped `scMPRA_data` object 
-        versions of the contents of `self.simulated`.
-        """
-        self.simulated_scMPRA=[]
-
-        for simulated in self.simulated:
+            scd=scMPRA_data()
+    
+            scd.data=working
             
-            simulated=client.compute(simulated)
+            scd.set_negative_controls(negative_controls)
+            scd.set_reference_cell(reference_cell_type)
+            scd.flag_synthetic()
+            scd.overtransfected()
+            scd.flatten_overtransfection()
+
+            scd.to_parquet(path)
+
+            return True
             
-            self.simulated_scMPRA.append(
-                client.submit(
-                    _wrap_helper,
-                    simulated,
-                    self.negative_controls,
-                    self.reference_cell_type
-                )
-            )
-    
-    def _test_replicate(self,client,hypothesis_set,test,index):
-        if test=="wald":
-            result=client.submit(_test_helper,
-                                test=test,
-                                hypothesis_set=hypothesis_set,
-                                test_data=self.simulated_scMPRA[index],
-                                test_ortho=self.orthos[index])
-        else:
-            result=client.submit(_test_helper,
-                                test=test,
-                                hypothesis_set=hypothesis_set,
-                                test_data=self.simulated_scMPRA[index])
+        transcription_tracker=[]
+        #main loop
+        for idx in range(0,n_sims):
+            #compute the output path
+            path=self.scmpradatp/f"{idx}.scmpra"
+            #submit the job
+            r=self.client.submit(_simulate_transcription_helper,
+                               tfection_fut=tfection_futures[idx],
+                               description_path=self.descripd/f"{idx}.tsv.gz",
+                               path=path,
+                               negative_controls=self.get_state_field("negative_controls"),
+                               reference_cell_type=self.get_state_field("reference_cell_type"))
+            #append the 
+            transcription_tracker.append(r)
+        
+        self.futures["transcription"]=transcription_tracker
 
-        lst = self.results.setdefault(test, [])
-        if index >= len(lst):
-            lst.extend([None] * (index + 1 - len(lst)))
-        lst[index] = result
+    def _block_until_all_tests_are_done(self):
+        dummy = [f.result() for f in self.testqueue]
     
-    def _test_all_replicates(self,client,hypothesis_set,test):
-        """
-        Performs desired test with provided hypothesis set
-        saves to self.results dict, keyed on test type. 
-        """
-        for i in range(len(self.simulated_scMPRA)):
-            self._test_replicate(client,hypothesis_set,test,index=i)        
-    
-    def _create_ortho_for_replicate(self,client,index):
-        """
-        Fits an ortho to simulated replicate `index`.
-        Useful for downstream wald hypothesis testing.
-        !Collects simulations!
-        """
-        result=_ortho_helper(self.simulated_scMPRA[index])
-        if index>=len(self.orthos):
-            self.orthos.extend([None] * (index + 1 - len(self.orthos)))
-        self.orthos[index] = result
-    
-    def create_orthos_for_all_replicates(self, client):
-        """
-        Fits orthos to all simulated replicates. 
-        Useful for downstream wald hypothesis testing.
-        !Collects simulations!
-        """
-        for i in range(len(self.simulated_scMPRA)):
-            self._create_ortho_for_replicate(client,i)
+    def save(self):
+        state_path=self.location/self.name/Path("state.parquet")
+        self.state.to_parquet(state_path)
 
-    
-    _normal_vars=["simulation_replicates"]
-    _df_vars=["ground_truth","library"]
-    
-    def save(self,path,name):
-        """
-        Note that this function saves self.simulated_scMPRA
-        but not self.simulated, since the latter is intermediate.
-        """
+        self._block_until_all_tests_are_done()
         
-        path=Path(path)/name
         
-        clobber_mkdir(path)
+        #block until all queued steps are done
+        fut=self.futures.to_numpy().ravel()
+        dask.distributed.wait(fut)
         
-        # normal vars
-        normal_dump={}
-        for var in self._normal_vars:
-            normal_dump[var]=getattr(self,var)
+        results = [f.result() for f in fut]
         
-        with open(path / "vars.json","w") as f:
-            json.dump(normal_dump,f,indent=4)
-        
-        # orthos
-        clobber_mkdir(path/"orthos")
-        for i, orth in enumerate(self.orthos):
-            orth.save(path=path/"orthos",
-                    name=str(i))
-        
-        #dataframes
-        for var in self._df_vars:
-            getattr(self,var).to_csv(path/f"{var}.tsv.gz",sep="\t",compression='gzip')
+        arr = pd.array(results, dtype="bool").to_numpy().reshape(self.futures.shape)
+        resolved = pd.DataFrame(arr, index=self.futures.index, columns=self.futures.columns)
 
-        
-        # descriptions
-        clobber_mkdir(path/"descriptions")
-        for i, df in enumerate(self.descriptions):
-            target = path/"descriptions" / f"{i}.tsv.gz"
-            # Compute to pandas and then write
-            #pdf = ddf.compute()
-            df.to_csv(
-                target,
+        resolved.to_csv(self.fullp/"futures.tsv.gz",
                 sep="\t",
-                index=False,
-                compression="gzip"
+                compression="gzip")
+
+    def mwu(self,name):
+        """
+        Takes a name of a hypotheses set added previously with 
+        `add_hypothesis_set` and runs mann whitney u tests.
+        NOTE: Tests are performed directly on simulated data.
+        This means that ortho filtering is not applied!
+        """
+        #init & load relevant hypothesis set...
+        hypod=self.testd/name
+        hypof=hypod/"hypotheses.tsv"
+        if not hypof.is_file():
+            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
+        
+        hypotheses=HypothesisSet.from_tsv(hypof)
+
+        testd=hypod/"mwu"
+
+        testd.mkdir()
+        
+        #check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError("Tried to fit perfrom mwu testing, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
+        
+        #pull out the futures tracking 
+        tscription_futures=self.futures["transcription"].to_list()
+        
+        #little helper function to shuttle to workers
+        def _mwu_helper(tscription_future,
+                        path_scmpradat,
+                        path_output,
+                        hypothesis_set):
+            #load the data
+            dat = scMPRA_data.from_parquet(path_scmpradat)
+            #test
+            tester = HypothesisTester("mwu")
+            results = tester.run(hypothesis_set, dat)
+            #save
+            results.to_tsv(path_output)
+            
+            return True
+        
+        #submit jobs
+        for idx in range(0,self.get_state_field("n_sims")):
+            r=self.client.submit(_mwu_helper,
+                    tscription_future=tscription_futures[idx],
+                    path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
+                    path_output=testd/f"{idx}_results.tsv",
+                    hypothesis_set=hypotheses)
+            
+            self.testqueue.append(r)
+            
+    def wald(self,
+            name,
+            cov_method="sandwich"):
+        """
+        Takes a name of a hypotheses set added previously with 
+        `add_hypothesis_set` and runs wald tests.
+        Requires that `precompute_wald` have been computed previously.
+        cov_method : {"sandwich", "opg"}
+        - See ortho.precompute_wald for more information.
+        """
+        #pick input dir destination based on covariance matrix estimation procedure
+        precompd=self._switch_cov_method(cov_method)
+
+        #check to make sure previous step has at least been queued.
+        if cov_method not in self.futures.columns:
+            raise RuntimeError(f"wald precompute with coariance estimation method \'{cov_method}\' not yet run.")
+
+        #extract precomp
+        precomp_futures=self.futures[cov_method]
+        
+        #init & load relevant hypothesis set...
+        hypod=self.testd/name
+        hypof=hypod/"hypotheses.tsv"
+        if not hypof.is_file():
+            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
+        
+        hypotheses=HypothesisSet.from_tsv(hypof)
+
+        testd=hypod/f"wald_{cov_method}"
+
+        testd.mkdir()
+
+        #define helper function to submit
+        def _wald_helper(precomp_future,
+                    input_dir,
+                    name,
+                    path_output,
+                    hypothesis_set):
+            #load the relevant_ortho
+            test_ortho=ortho.load(client=get_client(),
+                        path=input_dir,
+                        name=name)
+            
+            #run the tests
+            tester = HypothesisTester("wald")
+            results  = tester.run(hypothesis_set,
+                    test_ortho,
+                    client=get_client())
+            
+            #save
+            results.to_tsv(path_output)
+
+            return True
+        
+        #submit jobs
+        for idx in range(0,self.get_state_field("n_sims")):
+            r=self.client.submit(_wald_helper,
+                                precomp_future=precomp_futures[idx],
+                                input_dir=precompd,
+                                name=str(idx),
+                                path_output=testd/f"{idx}_results.tsv",
+                                hypothesis_set=hypotheses)
+
+            self.testqueue.append(r)
+        
+    def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
+        """
+        Function adds a hypothesis set to the object for testing.
+        'name' will be the name of a directory, so usual caveats apply based on your filesystem
+        (avoid special characters, spaces...)
+        To run the actual tests, call one of the associated functions (test_wald, test_mwu).
+        """
+        hypod=self.testd/name
+        
+        try:
+            hypod.mkdir(parents=True)
+        except FileExistsError as e:
+            raise FileExistsError(
+                    f"Hypothesis test with name {name} already exists"
+                ) from e
+        
+        hypotheses.to_tsv(hypod/"hypotheses.tsv")
+        
+    def list_tests(self):
+        """
+        Lists all hypothesis sets and the tests which have been run on them.
+        """
+        root = self.testd
+        tree = {}
+
+        for level1 in sorted(p for p in root.iterdir() if p.is_dir()):
+            tree[level1.name] = sorted(
+                p.name for p in level1.iterdir() if p.is_dir()
             )
 
-        #data
-        scMPRA_data_root=path/"scMPRA"
-        clobber_mkdir(scMPRA_data_root)
-
-        for i, dat in enumerate(self.simulated_scMPRA):
-            dat.result().to_parquet(scMPRA_data_root/f"{i}.scmpra")
-
-        #save results
-        #results_root=path/"results"
-        #clobber_mkdir(results_root)
-        #for each hypothesis test
-        #for key in self.results.keys():
-        #    hypo_test_path=results_root/key
-        #    clobber_mkdir(hypo_test_path)
-        #    #for each replicate's results object
-        #    for idx,result_obj in enumerate(self.results[key]):
-        #        result_obj.result().to_tsv(hypo_test_path/f"{idx}.tsv")
-
-    @classmethod
-    def load(cls, client, path, name):
-        path = Path(path) / name
-        
-        # Create an instance
-        obj = cls.__new__(cls)  # bypass __init__
-        
-        #normal members
-        with open(path / "vars.json", "r") as f:
-            normal_dump = json.load(f)
-        
-        
-        for var, value in normal_dump.items():
-            setattr(obj, var, value)
-        
-        #dfs
-        for var in obj._df_vars:
-            df=pd.read_csv(path/f"{var}.tsv.gz",
-                sep="\t",
-                compression="gzip",
-                index_col=0)
-            
-            setattr(obj,var,df)
-            
-        # orthos
-        #orth_path = path / "orthos"
-        #orth_dirs = sorted(orth_path.glob("*"))
-        #
-        #if orth_dirs:  # only proceed if directory is not empty
-        #    max_index = int(orth_dirs[-1].name)
-        #    # first, initalize list to appropriate length
-        #    obj.orthos = [None] * (max_index + 1)
-        #    for ortho_dir in orth_dirs:
-        #        obj.orthos[int(ortho_dir.name)] = ortho.load(
-        #            client, path=orth_path, name=ortho_dir.name
-        #        )
-        #else:
-        #    obj.orthos = []
+        return tree
 
 
-        
-        #descriptions
-        #obj.descriptions=[]
-        #desc_path=path/"descriptions"
-        #for file in sorted(desc_path.glob("*.tsv.gz"),
-        #    key=lambda p: int(p.with_suffix("").stem)):
-        #    ddf = dd.read_csv(file, sep="\t", compression="gzip")
-        #    obj.descriptions.append(ddf)
-
-        
-        # descriptions
-        obj.descriptions = []
-        desc_path = path / "descriptions"
-        for dirpath in sorted(
-                desc_path.glob("*.tsv.gz"),                # these are directories named like "123.tsv.gz/"
-                key=lambda p: int(p.name.replace(".tsv.gz", ""))  # sort by the numeric dir name
-            ):
-            # read all part files inside the directory
-            ddf = dd.read_csv(
-                str(dirpath / "*"),                 # e.g., 0.part
-                sep="\t",
-                compression="gzip"
-            )
-            obj.descriptions.append(ddf)
-        
-        #scMPRA
-        obj.simulated_scMPRA=[]
-        scMPRA_data_root=path/"scMPRA"
-        for i, file in enumerate(scMPRA_data_root.glob("*.scmpra")):
-            working=scMPRA_data.from_parquet(scMPRA_data_root/f"{i}.scmpra")
-            working=client.submit(lambda x: x, working)
-            obj.simulated_scMPRA.append(working)
-        
-        #load hypothesis testing results
-        #obj.results={}
-        #results_root=path/"results"
-        #for hypo_test_path in results_root.iterdir():
-        #    if not hypo_test_path.is_dir():
-        #        continue
-        #    #found a directory containing results objects. 
-        #    test=hypo_test_path.name
-        #    #get all results & sort
-        #    results_names=sorted([i for i in hypo_test_path.iterdir()])
-        #    
-        #    working=[]
-        #    for rep_results_path in results_names:
-        #        working.append(
-        #                client.submit(
-        #                    lambda x: x,
-        #                    ResultSet.from_tsv(rep_results_path)
-        #            )
-        #        )
-        #    obj.results[test]=working
-        #
-        return obj
-    
-    def _validate_test(self,test,index):
-        """
-        Complains if test `test` of replicate `index` does not exist.
-        """
-        if not test in self.results:
-            raise ValueError(f"Test {test} not in object.")
-        if len(self.results[test])-1<index:
-            raise ValueError(f"Index {index} for test {test} is not in object.")
-    
-    
-    
-    def crosstab(self,test,index):
-        """
-        COLLECTOR FUNCTION
-        Evaluates the performance of a test as a classifier, using 
-        BH corrected p-value cutoff. 
-        """
-        df=self._merge_in_ground_truth(test=test,index=index)
-        return pd.crosstab(df["gt_null"],df["reject_null"])
-    
-    def prc(self,test,index):
-        """
-        COLLECTOR
-        """
-        merged=self._merge_in_ground_truth(test,index)
-        y_true = (~merged["gt_null"]).astype(int).to_numpy()
-        p = merged["p_value"].to_numpy()
-        epsilon = np.finfo(float).tiny
-        scores = -np.log10(p + epsilon)
-
-        prec, rec, _ = precision_recall_curve(y_true, scores)
-        auprc = average_precision_score(y_true, scores)
-
-
-        # Plot PRC with baseline
-        pos_rate = y_true.mean()  # prevalence; PRC baseline
-        plt.figure(figsize=(5,4))
-        plt.plot(rec, prec, lw=2)
-        plt.hlines(pos_rate, 0, 1, linestyles="--", label=f"Baseline = {pos_rate:.3f}")
-        plt.xlim(0, 1); plt.ylim(0, 1)
-        plt.xlabel("Recall")
-        plt.ylabel("Precision")
-        plt.title(f"PR Curve (AUPRC = {auprc:.3f})")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-
-    def roc(self,test,index):
-        """
-        COLLECTOR
-        """
-        merged=self._merge_in_ground_truth(test,index)
-        y_true = (~merged["gt_null"]).astype(int).to_numpy()
-        p = merged["p_value"].to_numpy()
-        epsilon = np.finfo(float).tiny
-        scores = -np.log10(p + epsilon)
-
-
-        fpr, tpr, _ = roc_curve(y_true, scores)
-        auroc = roc_auc_score(y_true, scores)
-
-        plt.figure(figsize=(5,4))
-        plt.plot(fpr, tpr, lw=2, label=f"AUROC = {auroc:.3f}")
-        plt.plot([0,1],[0,1], "--", color="gray")
-        plt.xlim(0,1); plt.ylim(0,1)
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.title("ROC Curve")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-
-def _wrap_helper(df,negative_controls,reference_cell_type):
-    """
-    Helper function for class de_novo_simulation.
-    Converts a simulated DF to an scMPRA object.
-    """
-    ret=scMPRA_data()
-    
-    ret.data=df
-    
-    ret.set_negative_controls(negative_controls)
-    ret.set_reference_cell(reference_cell_type)
-    ret.flag_synthetic()
-    ret.overtransfected()
-    ret.flatten_overtransfection()
-    return ret
-
-def _ortho_helper(data:scMPRA_data):
-    """
-    Helper function for de_novo_simulation._create_ortho_for_replicate
-    """
-    client=get_client()
-    data=data.result()
-    data.ortho_filter()
-    primordial=ortho()
-    primordial.criss_cross(client=client,
-                            dat=data)
-    primordial.extract_params(client)
-    return primordial
-    
-
-
-
-def _test_helper(test,
-        hypothesis_set,
-        test_data=None,
-        test_ortho=None):
-    """
-    Helper function for de_novo_simulation._test_all_replicates
-    """
-    client=get_client()
-    if test == "wald" and not test_ortho:
-        raise ValueError("Precomputed ortho required for wald test.")
-    if not test_data:
-        raise ValueError("Test data required") 
-
-    if test=="wald":
-        test_ortho.training_data=test_data
-        test_ortho.precompute_wald(client)
-        tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, test_ortho, client)
-        return results
-    elif test=="mwu":
-        tester = HypothesisTester(test)
-        results  = tester.run(hypothesis_set, test_data, client)
-        return results
-    else:
-        assert 1==2; "Test not yet implemented yet in this context."
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
@@ -5372,7 +5799,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
     #handle case where mu is zero
     ret.loc[ret["mu"]==0.0,"p"]=0.0
 
-    #finally, we convert to a dask dataframe & return 
     return ret
 
 
