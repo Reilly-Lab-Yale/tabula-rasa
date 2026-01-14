@@ -5104,7 +5104,6 @@ class de_novo_simulation:
     def gamut(self):
         self._simulate_transfection()
         self._simulate_transcription()
-
     
     def _merge_in_ground_truth(self,hypothesis_set_name,test_type,index):
         """
@@ -5157,6 +5156,55 @@ class de_novo_simulation:
         return merged
 
 
+    def _classifier_summary(self,hypothesis_set_name,test_type):
+        """
+        Treating the given test as a classifier, function computes AUROC, AUPRC for all replicates. 
+        """
+        self._block_until_all_tests_are_done()
+
+        ret={'replicate':[],'auroc':[],'auprc':[]}
+
+        for idx in range(0,self.get_state_field("n_sims")):
+            df=self._merge_in_ground_truth(hypothesis_set_name,
+                    test_type,
+                    index=idx)
+            
+            y_true = (~df["gt_null"]).astype(int)
+            y_score = 1.0 - df["p_value"]
+
+            auroc = roc_auc_score(y_true, y_score)
+            auprc = average_precision_score(y_true, y_score)
+
+            ret['replicate'].append(idx)
+            ret['auroc'].append(auroc)
+            ret['auprc'].append(auprc)
+        
+        return pd.DataFrame(ret)
+           
+    @unimplemented
+    def _all_classifier_summary(self,hypothesis_set_name):
+        """
+        Function computes AUROC, AUPRC, for all tests.
+        """
+    
+    @unimplemented
+    def median_ROC(self,hypothesis_set_name,test_types,include_alpha=True):
+        """
+        Plots the ROC curve for the replicate with the median auROC
+
+        Takes a list of test_types plotting the curve for all.
+        
+        Note that function is a collector and WILL hang if ANY tests are not completed.
+        """
+        pass
+    
+    @unimplemented
+    def median_PRC():
+        """
+        Plots the ...
+
+        Note that function is a collector and WILL hang if ANY tests are not completed.
+        """
 
     
     def _switch_cov_method(self,cov_method):
@@ -5170,7 +5218,6 @@ class de_novo_simulation:
         else:
             raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
         return precompd
-
     
     def precompute_wald(self,cov_method="sandwich"):
         """
@@ -5497,10 +5544,6 @@ class de_novo_simulation:
 
         return tree
 
-    def median_PRC(self,name,test):
-        """
-
-        """
 
 
 def _simulate_transfection(experiment_bounds:Bounds,
