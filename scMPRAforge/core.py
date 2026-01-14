@@ -91,6 +91,8 @@ HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
 
 WARN_MULTI_TRANSFECTION_PERCENT=2.0
 
+ERROR_TEST_NAN_PERCENT=5
+
 RESULT_REQUIRED = {
     "test_type", "test_statistic", "p_value", "fold_change", "bh_p", "flattened"
 }
@@ -5168,6 +5170,21 @@ class de_novo_simulation:
             df=self._merge_in_ground_truth(hypothesis_set_name,
                     test_type,
                     index=idx)
+
+            df["meta"] = df["meta"].fillna(0)
+            
+            #df drop nans
+            nona=df.copy()
+            nona=nona.dropna()
+
+            if len(nona)!=len(df):
+                percent=(len(df)-len(nona))/len(df)*100
+                logger.info(f"Dropped {len(df)-len(nona)} or {percent:.1f}% of tests with NA values for test:{test_type}, rep:{idx}.")
+                if percent>ERROR_TEST_NAN_PERCENT:
+                    raise RuntimeError("Percent of dropped tests greater than threshold, aborting.")
+
+            
+            df=nona
             
             y_true = (~df["gt_null"]).astype(int)
             y_score = 1.0 - df["p_value"]
@@ -5181,22 +5198,45 @@ class de_novo_simulation:
         
         return pd.DataFrame(ret)
            
-    @unimplemented
     def _all_classifier_summary(self,hypothesis_set_name):
         """
         Function computes AUROC, AUPRC, for all tests.
         """
-    
-    @unimplemented
-    def median_ROC(self,hypothesis_set_name,test_types,include_alpha=True):
-        """
-        Plots the ROC curve for the replicate with the median auROC
+        tests=self.list_tests()
+        if not hypothesis_set_name in tests.keys():
+            raise RuntimeError(f"Unable to find hypothesis set '{hypothesis_set_name}.'")
+        
+        tests=tests[hypothesis_set_name]
 
-        Takes a list of test_types plotting the curve for all.
+        ret=[]
+        
+        for test in tests:
+            df=self._classifier_summary(hypothesis_set_name,test_type=test)
+            df["test"]=test
+            ret.append(df)
+
+        return pd.concat(ret)
+    
+    def median_performance_curve(self,hypothesis_set_name,test_types,performance_type,include_alpha=True):
+        """
+        Plots the ROC curve for the replicate with the median auROC or the PRC curve for the replicate with the median auPRC.
+        - hypothesis_set_name: string of hypothesis set name.
+        - test_types: list of strings of tests you want to plot
+        - performance_type: ROC or PRC
         
         Note that function is a collector and WILL hang if ANY tests are not completed.
         """
-        pass
+        if performance_type not in ["ROC","PRC"]:
+            raise 
+
+        #For each test, find the median replicate
+
+        #Now, for each test/median replicate
+        ## get the performance table
+        ## use sklearn to compute 
+
+        
+        
     
     @unimplemented
     def median_PRC():
