@@ -966,6 +966,31 @@ class scMPRA_data:
         self.data= self.data.groupby(groupby_columns).agg("sum").reset_index()
         self.operations.append("overtransfection_flattened")
     
+    def pseudobulk(self,subset,split,agg_method="sum"):
+        """
+        Function takes an subset and a split direction.
+        Subset is the value of anti_split we want to subset to.
+        Returns data from the specified subset, pseudobulked 
+        across cells and MPRA barcodes. agg_method specifies
+        how ggregation should occur. Passed directly to 'func'
+        of pandas 'agg'.
+
+        https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.agg.html
+
+        split takes 'cre_id' or 'cell_type'
+
+        Example: split='cre_id', subset='cardiomyocytes' will
+        give you pseudobulked data for all CREs, in cardiomyocytes,
+        per replicate.
+        """
+        anti=anti_split(split)
+
+        working=self.data.copy()
+        working=working[working[anti]==subset]
+        working=working[["rep_id",split,"umis_mpra_bc"]]
+        working.groupby(["rep_id",split]).agg(func=agg_method).reset_index()
+        return working
+    
     def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
         """
         Return True iff the overall percent of cells with >=1 multi-transfection
