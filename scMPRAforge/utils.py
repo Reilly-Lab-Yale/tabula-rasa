@@ -10,6 +10,8 @@ import pandas as pd
 from dask.distributed import Future
 import itertools
 import time
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger("scMPRAforge")
 
@@ -425,3 +427,121 @@ def sample_crp_groups(n, alpha, rng=None):
             sizes[k] += 1
             groups[i] = k
     return groups
+
+
+def _plot_test_bars(
+    df,
+    metric="auroc",
+    *,
+    test_col="test",
+    replicate_col="replicate",
+    figsize=(8, 4.5),
+    estimator="mean",     # "mean" or "median"
+    err="sd",             # "sd" or "se"
+    show_points=True,
+    point_jitter=0.18,
+    point_size=4,
+    order="median_desc",  # "median_desc", "mean_desc", or a list of test names
+    ylims="auto",         # "auto" or (ymin, ymax)
+    ax=None,
+    title=None,
+):
+    """
+    Helper function for de_novo_sim.
+
+    Bar chart per test with replicate points overlaid and error bars.
+
+    - Bars show mean/median across replicates.
+    - Error bars show SD or SE across replicates.
+    - Y-axis is fixed to a reasonable range per metric (AUROC/AUPRC) by default.
+    """
+    required = {test_col, replicate_col, metric}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    plot_df = df[[test_col, replicate_col, metric]].copy()
+    plot_df[metric] = plot_df[metric].astype(float)
+
+    sns.set_theme(style="whitegrid", context="talk")
+
+    # Choose aggregation
+    if estimator not in {"mean", "median"}:
+        raise ValueError("estimator must be 'mean' or 'median'")
+    if err not in {"sd", "se"}:
+        raise ValueError("err must be 'sd' or 'se'")
+
+    # Decide order
+    tests = plot_df[test_col].unique().tolist()
+    if isinstance(order, list):
+        order_list = order
+    else:
+        if order == "median_desc":
+            order_list = (
+                plot_df.groupby(test_col)[metric].median().sort_values(ascending=False).index.tolist()
+            )
+        elif order == "mean_desc":
+            order_list = (
+                plot_df.groupby(test_col)[metric].mean().sort_values(ascending=False).index.tolist()
+            )
+        else:
+            order_list = sorted(tests)
+
+    # Fixed y-lims defaults that are usually sensible for these metrics
+    if ylims == "auto":
+        m = metric.lower()
+        if m == "auroc":
+            y_min, y_max = 0.5, 1.0
+        elif m == "auprc":
+            y_min, y_max = 0.0, 1.0
+        else:
+            # generic: pad around observed
+            lo, hi = plot_df[metric].min(), plot_df[metric].max()
+            pad = 0.05 * (hi - lo if hi > lo else 1.0)
+            y_min, y_max = lo - pad, hi + pad
+    else:
+        y_min, y_max = ylims
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+
+    # Build barplot with desired estimator + error
+    agg = "mean" if estimator == "mean" else "median"
+    # seaborn expects callable for estimator
+    est_fn = {"mean": lambda x: x.mean(), "median": lambda x: x.median()}[agg]
+
+    # errorbars:
+    # seaborn 0.12+: errorbar can be "sd" or "se"
+    sns.barplot(
+        data=plot_df,
+        x=test_col,
+        y=metric,
+        order=order_list,
+        estimator=est_fn,
+        errorbar=err,     # "sd" or "se"
+        capsize=0.15,
+        ax=ax,
+    )
+
+    if show_points:
+        sns.stripplot(
+            data=plot_df,
+            x=test_col,
+            y=metric,
+            order=order_list,
+            jitter=point_jitter,
+            size=point_size,
+            alpha=0.8,
+            ax=ax,
+        )
+
+    ax.set_xlabel("")
+    ax.set_ylabel(metric.upper())
+    ax.set_ylim(y_min, y_max)
+    ax.set_title(title or f"{metric.upper()} by test ({estimator} ± {err})")
+    ax.tick_params(axis="x", rotation=25)
+
+    fig.tight_layout()
+    return fig, ax

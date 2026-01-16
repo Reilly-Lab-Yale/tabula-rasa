@@ -73,7 +73,7 @@ from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
-from .utils import alpha_for_expected_groups, sample_crp_groups
+from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
 logger = logging.getLogger("scMPRAforge")
 
 
@@ -5043,7 +5043,7 @@ class de_novo_simulation:
 
             #save the state
             self.save()
-
+    
     def _simulate_transfection(self):
         """
         Simulates transfection. Most of the logic
@@ -5156,7 +5156,6 @@ class de_novo_simulation:
         merged["reject_null"]=merged["bh_p"]<self.get_state_field("alpha")
 
         return merged
-
 
     def _classifier_summary(self,hypothesis_set_name,test_type):
         """
@@ -5365,7 +5364,14 @@ class de_novo_simulation:
 
         plot_curves(curves,kind=performance_type,p_value=p_value)
 
-    
+    def performance_barchart(self,hypothesis_set_name,metric):
+        """
+        metric is one of auroc, auprc
+        """
+        self._block_until_all_tests_are_done()
+        df=self._all_classifier_summary(hypothesis_set_name)
+        _plot_test_bars(df,metric)
+
     def _switch_cov_method(self,cov_method):
         """
         Helper function which validates passed cov method.
