@@ -988,7 +988,12 @@ class scMPRA_data:
         working=self.data.copy()
         working=working[working[anti]==subset]
         working=working[["rep_id",split,"umis_mpra_bc"]]
-        working.groupby(["rep_id",split]).agg(func=agg_method).reset_index()
+        working = (
+            working
+            .groupby(["rep_id", split])
+            .agg(agg_method)
+            .reset_index()
+        )
         return working
     
     def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
