@@ -1767,47 +1767,41 @@ class ortho:
 
         return ret_ortho
 
-    @unimplemented
-    def clean(self,kill_list="auto"):
-        """
-        Deletes intermediate values to save space. 
+    
+    def _condense_dat(self,dat):
+        if dat==None:#passed dat is none, look for cached training data.
+            if self.training_data==None:
+                raise RuntimeError("No training data supplied.")
+            dat=self.training_data
+        else:#dat is not none, save it
+            self.training_data=dat.copy()
+        return dat
 
-        `kill_list` is any or all of "training_data", "design_matricies", "models", "parameters"
+    
+    def fit_by_cre_models(self,client,dat=None):
+        dat=_condense_dat(dat)
+        self.by_cre, self.by_cre_design=standard_fit(client,
+                                                     dat,
+                                                     split="cre_id")
+        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+
         
-        alternatively, "auto" is equivalent to ["training_data", "design_matricies"]
-        """
-        for target in kill_list:
-            pass
+    def fit_by_cell_type_models(self,client,dat=None):
+        dat=_condense_dat(dat)
+        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
+                                                        dat,
+                                                        split="cell_type")
+        self.by_cre.label_regressors(client,self.by_cre_design)
+        
     
     def criss_cross(self,client,dat):
         """
         Makes by_cre and by_cell_type models.
-
-        Note: a little computationally intensive...
-        retain_metadata will keep some information 'dat' in self.training_data
-        The actual MPRA data will be stripped to save space, but metadata will be retained
         """
+        self.fit_by_cre_models(client=client,dat=dat)
+        self.fit_by_cell_type_models(client=client,dat=dat)
         
         
-        
-        self.by_cre, self.by_cre_design=standard_fit(client,
-                                                     dat,
-                                                     split="cre_id")
-        
-        
-        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
-                                                        dat,
-                                                        split="cell_type")
-        
-        self.training_data=dat.copy()
-        self.annotate_models(client)
-
-    def annotate_models(self,client):
-        """
-        Adds regressor names to each model
-        """
-        self.by_cre.label_regressors(client,self.by_cre_design)
-        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
     
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
