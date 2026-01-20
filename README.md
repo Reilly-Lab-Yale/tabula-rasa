@@ -67,14 +67,22 @@ conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueu
 may need to install `tensorflow keras` if you didn't above
 
 At this point, it may work fine. However some environments (such as mccleary gpu nodes) may require some more fnagling to get GPU accel working. Perform the following:
+
+For McCleary:
 ```
 conda install cudatoolkit=11.2 cudnn=8.1.0
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 ```
 
-latter not necessary on bouchet
+For Bouchet: 
+```
+conda install cudatoolkit=11.2 cudnn=8.1.0
+# Store system paths to cuda libraries for gpu communication
+mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+```
 
-then deactivate, activate, and test with
+then deactivate, activate, and test with (must be on gpu node)
 ```
 python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
