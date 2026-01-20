@@ -76,7 +76,7 @@ echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFI
 
 For Bouchet: 
 ```
-conda install cudatoolkit=11.2 cudnn=8.1.0
+conda install cudatoolkit=11.3.1 cudnn=8.2.1
 # Store system paths to cuda libraries for gpu communication
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
