@@ -58,7 +58,7 @@ import warnings
 # tensorflow import for Wald test Hessian/SE computation
 try:
     import tensorflow as tf
-    tf.compat.v1.disable_eager_execution()  # single source of truth: graph mode only
+    tf.compat.v1.disable_eager_execution()  # graph mode only
 except Exception as _tf_err:
     tf = None
 
@@ -86,6 +86,25 @@ def dump_df_debug(df, prefix="debug_df", outdir="."):
 
     logger.info(f"[debug] dumped df to: {path}")
     return path
+
+def dump_df_pickle_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    path = outdir / f"{prefix}_{uid}.pkl"
+    df.to_pickle(path)
+
+    print(f"[debug] pickled df to: {path}")
+    return path
+
+
+def load_df_pickle_debug(path):
+    path = Path(path)
+    df = pd.read_pickle(path)
+
+    print(f"[debug] loaded df from: {path}")
+    return df
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
@@ -5054,8 +5073,8 @@ class de_novo_simulation:
         """
         n_sims=self.get_state_field("n_sims")
 
-        #load ground truth
-        ground_truth=pd.read_csv(self.fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+        #ground truth
+        ground_truth=self.ground_truth
 
         #load the experiment bounds
         experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
@@ -5086,7 +5105,7 @@ class de_novo_simulation:
         
         for idx in range(0,n_sims):
             #load the corresponding library
-            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip',index_col=0)
 
             #submit a job to simulate transfection using the helper function
             ret=self.client.submit(_simulate_transfection_helper,
@@ -5784,8 +5803,12 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
         
         logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        logger.info(f"C.5: cells_df cols: {ground_truth.columns}, types: {ground_truth.dtypes}")
 
         # merge in ground truth
+
+        dump_df_pickle_debug(cells_df,prefix="permerge_cells_df")
+        dump_df_pickle_debug(ground_truth,prefix="premerge_gt")
         
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
@@ -5793,6 +5816,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="many_to_one",
                                 how="left")
         
+        dump_df_pickle_debug(cells_df,prefix="postmerge")
+
         logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
         logger.info(f"D {cells_df.isna().sum().sum()}")
@@ -5800,7 +5825,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
         #check to make sure there were no NAs introduced
         #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
 
-        dump_df_debug(cells_df)
+        #dump_df_debug(cells_df)
         
         #TEMP DEBUG OVERRIDE
         #return cells_df
