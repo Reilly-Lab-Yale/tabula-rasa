@@ -76,12 +76,21 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
 logger = logging.getLogger("scMPRAforge")
 
+def dump_df_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
+    path = outdir / f"{prefix}_{uid}.tsv.gz"
+    df.to_csv(path, sep="\t", index=False, compression="gzip")
+
+    logger.info(f"[debug] dumped df to: {path}")
+    return path
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
 DEFAULT_SIGNIFICANCE_THRESHOLD=0.05
-#If (a-b) < FLOATING_POINT_DIFF, we conclude a=b.
+#If abs(a-b) < FLOATING_POINT_DIFF, we conclude a=b.
 FLOATING_POINT_DIFF=1e-8
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
@@ -5032,7 +5041,7 @@ class de_novo_simulation:
             experiment_bounds.to_tgz(fullp/"experiment_bounds.tgz")
 
             #save the ground truth
-            self.ground_truth=ground_truth
+            self.ground_truth=cast_string_keys(ground_truth, ["cell_type", "cre_id"])
             ground_truth.to_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
 
             #save the state
@@ -5704,6 +5713,15 @@ class de_novo_simulation:
         return tree
 
 
+def cast_string_keys(df, keys):
+    df = df.copy()
+    for k in keys:
+        df[k] = (
+            df[k]
+            .astype("string")   # pandas StringDtype, not object
+            .str.strip()        # kill whitespace
+        )
+    return df
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
@@ -5715,6 +5733,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
     See README spec for details on ground truth dataframe.
     You can easially create one with the helper function `simple_spread`. 
     """
+
+    ground_truth=cast_string_keys(ground_truth,["cell_type", "cre_id"])
 
     #known before you start : "to be optimized":
     #  cells per cell-type is a fixed parameter
@@ -5745,25 +5765,49 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 size=len(cells_df))
         
         #merge dataframes
+        logger.info(f"1 cells_df has col {cells_df.columns} drawn_library had cols {drawn_library.columns}")
+        
         cells_df=cells_df.merge(drawn_library,
                                 left_index=True,
                                 right_index=True,
                                 validate="one_to_one")
         
+        #logger.info(f"1 {cells_df.isna().sum().sum()}")
+        
+        
+        keys = ["cell_type", "cre_id"]
         
         # drop library abundance, we don't care anymore.
         cells_df=cells_df.drop(columns=["abundance"])
+        cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
         
         # merge in ground truth
+        
+        #logger.info(f"2 cells_df has col {cells_df.columns} ground_truth has cols {ground_truth.columns}")
+
+        
+
+        
+        #logger.info(f"cells_df dtypes: {cells_df[keys].dtypes}")
+        #logger.info(f"ground_truth dtypes: {ground_truth[keys].dtypes}")
+        
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
                                 on=["cell_type","cre_id"],
                                 validate="many_to_one",
                                 how="left")
+        
+        logger.info(f"2 {cells_df.isna().sum().sum()}")
 
         #check to make sure there were no NAs introduced
         #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
 
+        dump_df_debug(cells_df)
+        
+        #TEMP DEBUG OVERRIDE
+        #return cells_df
+
+        
         bad = cells_df[cells_df.isna().any(axis=1)]
         assert bad.empty, (
             "DataFrame contains NA values in these rows:\n"
