@@ -5764,8 +5764,10 @@ def _simulate_transfection(experiment_bounds:Bounds,
         drawn_library=sample_from_library(library=library,
                                 size=len(cells_df))
         
+        logger.info(f"A: drawn_library cols: {drawn_library.columns}, types: {drawn_library.dtypes}")
+        logger.info(f"A: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        
         #merge dataframes
-        logger.info(f"1 cells_df has col {cells_df.columns} drawn_library had cols {drawn_library.columns}")
         
         cells_df=cells_df.merge(drawn_library,
                                 left_index=True,
@@ -5773,7 +5775,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="one_to_one")
         
         #logger.info(f"1 {cells_df.isna().sum().sum()}")
-        
+        logger.info(f"B: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
         keys = ["cell_type", "cre_id"]
         
@@ -5781,15 +5783,9 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.drop(columns=["abundance"])
         cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
         
+        logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+
         # merge in ground truth
-        
-        #logger.info(f"2 cells_df has col {cells_df.columns} ground_truth has cols {ground_truth.columns}")
-
-        
-
-        
-        #logger.info(f"cells_df dtypes: {cells_df[keys].dtypes}")
-        #logger.info(f"ground_truth dtypes: {ground_truth[keys].dtypes}")
         
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
@@ -5797,7 +5793,9 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="many_to_one",
                                 how="left")
         
-        logger.info(f"2 {cells_df.isna().sum().sum()}")
+        logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        
+        logger.info(f"D {cells_df.isna().sum().sum()}")
 
         #check to make sure there were no NAs introduced
         #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
@@ -5806,7 +5804,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
         
         #TEMP DEBUG OVERRIDE
         #return cells_df
-
         
         bad = cells_df[cells_df.isna().any(axis=1)]
         assert bad.empty, (
