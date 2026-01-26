@@ -1093,7 +1093,6 @@ class scMPRA_data:
         y=self.data.groupby("cre_id")["mpra_bc"].nunique()
         return simple_count(data=y)
 
-    
     def set_negative_controls(self,negative_controls:list[str]):
         """
         Takes a list of CRE names that we consider to be negative controls and give them all the name "negative_control", lumping all their data together.
@@ -1111,7 +1110,6 @@ class scMPRA_data:
         #(Can be deduced from difference between cre_id and 
         #cre_id_original, but this is more convienient).
         self.negative_controls=self.negative_controls+negative_controls
-    
     
     def set_reference_cell(self,reference_cell_type):
         assert self.reference_cell_type is None, "Already set reference cell type."
