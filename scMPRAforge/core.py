@@ -1836,19 +1836,20 @@ class ortho:
 
     
     def fit_by_cre_models(self,client,dat=None):
-        dat=_condense_dat(dat)
+        dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
                                                      split="cre_id")
-        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+        self.by_cre.label_regressors(client,self.by_cre_design)
+        
 
         
     def fit_by_cell_type_models(self,client,dat=None):
-        dat=_condense_dat(dat)
+        dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
                                                         split="cell_type")
-        self.by_cre.label_regressors(client,self.by_cre_design)
+        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
         
     
     def criss_cross(self,client,dat):
@@ -5482,11 +5483,16 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self):
+    def fit_orthos(self,direction="both"):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
+
+        direction can be 'both', 'by_cre' or 'by_cell_type'
         """
+        valid_directions=['both','by_cre','by_cell_type']
+        if direction not in valid_directions:
+            raise ValueError(f"Invalid direction {direction}, valid directions are {valid_directions}")
         #check to make sure previous step has at least been queued.
         if "transcription" not in self.futures.columns:
             raise RuntimeError("Tried to fit orthos, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
@@ -5508,8 +5514,16 @@ class de_novo_simulation:
             #create an ortho
             client=get_client()
             primordial=ortho()
-            primordial.criss_cross(client=client,
-                                    dat=data)
+            if direction=="both":
+                primordial.criss_cross(client=client,
+                                        dat=data)
+            elif direction=="by_cre":
+                primordial.fit_by_cre_models(client=client,
+                                        dat=data)
+            elif direction=="by_cell_type":
+                fit_by_cell_type_models(client=client,
+                                        dat=data)
+            
             primordial.extract_params(client)
 
             #write the ortho to disc
