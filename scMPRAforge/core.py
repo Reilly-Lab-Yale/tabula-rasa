@@ -786,17 +786,26 @@ class Bounds:
 
     def to_tgz(self, out_file):
         with tempfile.TemporaryDirectory() as tmpdir:
+            type_map = {}
             # dump members as parquet files
             for name, value in self.__dict__.items():
                 path = os.path.join(tmpdir, f"{name}.parquet")
                 if isinstance(value, pd.DataFrame):
+                    type_map[name] = "dataframe"
                     value.to_parquet(path, engine="pyarrow", index=True)
                 elif isinstance(value,simple_count):
+                    type_map[name] = "simplecount"
                     value.to_dataframe().to_parquet(path, engine="pyarrow", index=True)
                 elif isinstance(value, pd.Series):
+                    type_map[name] = "series"
                     value.to_frame(name).to_parquet(path, engine="pyarrow", index=True)
                 else:
+                    type_map[name] = "scalar"
                     pd.DataFrame({name: [value]}).to_parquet(path, engine="pyarrow", index=False)
+
+            type_map_path = os.path.join(tmpdir, "types.json")
+            with open(type_map_path, "w", encoding="utf-8") as f:
+                json.dump(type_map, f)
 
             # pack into a tgz
             with tarfile.open(out_file, "w:gz") as tar:
@@ -810,22 +819,42 @@ class Bounds:
             with tarfile.open(in_file, "r:gz") as tar:
                 tar.extractall(tmpdir)
 
+            type_map = {}
+            type_map_path = os.path.join(tmpdir, "types.json")
+            if os.path.exists(type_map_path):
+                with open(type_map_path, "r", encoding="utf-8") as f:
+                    type_map = json.load(f)
+
             # load parquet members back
             for fname in os.listdir(tmpdir):
                 if fname.endswith(".parquet"):
                     name = fname[:-8]
                     path = os.path.join(tmpdir, fname)
                     df = pd.read_parquet(path, engine="pyarrow")
-                    if df.shape == (1, 1):
-                        val = df.iloc[0, 0]
-                    elif df.shape[1] == 1:
+                    val_type = type_map.get(name)
+                    if val_type == "simplecount":
+                        val = simple_count.from_dataframe(df)
+                    elif val_type == "series":
                         val = df.iloc[:, 0]
-                    else:
+                        val.name = df.columns[0] if len(df.columns) else name
+                    elif val_type == "dataframe":
                         val = df
+                    elif val_type == "scalar":
+                        val = df.iloc[0, 0]
+                    else:
+                        if df.shape == (1, 1):
+                            val = df.iloc[0, 0]
+                        elif df.shape[1] == 1:
+                            val = df.iloc[:, 0]
+                        else:
+                            val = df
                     setattr(ret, name, val)
+
         #re-initalize 
-        ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
-        ret.library_model=simple_count.from_dataframe(ret.library_model)
+        if isinstance(ret.transfection_model, pd.DataFrame):
+            ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
+        if isinstance(ret.library_model, pd.DataFrame):
+            ret.library_model=simple_count.from_dataframe(ret.library_model)
 
         ret.transfection_model.update_alt_nb_param()
         ret.library_model.update_alt_nb_param()
@@ -5078,8 +5107,6 @@ class de_novo_simulation:
         #load the experiment bounds
         experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
 
-        logger.info(experiment_bounds.cells_per_cell_type)
-        logger.info(type(experiment_bounds.cells_per_cell_type))
 
         #create an output directory for the descriptions
         self.descripd.mkdir(parents=True, exist_ok=True)
@@ -5785,8 +5812,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
         drawn_library=sample_from_library(library=library,
                                 size=len(cells_df))
         
-        logger.info(f"A: drawn_library cols: {drawn_library.columns}, types: {drawn_library.dtypes}")
-        logger.info(f"A: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        #logger.info(f"A: drawn_library cols: {drawn_library.columns}, types: {drawn_library.dtypes}")
+        #logger.info(f"A: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
         #merge dataframes
         
@@ -5796,7 +5823,7 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="one_to_one")
         
         #logger.info(f"1 {cells_df.isna().sum().sum()}")
-        logger.info(f"B: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        #logger.info(f"B: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
         keys = ["cell_type", "cre_id"]
         
@@ -5804,13 +5831,13 @@ def _simulate_transfection(experiment_bounds:Bounds,
         cells_df=cells_df.drop(columns=["abundance"])
         cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
         
-        logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
-        logger.info(f"C.5: cells_df cols: {ground_truth.columns}, types: {ground_truth.dtypes}")
+        #logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        #logger.info(f"C.5: cells_df cols: {ground_truth.columns}, types: {ground_truth.dtypes}")
 
         # merge in ground truth
 
-        dump_df_pickle_debug(cells_df,prefix="permerge_cells_df")
-        dump_df_pickle_debug(ground_truth,prefix="premerge_gt")
+        #dump_df_pickle_debug(cells_df,prefix="permerge_cells_df")
+        #dump_df_pickle_debug(ground_truth,prefix="premerge_gt")
         
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
@@ -5818,11 +5845,11 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 validate="many_to_one",
                                 how="left")
         
-        dump_df_pickle_debug(cells_df,prefix="postmerge")
+        #dump_df_pickle_debug(cells_df,prefix="postmerge")
 
-        logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        #logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
-        logger.info(f"D {cells_df.isna().sum().sum()}")
+        #logger.info(f"D {cells_df.isna().sum().sum()}")
 
         #check to make sure there were no NAs introduced
         #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
