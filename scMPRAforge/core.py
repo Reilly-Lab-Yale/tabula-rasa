@@ -58,7 +58,7 @@ import warnings
 # tensorflow import for Wald test Hessian/SE computation
 try:
     import tensorflow as tf
-    tf.compat.v1.disable_eager_execution()  # single source of truth: graph mode only
+    tf.compat.v1.disable_eager_execution()  # graph mode only
 except Exception as _tf_err:
     tf = None
 
@@ -76,12 +76,40 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
 logger = logging.getLogger("scMPRAforge")
 
+def dump_df_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
+    path = outdir / f"{prefix}_{uid}.tsv.gz"
+    df.to_csv(path, sep="\t", index=False, compression="gzip")
+
+    logger.info(f"[debug] dumped df to: {path}")
+    return path
+
+def dump_df_pickle_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    path = outdir / f"{prefix}_{uid}.pkl"
+    df.to_pickle(path)
+
+    print(f"[debug] pickled df to: {path}")
+    return path
+
+
+def load_df_pickle_debug(path):
+    path = Path(path)
+    df = pd.read_pickle(path)
+
+    print(f"[debug] loaded df from: {path}")
+    return df
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
 DEFAULT_SIGNIFICANCE_THRESHOLD=0.05
-#If (a-b) < FLOATING_POINT_DIFF, we conclude a=b.
+#If abs(a-b) < FLOATING_POINT_DIFF, we conclude a=b.
 FLOATING_POINT_DIFF=1e-8
 
 # Table schemas (centralized to avoid drift), open to packing this up into the class object if we feel that is cleaner
@@ -758,17 +786,26 @@ class Bounds:
 
     def to_tgz(self, out_file):
         with tempfile.TemporaryDirectory() as tmpdir:
+            type_map = {}
             # dump members as parquet files
             for name, value in self.__dict__.items():
                 path = os.path.join(tmpdir, f"{name}.parquet")
                 if isinstance(value, pd.DataFrame):
+                    type_map[name] = "dataframe"
                     value.to_parquet(path, engine="pyarrow", index=True)
-                if isinstance(value,simple_count):
+                elif isinstance(value,simple_count):
+                    type_map[name] = "simplecount"
                     value.to_dataframe().to_parquet(path, engine="pyarrow", index=True)
                 elif isinstance(value, pd.Series):
+                    type_map[name] = "series"
                     value.to_frame(name).to_parquet(path, engine="pyarrow", index=True)
                 else:
+                    type_map[name] = "scalar"
                     pd.DataFrame({name: [value]}).to_parquet(path, engine="pyarrow", index=False)
+
+            type_map_path = os.path.join(tmpdir, "types.json")
+            with open(type_map_path, "w", encoding="utf-8") as f:
+                json.dump(type_map, f)
 
             # pack into a tgz
             with tarfile.open(out_file, "w:gz") as tar:
@@ -782,22 +819,42 @@ class Bounds:
             with tarfile.open(in_file, "r:gz") as tar:
                 tar.extractall(tmpdir)
 
+            type_map = {}
+            type_map_path = os.path.join(tmpdir, "types.json")
+            if os.path.exists(type_map_path):
+                with open(type_map_path, "r", encoding="utf-8") as f:
+                    type_map = json.load(f)
+
             # load parquet members back
             for fname in os.listdir(tmpdir):
                 if fname.endswith(".parquet"):
                     name = fname[:-8]
                     path = os.path.join(tmpdir, fname)
                     df = pd.read_parquet(path, engine="pyarrow")
-                    if df.shape == (1, 1):
-                        val = df.iloc[0, 0]
-                    elif df.shape[1] == 1:
+                    val_type = type_map.get(name)
+                    if val_type == "simplecount":
+                        val = simple_count.from_dataframe(df)
+                    elif val_type == "series":
                         val = df.iloc[:, 0]
-                    else:
+                        val.name = df.columns[0] if len(df.columns) else name
+                    elif val_type == "dataframe":
                         val = df
+                    elif val_type == "scalar":
+                        val = df.iloc[0, 0]
+                    else:
+                        if df.shape == (1, 1):
+                            val = df.iloc[0, 0]
+                        elif df.shape[1] == 1:
+                            val = df.iloc[:, 0]
+                        else:
+                            val = df
                     setattr(ret, name, val)
+
         #re-initalize 
-        ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
-        ret.library_model=simple_count.from_dataframe(ret.library_model)
+        if isinstance(ret.transfection_model, pd.DataFrame):
+            ret.transfection_model=simple_count.from_dataframe(ret.transfection_model)
+        if isinstance(ret.library_model, pd.DataFrame):
+            ret.library_model=simple_count.from_dataframe(ret.library_model)
 
         ret.transfection_model.update_alt_nb_param()
         ret.library_model.update_alt_nb_param()
@@ -1767,47 +1824,41 @@ class ortho:
 
         return ret_ortho
 
-    @unimplemented
-    def clean(self,kill_list="auto"):
-        """
-        Deletes intermediate values to save space. 
+    
+    def _condense_dat(self,dat):
+        if dat==None:#passed dat is none, look for cached training data.
+            if self.training_data==None:
+                raise RuntimeError("No training data supplied.")
+            dat=self.training_data
+        else:#dat is not none, save it
+            self.training_data=dat.copy()
+        return dat
 
-        `kill_list` is any or all of "training_data", "design_matricies", "models", "parameters"
+    
+    def fit_by_cre_models(self,client,dat=None):
+        dat=_condense_dat(dat)
+        self.by_cre, self.by_cre_design=standard_fit(client,
+                                                     dat,
+                                                     split="cre_id")
+        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+
         
-        alternatively, "auto" is equivalent to ["training_data", "design_matricies"]
-        """
-        for target in kill_list:
-            pass
+    def fit_by_cell_type_models(self,client,dat=None):
+        dat=_condense_dat(dat)
+        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
+                                                        dat,
+                                                        split="cell_type")
+        self.by_cre.label_regressors(client,self.by_cre_design)
+        
     
     def criss_cross(self,client,dat):
         """
         Makes by_cre and by_cell_type models.
-
-        Note: a little computationally intensive...
-        retain_metadata will keep some information 'dat' in self.training_data
-        The actual MPRA data will be stripped to save space, but metadata will be retained
         """
+        self.fit_by_cre_models(client=client,dat=dat)
+        self.fit_by_cell_type_models(client=client,dat=dat)
         
         
-        
-        self.by_cre, self.by_cre_design=standard_fit(client,
-                                                     dat,
-                                                     split="cre_id")
-        
-        
-        self.by_cell_type, self.by_cell_type_design=standard_fit(client,
-                                                        dat,
-                                                        split="cell_type")
-        
-        self.training_data=dat.copy()
-        self.annotate_models(client)
-
-    def annotate_models(self,client):
-        """
-        Adds regressor names to each model
-        """
-        self.by_cre.label_regressors(client,self.by_cre_design)
-        self.by_cell_type.label_regressors(client,self.by_cell_type_design)
     
     def extract_params(self,client):
         """Extracts parameters for all models in the object"""
@@ -4936,7 +4987,6 @@ class de_novo_simulation:
         'n_sims'
         - number of sims.
         """
-
         self.location = Path(location)
         self.name = Path(name)
         self.client = client
@@ -5038,7 +5088,7 @@ class de_novo_simulation:
             experiment_bounds.to_tgz(fullp/"experiment_bounds.tgz")
 
             #save the ground truth
-            self.ground_truth=ground_truth
+            self.ground_truth=cast_string_keys(ground_truth, ["cell_type", "cre_id"])
             ground_truth.to_csv(fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
 
             #save the state
@@ -5051,11 +5101,12 @@ class de_novo_simulation:
         """
         n_sims=self.get_state_field("n_sims")
 
-        #load ground truth
-        ground_truth=pd.read_csv(self.fullp/"ground_truth.tsv.gz",sep="\t",compression="gzip")
+        #ground truth
+        ground_truth=self.ground_truth
 
         #load the experiment bounds
         experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
+
 
         #create an output directory for the descriptions
         self.descripd.mkdir(parents=True, exist_ok=True)
@@ -5083,7 +5134,7 @@ class de_novo_simulation:
         
         for idx in range(0,n_sims):
             #load the corresponding library
-            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip')
+            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip',index_col=0)
 
             #submit a job to simulate transfection using the helper function
             ret=self.client.submit(_simulate_transfection_helper,
@@ -5710,6 +5761,15 @@ class de_novo_simulation:
         return tree
 
 
+def cast_string_keys(df, keys):
+    df = df.copy()
+    for k in keys:
+        df[k] = (
+            df[k]
+            .astype("string")   # pandas StringDtype, not object
+            .str.strip()        # kill whitespace
+        )
+    return df
 
 def _simulate_transfection(experiment_bounds:Bounds,
                         ground_truth:pd.DataFrame,
@@ -5721,6 +5781,8 @@ def _simulate_transfection(experiment_bounds:Bounds,
     See README spec for details on ground truth dataframe.
     You can easially create one with the helper function `simple_spread`. 
     """
+
+    ground_truth=cast_string_keys(ground_truth,["cell_type", "cre_id"])
 
     #known before you start : "to be optimized":
     #  cells per cell-type is a fixed parameter
@@ -5750,26 +5812,53 @@ def _simulate_transfection(experiment_bounds:Bounds,
         drawn_library=sample_from_library(library=library,
                                 size=len(cells_df))
         
+        #logger.info(f"A: drawn_library cols: {drawn_library.columns}, types: {drawn_library.dtypes}")
+        #logger.info(f"A: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        
         #merge dataframes
+        
         cells_df=cells_df.merge(drawn_library,
                                 left_index=True,
                                 right_index=True,
                                 validate="one_to_one")
         
+        #logger.info(f"1 {cells_df.isna().sum().sum()}")
+        #logger.info(f"B: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        
+        keys = ["cell_type", "cre_id"]
         
         # drop library abundance, we don't care anymore.
         cells_df=cells_df.drop(columns=["abundance"])
+        cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
         
+        #logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        #logger.info(f"C.5: cells_df cols: {ground_truth.columns}, types: {ground_truth.dtypes}")
+
         # merge in ground truth
+
+        #dump_df_pickle_debug(cells_df,prefix="permerge_cells_df")
+        #dump_df_pickle_debug(ground_truth,prefix="premerge_gt")
+        
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
                                 on=["cell_type","cre_id"],
                                 validate="many_to_one",
                                 how="left")
+        
+        #dump_df_pickle_debug(cells_df,prefix="postmerge")
+
+        #logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
+        
+        #logger.info(f"D {cells_df.isna().sum().sum()}")
 
         #check to make sure there were no NAs introduced
         #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
 
+        #dump_df_debug(cells_df)
+        
+        #TEMP DEBUG OVERRIDE
+        #return cells_df
+        
         bad = cells_df[cells_df.isna().any(axis=1)]
         assert bad.empty, (
             "DataFrame contains NA values in these rows:\n"
