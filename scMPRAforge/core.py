@@ -791,7 +791,7 @@ class Bounds:
                 path = os.path.join(tmpdir, f"{name}.parquet")
                 if isinstance(value, pd.DataFrame):
                     value.to_parquet(path, engine="pyarrow", index=True)
-                if isinstance(value,simple_count):
+                elif isinstance(value,simple_count):
                     value.to_dataframe().to_parquet(path, engine="pyarrow", index=True)
                 elif isinstance(value, pd.Series):
                     value.to_frame(name).to_parquet(path, engine="pyarrow", index=True)
@@ -4958,7 +4958,6 @@ class de_novo_simulation:
         'n_sims'
         - number of sims.
         """
-
         self.location = Path(location)
         self.name = Path(name)
         self.client = client
@@ -5078,6 +5077,9 @@ class de_novo_simulation:
 
         #load the experiment bounds
         experiment_bounds=Bounds.from_tgz(self.fullp/"experiment_bounds.tgz")
+
+        logger.info(experiment_bounds.cells_per_cell_type)
+        logger.info(type(experiment_bounds.cells_per_cell_type))
 
         #create an output directory for the descriptions
         self.descripd.mkdir(parents=True, exist_ok=True)
