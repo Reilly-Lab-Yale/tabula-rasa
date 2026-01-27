@@ -5536,11 +5536,12 @@ class de_novo_simulation:
         #main loop
         for idx in range(0,self.get_state_field("n_sims")):
             
-            r=self.client.submit(_fit_ortho_helper,
-                            tscription_future=tscription_futures[idx],
-                            path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
-                            path_output=self.orthod,
-                            name_output=str(idx))
+            with dask.annotate(resources={"ORT": 1}):
+                r=self.client.submit(_fit_ortho_helper,
+                                tscription_future=tscription_futures[idx],
+                                path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
+                                path_output=self.orthod,
+                                name_output=str(idx))
             ortho_tracker.append(r)
         self.futures["ortho"]=ortho_tracker
     
