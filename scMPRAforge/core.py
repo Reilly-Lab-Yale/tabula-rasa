@@ -5481,69 +5481,86 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self,direction="both"):
+    def fit_orthos(self, direction="both", serial_orthos: bool = False):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
 
         direction can be 'both', 'by_cre' or 'by_cell_type'
+
+        If serial_orthos is True, only one _fit_ortho_helper will run at a time by
+        chaining each submission to depend on the previous ortho future.
         """
-        valid_directions=['both','by_cre','by_cell_type']
+        valid_directions = ["both", "by_cre", "by_cell_type"]
         if direction not in valid_directions:
             raise ValueError(f"Invalid direction {direction}, valid directions are {valid_directions}")
-        #check to make sure previous step has at least been queued.
-        if "transcription" not in self.futures.columns:
-            raise RuntimeError("Tried to fit orthos, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
-        
-        #pull out the futures tracking 
-        tscription_futures=self.futures["transcription"].to_list()
 
-        #make output directory
+        # Check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError(
+                "Tried to fit orthos, but transcription has not yet been simulated! "
+                "You probably want to run 'gamut' first."
+            )
+
+        # Pull out the futures tracking
+        tscription_futures = self.futures["transcription"].to_list()
+
+        # Make output directory
         self.orthod.mkdir(exist_ok=True)
 
-        #function to submit
-        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output):
-            
-            #data=data.result()
-            #load data
-            data=scMPRA_data.from_parquet(path_scmpradat)
-            #filter
+        # Function to submit
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output, _prev_ortho=None):
+            # NOTE: tscription_future and _prev_ortho are passed to enforce dependencies.
+            # We intentionally do NOT call .result() on them here to avoid blocking a worker.
+
+            # Load data
+            data = scMPRA_data.from_parquet(path_scmpradat)
+
+            # Filter
             data.ortho_filter()
-            #create an ortho
-            client=get_client()
-            primordial=ortho()
-            if direction=="both":
-                primordial.criss_cross(client=client,
-                                        dat=data)
-            elif direction=="by_cre":
-                primordial.fit_by_cre_models(client=client,
-                                        dat=data)
-            elif direction=="by_cell_type":
-                fit_by_cell_type_models(client=client,
-                                        dat=data)
-            
+
+            # Create an ortho
+            client = get_client()
+            primordial = ortho()
+
+            if direction == "both":
+                primordial.criss_cross(client=client, dat=data)
+            elif direction == "by_cre":
+                primordial.fit_by_cre_models(client=client, dat=data)
+            elif direction == "by_cell_type":
+                primordial.fit_by_cell_type_models(client=client, dat=data)
+
             primordial.extract_params(client)
 
-            #write the ortho to disc
-            #could save space with strip_training_data=True
-            primordial.save(path=path_output,
-                            name=name_output)
-            
+            # Write the ortho to disk
+            # could save space with strip_training_data=True
+            primordial.save(path=path_output, name=name_output)
+
             return True
-        
-        #loop over
-        ortho_tracker=[]
-        #main loop
-        for idx in range(0,self.get_state_field("n_sims")):
-            
-            with dask.annotate(resources={"ORT": 1}):
-                r=self.client.submit(_fit_ortho_helper,
-                                tscription_future=tscription_futures[idx],
-                                path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
-                                path_output=self.orthod,
-                                name_output=str(idx))
+
+        ortho_tracker = []
+        prev_ortho_future = None
+
+        n_sims = self.get_state_field("n_sims")
+        for idx in range(0, n_sims):
+            kwargs = dict(
+                tscription_future=tscription_futures[idx],
+                path_scmpradat=self.scmpradatp / f"{idx}.scmpra",
+                path_output=self.orthod,
+                name_output=str(idx),
+            )
+
+            # If serial_orthos, chain each ortho task to the previous ortho future.
+            # Passing the future as an argument makes it a scheduler-enforced dependency.
+            if serial_orthos:
+                kwargs["_prev_ortho"] = prev_ortho_future
+
+            r = self.client.submit(_fit_ortho_helper, **kwargs)
+
             ortho_tracker.append(r)
-        self.futures["ortho"]=ortho_tracker
+            prev_ortho_future = r
+
+        self.futures["ortho"] = ortho_tracker
     
     def _simulate_transcription(self):
         """
