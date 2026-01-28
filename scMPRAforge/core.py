@@ -5703,70 +5703,87 @@ class de_novo_simulation:
             
             self.testqueue.append(r)
             
-    def wald(self,
-            name,
-            cov_method="sandwich"):
+    def wald(self, name, cov_method="sandwich", serial_orthos: bool = True):
         """
-        Takes a name of a hypotheses set added previously with 
+        Takes a name of a hypotheses set added previously with
         `add_hypothesis_set` and runs wald tests.
         Requires that `precompute_wald` have been computed previously.
+
         cov_method : {"sandwich", "opg"}
         - See ortho.precompute_wald for more information.
+
+        If serial_orthos is True, only one _wald_helper will run at a time by
+        chaining each submission to depend on the previous wald future.
         """
-        #pick input dir destination based on covariance matrix estimation procedure
-        precompd=self._switch_cov_method(cov_method)
+        # pick input dir destination based on covariance matrix estimation procedure
+        precompd = self._switch_cov_method(cov_method)
 
-        #check to make sure previous step has at least been queued.
+        # check to make sure previous step has at least been queued.
         if cov_method not in self.futures.columns:
-            raise RuntimeError(f"wald precompute with coariance estimation method \'{cov_method}\' not yet run.")
+            raise RuntimeError(
+                f"wald precompute with coariance estimation method '{cov_method}' not yet run."
+            )
 
-        #extract precomp
-        precomp_futures=self.futures[cov_method]
-        
-        #init & load relevant hypothesis set...
-        hypod=self.testd/name
-        hypof=hypod/"hypotheses.tsv"
+        # extract precomp futures
+        precomp_futures = self.futures[cov_method]
+
+        # init & load relevant hypothesis set...
+        hypod = self.testd / name
+        hypof = hypod / "hypotheses.tsv"
         if not hypof.is_file():
-            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
-        
-        hypotheses=HypothesisSet.from_tsv(hypof)
+            raise FileNotFoundError(f"Could not find hypothesis set '{name}'.")
 
-        testd=hypod/f"wald_{cov_method}"
+        hypotheses = HypothesisSet.from_tsv(hypof)
 
+        testd = hypod / f"wald_{cov_method}"
         testd.mkdir()
 
-        #define helper function to submit
-        def _wald_helper(precomp_future,
-                    input_dir,
-                    name,
-                    path_output,
-                    hypothesis_set):
-            #load the relevant_ortho
-            test_ortho=ortho.load(client=get_client(),
-                        path=input_dir,
-                        name=name)
-            
-            #run the tests
+        # define helper function to submit
+        def _wald_helper(
+            precomp_future,
+            input_dir,
+            name,
+            path_output,
+            hypothesis_set,
+            _prev_wald=None,
+        ):
+            # NOTE: precomp_future and _prev_wald are passed to enforce dependencies.
+            # We intentionally do NOT call .result() on them here to avoid blocking a worker.
+
+            client = get_client()
+
+            # load the relevant ortho
+            test_ortho = ortho.load(client=client, path=input_dir, name=name)
+
+            # run the tests
             tester = HypothesisTester("wald")
-            results  = tester.run(hypothesis_set,
-                    test_ortho,
-                    client=get_client())
-            
-            #save
+            results = tester.run(hypothesis_set, test_ortho, client=client)
+
+            # save
             results.to_tsv(path_output)
 
             return True
-        
-        #submit jobs
-        for idx in range(0,self.get_state_field("n_sims")):
-            r=self.client.submit(_wald_helper,
-                                precomp_future=precomp_futures[idx],
-                                input_dir=precompd,
-                                name=str(idx),
-                                path_output=testd/f"{idx}_results.tsv",
-                                hypothesis_set=hypotheses)
+
+        # submit jobs
+        prev_wald_future = None
+        n_sims = self.get_state_field("n_sims")
+
+        for idx in range(0, n_sims):
+            kwargs = dict(
+                precomp_future=precomp_futures[idx],
+                input_dir=precompd,
+                name=str(idx),
+                path_output=testd / f"{idx}_results.tsv",
+                hypothesis_set=hypotheses,
+            )
+
+            if serial_orthos:
+                kwargs["_prev_wald"] = prev_wald_future
+
+            r = self.client.submit(_wald_helper, **kwargs)
 
             self.testqueue.append(r)
+            prev_wald_future = r
         
     def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
         """
