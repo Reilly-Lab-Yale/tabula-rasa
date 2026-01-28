@@ -215,7 +215,10 @@ def find_dask_future_paths(obj, seen=None, path=""):
 def dict_wrap(client,dic):
     """
     Takes a dictionary and wraps all of its values in dask futures using the provided client.
+    If object is none, simply returns none
     """
+    if dic is None:
+        return None
     ret={}
     for key in dic:
         ret[key]=client.submit(lambda x: x,dic[key])

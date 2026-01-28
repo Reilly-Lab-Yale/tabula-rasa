@@ -1970,9 +1970,9 @@ class ortho:
                 "precompute_wald requires self.training_data to subset matrices."
             )
 
-        if (self.by_cell_type is None) or (self.by_cre is None):
+        if (self.by_cell_type is None) and (self.by_cre is None):
             raise RuntimeError(
-                "precompute_wald requires by_cell_type and by_cre models to be present."
+                "precompute_wald requires at least one of by_cell_type, by_cre models."
             )
 
         # Map cov_method -> opg_only flag
@@ -1986,33 +1986,39 @@ class ortho:
         #Very Lame retry hack due to extremely rare failures in _hessian_se
         #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         with dask.annotate(retries=10):
-            for ct in self.by_cell_type.model.keys():
-                model_f = self.by_cell_type.model[ct]
-                design_f = self.by_cell_type_design[ct]
-                df_ct = self.training_data.data[
-                    self.training_data.data["cell_type"] == ct
-                ]
-                by_ct[ct] = client.submit(
-                    _build_wald_precomp_for_subset,
-                    model_f,
-                    design_f,
-                    df_ct,
-                    opg_only=opg_only,   # <-- pass the flag
-                )
+            if not self.by_cell_type is None:
+                for ct in self.by_cell_type.model.keys():
+                    model_f = self.by_cell_type.model[ct]
+                    design_f = self.by_cell_type_design[ct]
+                    df_ct = self.training_data.data[
+                        self.training_data.data["cell_type"] == ct
+                    ]
+                    by_ct[ct] = client.submit(
+                        _build_wald_precomp_for_subset,
+                        model_f,
+                        design_f,
+                        df_ct,
+                        opg_only=opg_only,   # <-- pass the flag
+                    )
+            else:
+                by_ct=None
 
-            for cr in self.by_cre.model.keys():
-                model_f = self.by_cre.model[cr]
-                design_f = self.by_cre_design[cr]
-                df_cr = self.training_data.data[
-                    self.training_data.data["cre_id"] == cr
-                ]
-                by_cr[cr] = client.submit(
-                    _build_wald_precomp_for_subset,
-                    model_f,
-                    design_f,
-                    df_cr,
-                    opg_only=opg_only,   # <-- pass the flag
-                )
+            if not self.by_cre is None:
+                for cr in self.by_cre.model.keys():
+                    model_f = self.by_cre.model[cr]
+                    design_f = self.by_cre_design[cr]
+                    df_cr = self.training_data.data[
+                        self.training_data.data["cre_id"] == cr
+                    ]
+                    by_cr[cr] = client.submit(
+                        _build_wald_precomp_for_subset,
+                        model_f,
+                        design_f,
+                        df_cr,
+                        opg_only=opg_only,   # <-- pass the flag
+                    )
+            else:
+                by_cr=None
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
@@ -2980,12 +2986,16 @@ class WaldPrecomp:
     def _unflatten_futures(self, client: Client):
         # wrap raw objects in futures, for symmetry with other classes
         for d in (self.by_cell_type, self.by_cre):
+            if d is None:
+                continue
             for k in list(d.keys()):
                 d[k] = client.submit(lambda x: x, d[k])
 
     def flattened_copy(self):
         # gather futures to plain objects
         def _gather(d):
+            if d is None:
+                return None
             return {k: (v.result() if isinstance(v, Future) else v) for k, v in d.items()}
         return WaldPrecomp(by_cell_type=_gather(self.by_cell_type),
                            by_cre=_gather(self.by_cre))
