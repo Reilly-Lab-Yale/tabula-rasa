@@ -2031,16 +2031,23 @@ class ortho:
             raise RuntimeError("Call ortho.precompute_wald(...) first.")
 
         wp = self.wald_precomp.flattened_copy()  # resolve futures
+        logger.info("flattened ortho successfully")
 
         by_ct = {}
-        for ct, entry in wp.by_cell_type.items():
-            model = _to_plain(self.by_cell_type.model[ct])
-            by_ct[str(ct)] = _pack_model_block(model, entry)
+        if wp.by_cell_type is None:
+            by_ct=None
+        else:
+            for ct, entry in wp.by_cell_type.items():
+                model = _to_plain(self.by_cell_type.model[ct])
+                by_ct[str(ct)] = _pack_model_block(model, entry)
 
         by_cr = {}
-        for cr, entry in wp.by_cre.items():
-            model = _to_plain(self.by_cre.model[cr])
-            by_cr[str(cr)] = _pack_model_block(model, entry)
+        if wp.by_cre is None:
+            by_cr=None
+        else:
+            for cr, entry in wp.by_cre.items():
+                model = _to_plain(self.by_cre.model[cr])
+                by_cr[str(cr)] = _pack_model_block(model, entry)
 
         return {"by_cell_type": by_ct, "by_cre": by_cr}
 
