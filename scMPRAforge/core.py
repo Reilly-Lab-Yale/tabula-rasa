@@ -3702,17 +3702,18 @@ def _setup_params_from_fit(zinb_model_fit):
     # params_tensor = tf.Variable(params, dtype=tf64)
     return params.astype(np.float64, copy=False) #, params_tensor
 
-def _pack_model_block(model_dict, entry):
-    # model_dict['weights']['x_mu'] is a Series with names
+def _pack_model_block(model_dict, entry, *, include_cov_nb=False):
     w = model_dict['weights']['x_mu']
-    return {
+    d = {
         "xmu_names": list(w.index),
-        "xmu":      np.asarray(w).ravel(),     # betas
-        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
-        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
+        "xmu":      np.asarray(w).ravel(),
+        "se_x_mu":  np.asarray(entry.se_x_mu),
         "k_nb":     int(entry.k_nb),
-        "debug_msg": entry.debug_msg,   # NEW carry through debugging messages to make Erin's life easier
+        "debug_msg": entry.debug_msg,
     }
+    if include_cov_nb:
+        d["cov_nb"] = np.asarray(entry.cov_nb)
+    return d
 
 def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     """
@@ -4155,6 +4156,7 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "flattened": False,
             "wald_debug": f"{debug_base}; se==0 for {cre}",
         }
+
 
     z = beta / se
     eps = np.finfo(float).tiny  # ~1e-308
@@ -5764,7 +5766,7 @@ class de_novo_simulation:
 
             # run the tests
             tester = HypothesisTester("wald")
-            results = tester.run(hypothesis_set, test_ortho, client=client)
+            results = tester.run(hypothesis_set, test_ortho, client=None)
 
             # save
             results.to_tsv(path_output)
