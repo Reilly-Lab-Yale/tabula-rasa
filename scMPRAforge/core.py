@@ -1093,7 +1093,6 @@ class scMPRA_data:
         y=self.data.groupby("cre_id")["mpra_bc"].nunique()
         return simple_count(data=y)
 
-    
     def set_negative_controls(self,negative_controls:list[str]):
         """
         Takes a list of CRE names that we consider to be negative controls and give them all the name "negative_control", lumping all their data together.
@@ -1111,7 +1110,6 @@ class scMPRA_data:
         #(Can be deduced from difference between cre_id and 
         #cre_id_original, but this is more convienient).
         self.negative_controls=self.negative_controls+negative_controls
-    
     
     def set_reference_cell(self,reference_cell_type):
         assert self.reference_cell_type is None, "Already set reference cell type."
@@ -1972,9 +1970,9 @@ class ortho:
                 "precompute_wald requires self.training_data to subset matrices."
             )
 
-        if (self.by_cell_type is None) or (self.by_cre is None):
+        if (self.by_cell_type is None) and (self.by_cre is None):
             raise RuntimeError(
-                "precompute_wald requires by_cell_type and by_cre models to be present."
+                "precompute_wald requires at least one of by_cell_type, by_cre models."
             )
 
         # Map cov_method -> opg_only flag
@@ -1988,33 +1986,39 @@ class ortho:
         #Very Lame retry hack due to extremely rare failures in _hessian_se
         #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         with dask.annotate(retries=10):
-            for ct in self.by_cell_type.model.keys():
-                model_f = self.by_cell_type.model[ct]
-                design_f = self.by_cell_type_design[ct]
-                df_ct = self.training_data.data[
-                    self.training_data.data["cell_type"] == ct
-                ]
-                by_ct[ct] = client.submit(
-                    _build_wald_precomp_for_subset,
-                    model_f,
-                    design_f,
-                    df_ct,
-                    opg_only=opg_only,   # <-- pass the flag
-                )
+            if not self.by_cell_type is None:
+                for ct in self.by_cell_type.model.keys():
+                    model_f = self.by_cell_type.model[ct]
+                    design_f = self.by_cell_type_design[ct]
+                    df_ct = self.training_data.data[
+                        self.training_data.data["cell_type"] == ct
+                    ]
+                    by_ct[ct] = client.submit(
+                        _build_wald_precomp_for_subset,
+                        model_f,
+                        design_f,
+                        df_ct,
+                        opg_only=opg_only,   # <-- pass the flag
+                    )
+            else:
+                by_ct=None
 
-            for cr in self.by_cre.model.keys():
-                model_f = self.by_cre.model[cr]
-                design_f = self.by_cre_design[cr]
-                df_cr = self.training_data.data[
-                    self.training_data.data["cre_id"] == cr
-                ]
-                by_cr[cr] = client.submit(
-                    _build_wald_precomp_for_subset,
-                    model_f,
-                    design_f,
-                    df_cr,
-                    opg_only=opg_only,   # <-- pass the flag
-                )
+            if not self.by_cre is None:
+                for cr in self.by_cre.model.keys():
+                    model_f = self.by_cre.model[cr]
+                    design_f = self.by_cre_design[cr]
+                    df_cr = self.training_data.data[
+                        self.training_data.data["cre_id"] == cr
+                    ]
+                    by_cr[cr] = client.submit(
+                        _build_wald_precomp_for_subset,
+                        model_f,
+                        design_f,
+                        df_cr,
+                        opg_only=opg_only,   # <-- pass the flag
+                    )
+            else:
+                by_cr=None
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
@@ -2027,16 +2031,23 @@ class ortho:
             raise RuntimeError("Call ortho.precompute_wald(...) first.")
 
         wp = self.wald_precomp.flattened_copy()  # resolve futures
+        logger.info("flattened ortho successfully")
 
         by_ct = {}
-        for ct, entry in wp.by_cell_type.items():
-            model = _to_plain(self.by_cell_type.model[ct])
-            by_ct[str(ct)] = _pack_model_block(model, entry)
+        if wp.by_cell_type is None:
+            by_ct=None
+        else:
+            for ct, entry in wp.by_cell_type.items():
+                model = _to_plain(self.by_cell_type.model[ct])
+                by_ct[str(ct)] = _pack_model_block(model, entry)
 
         by_cr = {}
-        for cr, entry in wp.by_cre.items():
-            model = _to_plain(self.by_cre.model[cr])
-            by_cr[str(cr)] = _pack_model_block(model, entry)
+        if wp.by_cre is None:
+            by_cr=None
+        else:
+            for cr, entry in wp.by_cre.items():
+                model = _to_plain(self.by_cre.model[cr])
+                by_cr[str(cr)] = _pack_model_block(model, entry)
 
         return {"by_cell_type": by_ct, "by_cre": by_cr}
 
@@ -2982,12 +2993,16 @@ class WaldPrecomp:
     def _unflatten_futures(self, client: Client):
         # wrap raw objects in futures, for symmetry with other classes
         for d in (self.by_cell_type, self.by_cre):
+            if d is None:
+                continue
             for k in list(d.keys()):
                 d[k] = client.submit(lambda x: x, d[k])
 
     def flattened_copy(self):
         # gather futures to plain objects
         def _gather(d):
+            if d is None:
+                return None
             return {k: (v.result() if isinstance(v, Future) else v) for k, v in d.items()}
         return WaldPrecomp(by_cell_type=_gather(self.by_cell_type),
                            by_cre=_gather(self.by_cre))
@@ -3687,17 +3702,18 @@ def _setup_params_from_fit(zinb_model_fit):
     # params_tensor = tf.Variable(params, dtype=tf64)
     return params.astype(np.float64, copy=False) #, params_tensor
 
-def _pack_model_block(model_dict, entry):
-    # model_dict['weights']['x_mu'] is a Series with names
+def _pack_model_block(model_dict, entry, *, include_cov_nb=False):
     w = model_dict['weights']['x_mu']
-    return {
+    d = {
         "xmu_names": list(w.index),
-        "xmu":      np.asarray(w).ravel(),     # betas
-        "se_x_mu":  np.asarray(entry.se_x_mu), # SEs for NB block
-        "cov_nb":   np.asarray(entry.cov_nb),  # if you need contrasts
+        "xmu":      np.asarray(w).ravel(),
+        "se_x_mu":  np.asarray(entry.se_x_mu),
         "k_nb":     int(entry.k_nb),
-        "debug_msg": entry.debug_msg,   # NEW carry through debugging messages to make Erin's life easier
+        "debug_msg": entry.debug_msg,
     }
+    if include_cov_nb:
+        d["cov_nb"] = np.asarray(entry.cov_nb)
+    return d
 
 def _model_matrices_for_subset(df_subset, design_dict, nb_formula, zi_formula):
     """
@@ -4140,6 +4156,7 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "flattened": False,
             "wald_debug": f"{debug_base}; se==0 for {cre}",
         }
+
 
     z = beta / se
     eps = np.finfo(float).tiny  # ~1e-308
@@ -5483,68 +5500,86 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self,direction="both"):
+    def fit_orthos(self, direction="both", serial_orthos: bool = False):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
 
         direction can be 'both', 'by_cre' or 'by_cell_type'
+
+        If serial_orthos is True, only one _fit_ortho_helper will run at a time by
+        chaining each submission to depend on the previous ortho future.
         """
-        valid_directions=['both','by_cre','by_cell_type']
+        valid_directions = ["both", "by_cre", "by_cell_type"]
         if direction not in valid_directions:
             raise ValueError(f"Invalid direction {direction}, valid directions are {valid_directions}")
-        #check to make sure previous step has at least been queued.
-        if "transcription" not in self.futures.columns:
-            raise RuntimeError("Tried to fit orthos, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
-        
-        #pull out the futures tracking 
-        tscription_futures=self.futures["transcription"].to_list()
 
-        #make output directory
+        # Check to make sure previous step has at least been queued.
+        if "transcription" not in self.futures.columns:
+            raise RuntimeError(
+                "Tried to fit orthos, but transcription has not yet been simulated! "
+                "You probably want to run 'gamut' first."
+            )
+
+        # Pull out the futures tracking
+        tscription_futures = self.futures["transcription"].to_list()
+
+        # Make output directory
         self.orthod.mkdir(exist_ok=True)
 
-        #function to submit
-        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output):
-            
-            #data=data.result()
-            #load data
-            data=scMPRA_data.from_parquet(path_scmpradat)
-            #filter
+        # Function to submit
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output, _prev_ortho=None):
+            # NOTE: tscription_future and _prev_ortho are passed to enforce dependencies.
+            # We intentionally do NOT call .result() on them here to avoid blocking a worker.
+
+            # Load data
+            data = scMPRA_data.from_parquet(path_scmpradat)
+
+            # Filter
             data.ortho_filter()
-            #create an ortho
-            client=get_client()
-            primordial=ortho()
-            if direction=="both":
-                primordial.criss_cross(client=client,
-                                        dat=data)
-            elif direction=="by_cre":
-                primordial.fit_by_cre_models(client=client,
-                                        dat=data)
-            elif direction=="by_cell_type":
-                fit_by_cell_type_models(client=client,
-                                        dat=data)
-            
+
+            # Create an ortho
+            client = get_client()
+            primordial = ortho()
+
+            if direction == "both":
+                primordial.criss_cross(client=client, dat=data)
+            elif direction == "by_cre":
+                primordial.fit_by_cre_models(client=client, dat=data)
+            elif direction == "by_cell_type":
+                primordial.fit_by_cell_type_models(client=client, dat=data)
+
             primordial.extract_params(client)
 
-            #write the ortho to disc
-            #could save space with strip_training_data=True
-            primordial.save(path=path_output,
-                            name=name_output)
-            
+            # Write the ortho to disk
+            # could save space with strip_training_data=True
+            primordial.save(path=path_output, name=name_output)
+
             return True
-        
-        #loop over
-        ortho_tracker=[]
-        #main loop
-        for idx in range(0,self.get_state_field("n_sims")):
-            
-            r=self.client.submit(_fit_ortho_helper,
-                            tscription_future=tscription_futures[idx],
-                            path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
-                            path_output=self.orthod,
-                            name_output=str(idx))
+
+        ortho_tracker = []
+        prev_ortho_future = None
+
+        n_sims = self.get_state_field("n_sims")
+        for idx in range(0, n_sims):
+            kwargs = dict(
+                tscription_future=tscription_futures[idx],
+                path_scmpradat=self.scmpradatp / f"{idx}.scmpra",
+                path_output=self.orthod,
+                name_output=str(idx),
+            )
+
+            # If serial_orthos, chain each ortho task to the previous ortho future.
+            # Passing the future as an argument makes it a scheduler-enforced dependency.
+            if serial_orthos:
+                kwargs["_prev_ortho"] = prev_ortho_future
+
+            r = self.client.submit(_fit_ortho_helper, **kwargs)
+
             ortho_tracker.append(r)
-        self.futures["ortho"]=ortho_tracker
+            prev_ortho_future = r
+
+        self.futures["ortho"] = ortho_tracker
     
     def _simulate_transcription(self):
         """
@@ -5677,70 +5712,87 @@ class de_novo_simulation:
             
             self.testqueue.append(r)
             
-    def wald(self,
-            name,
-            cov_method="sandwich"):
+    def wald(self, name, cov_method="sandwich", serial_orthos: bool = True):
         """
-        Takes a name of a hypotheses set added previously with 
+        Takes a name of a hypotheses set added previously with
         `add_hypothesis_set` and runs wald tests.
         Requires that `precompute_wald` have been computed previously.
+
         cov_method : {"sandwich", "opg"}
         - See ortho.precompute_wald for more information.
+
+        If serial_orthos is True, only one _wald_helper will run at a time by
+        chaining each submission to depend on the previous wald future.
         """
-        #pick input dir destination based on covariance matrix estimation procedure
-        precompd=self._switch_cov_method(cov_method)
+        # pick input dir destination based on covariance matrix estimation procedure
+        precompd = self._switch_cov_method(cov_method)
 
-        #check to make sure previous step has at least been queued.
+        # check to make sure previous step has at least been queued.
         if cov_method not in self.futures.columns:
-            raise RuntimeError(f"wald precompute with coariance estimation method \'{cov_method}\' not yet run.")
+            raise RuntimeError(
+                f"wald precompute with coariance estimation method '{cov_method}' not yet run."
+            )
 
-        #extract precomp
-        precomp_futures=self.futures[cov_method]
-        
-        #init & load relevant hypothesis set...
-        hypod=self.testd/name
-        hypof=hypod/"hypotheses.tsv"
+        # extract precomp futures
+        precomp_futures = self.futures[cov_method]
+
+        # init & load relevant hypothesis set...
+        hypod = self.testd / name
+        hypof = hypod / "hypotheses.tsv"
         if not hypof.is_file():
-            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
-        
-        hypotheses=HypothesisSet.from_tsv(hypof)
+            raise FileNotFoundError(f"Could not find hypothesis set '{name}'.")
 
-        testd=hypod/f"wald_{cov_method}"
+        hypotheses = HypothesisSet.from_tsv(hypof)
 
+        testd = hypod / f"wald_{cov_method}"
         testd.mkdir()
 
-        #define helper function to submit
-        def _wald_helper(precomp_future,
-                    input_dir,
-                    name,
-                    path_output,
-                    hypothesis_set):
-            #load the relevant_ortho
-            test_ortho=ortho.load(client=get_client(),
-                        path=input_dir,
-                        name=name)
-            
-            #run the tests
+        # define helper function to submit
+        def _wald_helper(
+            precomp_future,
+            input_dir,
+            name,
+            path_output,
+            hypothesis_set,
+            _prev_wald=None,
+        ):
+            # NOTE: precomp_future and _prev_wald are passed to enforce dependencies.
+            # We intentionally do NOT call .result() on them here to avoid blocking a worker.
+
+            client = get_client()
+
+            # load the relevant ortho
+            test_ortho = ortho.load(client=client, path=input_dir, name=name)
+
+            # run the tests
             tester = HypothesisTester("wald")
-            results  = tester.run(hypothesis_set,
-                    test_ortho,
-                    client=get_client())
-            
-            #save
+            results = tester.run(hypothesis_set, test_ortho, client=None)
+
+            # save
             results.to_tsv(path_output)
 
             return True
-        
-        #submit jobs
-        for idx in range(0,self.get_state_field("n_sims")):
-            r=self.client.submit(_wald_helper,
-                                precomp_future=precomp_futures[idx],
-                                input_dir=precompd,
-                                name=str(idx),
-                                path_output=testd/f"{idx}_results.tsv",
-                                hypothesis_set=hypotheses)
+
+        # submit jobs
+        prev_wald_future = None
+        n_sims = self.get_state_field("n_sims")
+
+        for idx in range(0, n_sims):
+            kwargs = dict(
+                precomp_future=precomp_futures[idx],
+                input_dir=precompd,
+                name=str(idx),
+                path_output=testd / f"{idx}_results.tsv",
+                hypothesis_set=hypotheses,
+            )
+
+            if serial_orthos:
+                kwargs["_prev_wald"] = prev_wald_future
+
+            r = self.client.submit(_wald_helper, **kwargs)
 
             self.testqueue.append(r)
+            prev_wald_future = r
         
     def add_hypothesis_set(self,name:str,hypotheses:HypothesisSet):
         """
