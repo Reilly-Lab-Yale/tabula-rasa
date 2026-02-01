@@ -21,7 +21,7 @@ else:
             f"--output=worker_%j.out"]
     )
     #cluster.scale(jobs=20)
-    cluster.scale(jobs=4)
+    cluster.scale(jobs=10)
     client = Client(cluster,
             timeout=f"{5*60}s",   # Client <-> scheduler timeout 
             heartbeat_interval="20s"  # Worker heartbeat interval
@@ -33,18 +33,31 @@ sim=scm.de_novo_simulation(location=data_root,
                             name="twothird_pow_sim_2026-01-30",
                             client=client)
 
-sim.fit_orthos(serial_orthos=True)
-sim.save()
-print("DONE FIT",flush=True)
+#sim.fit_orthos(serial_orthos=True)
+#sim.save()
+#print("DONE FIT",flush=True)
 
-sim.precompute_wald(cov_method="sandwich")
-sim.save()
-print("DONE SANDWICH",flush=True)
+#sim.precompute_wald(cov_method="sandwich")
+#sim.save()
+#print("DONE SANDWICH",flush=True)
 
-sim.precompute_wald(cov_method="opg")
-sim.save()
-print("DONE OPG",flush=True)
+#sim.precompute_wald(cov_method="opg")
+#sim.save()
+#print("DONE OPG",flush=True)
 
+
+
+sim.wald("hs_all_ct")
+sim.save()
+print("wald sandwitch done",flush=True)
+
+sim.wald("hs_all_ct",cov_method="opg")
+sim.save()
+print("wald opg done",flush=True)
+
+sim.mwu("hs_all_ct")
+sim.save()
+print("mwu done", flush=True)
 
 client.close()
 cluster.close()

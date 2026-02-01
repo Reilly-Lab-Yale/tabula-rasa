@@ -5213,21 +5213,25 @@ class de_novo_simulation:
 
         results=ResultSet.from_tsv(testd/f"{index}_results.tsv").df
 
+        #merge in ground truth for `comparison` 
         merged=results.merge(self.ground_truth,
             left_on=["comparison_CRE","comparison_cell_type"],
             right_on=["cre_id","cell_type"]
         )
-
+        
         merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+        #rename 2x given that  
+        merged=merged.rename({"true_mean":"comparison_truth",
+                            "mu":"comparison_truth"},axis=1)
 
-        #merge in `reference` ground truth
+        #merge in ground truth for `reference` 
         merged=merged.merge(self.ground_truth,
             left_on=["reference_CRE","reference_cell_type"],
             right_on=["cre_id","cell_type"]
         )
         merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+        merged=merged.rename({"true_mean":"reference_truth",
+                            "mu":"reference_truth"},axis=1)
 
         #ground truth effect size
         merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]

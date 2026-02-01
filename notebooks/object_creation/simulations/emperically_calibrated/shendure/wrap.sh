@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=fit
 #SBATCH --partition=day
-#SBATCH --time=08:10:00
+#SBATCH --time=08:20:00
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=32G
 #SBATCH --output=slurm-%j.out
