@@ -74,6 +74,7 @@ from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
+from .utils import one_library_replicate, pow_curve
 logger = logging.getLogger("scMPRAforge")
 
 def dump_df_debug(df, prefix="debug_df", outdir="."):
@@ -1166,8 +1167,7 @@ class scMPRA_data:
         ret.source=filepath
 
         return ret
-    
-    
+        
     @classmethod
     def from_parquet(cls,path):
         """
@@ -1211,8 +1211,7 @@ class scMPRA_data:
         #dump
         pa_data_table=pa_data_table.replace_schema_metadata(pa_metadata)
         pq.write_table(pa_data_table,path,compression="gzip")
-
-    
+  
     def graph_chimeric(self, *args, **kwargs):
         """
         TODO: test again now that its moved to scMPRA data obj
@@ -1284,7 +1283,6 @@ class scMPRA_data:
         self.data=ret
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
-
     
     def ortho_filter(self):
         """
@@ -1308,6 +1306,18 @@ class scMPRA_data:
         # Compute dropped combos
         dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
         dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
+
+        # Warn if reference was filtered out
+        ref_mask = (
+            (dropped_combos["cell_type"] == "reference")
+            | (dropped_combos["cre_id"] == "reference")
+        )
+
+        if ref_mask.any():
+            n_ref = ref_mask.sum()
+            logger.warning(
+                f"ortho_filter removed {n_ref} combinations involving 'reference' "
+            )
 
         # Keep only rows matching valid (cell_type, cre_id) combos
         self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
@@ -4980,6 +4990,7 @@ class de_novo_simulation:
         n_sims:int=None,
         experiment_bounds:Bounds=None,
         ground_truth:pd.DataFrame=None,
+        flatten_overtransfection=None,
         negative_controls=["reference"],
         reference_cell_type="reference"
         ):
@@ -5056,7 +5067,8 @@ class de_novo_simulation:
                         "library_mapping",
                         "n_sims",
                         "experiment_bounds",
-                        "ground_truth")
+                        "ground_truth",
+                        "flatten_overtransfection")
                         
             
             #lightweight, just save.
@@ -5064,6 +5076,7 @@ class de_novo_simulation:
             self.set_state_field("reference_cell_type",reference_cell_type)
             self.set_state_field("negative_controls",negative_controls)
             self.set_state_field("alpha",DEFAULT_SIGNIFICANCE_THRESHOLD)
+            self.set_state_field("flatten_overtransfection",flatten_overtransfection)
             
             if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
                 raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
@@ -5201,21 +5214,25 @@ class de_novo_simulation:
 
         results=ResultSet.from_tsv(testd/f"{index}_results.tsv").df
 
+        #merge in ground truth for `comparison` 
         merged=results.merge(self.ground_truth,
             left_on=["comparison_CRE","comparison_cell_type"],
             right_on=["cre_id","cell_type"]
         )
-
+        
         merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"comparison_truth"},axis=1)
+        #rename 2x given that  
+        merged=merged.rename({"true_mean":"comparison_truth",
+                            "mu":"comparison_truth"},axis=1)
 
-        #merge in `reference` ground truth
+        #merge in ground truth for `reference` 
         merged=merged.merge(self.ground_truth,
             left_on=["reference_CRE","reference_cell_type"],
             right_on=["cre_id","cell_type"]
         )
         merged=merged.drop(columns=["cre_id","cell_type"])
-        merged=merged.rename({"true_mean":"reference_truth"},axis=1)
+        merged=merged.rename({"true_mean":"reference_truth",
+                            "mu":"reference_truth"},axis=1)
 
         #ground truth effect size
         merged["gt_effect_size"]=merged["comparison_truth"]/merged["reference_truth"]
@@ -5598,7 +5615,7 @@ class de_novo_simulation:
         n_sims=self.get_state_field("n_sims")
 
         #helper function to be submitted to the cluster...
-        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type):
+        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type,flatten):
             
             #load a description
             description=pd.read_csv(description_path,
@@ -5615,7 +5632,8 @@ class de_novo_simulation:
             scd.set_reference_cell(reference_cell_type)
             scd.flag_synthetic()
             scd.overtransfected()
-            scd.flatten_overtransfection()
+            if flatten:
+                scd.flatten_overtransfection()
 
             scd.to_parquet(path)
 
@@ -5632,7 +5650,8 @@ class de_novo_simulation:
                                description_path=self.descripd/f"{idx}.tsv.gz",
                                path=path,
                                negative_controls=self.get_state_field("negative_controls"),
-                               reference_cell_type=self.get_state_field("reference_cell_type"))
+                               reference_cell_type=self.get_state_field("reference_cell_type"),
+                               flatten=self.get_state_field("flatten_overtransfection"))
             #append the 
             transcription_tracker.append(r)
         
