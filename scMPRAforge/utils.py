@@ -548,3 +548,73 @@ def _plot_test_bars(
 
     fig.tight_layout()
     return fig, ax
+
+def one_library_replicate(root,min,max,reps,client,flatten_overtransfection,bound):
+    """
+    Notebook helper function.
+    Creates a de_novo_simulation in root, with a random name.
+    Assumes corresponding libraries. 
+    """
+    #create ground truth dataframe
+    rng = np.random.default_rng()
+    cre_gt=rng.uniform(min,max,size=n_cres-1)
+    cre_gt=np.append(cre_gt,minP)
+    names=[f"synthcre_{i}" for i in range(0,n_cres-1)]+["reference"]
+
+    gt_df=pd.DataFrame({"cre_id":names,"mu":cre_gt})
+    gt_df["cell_type"]="reference"
+
+    # simulate libraries
+    libraries=[scm.simulate_library(CREs=gt_df["cre_id"],
+                 library_model=scm.SHENDURE_BOUNDS.library_model)
+                 for i in range(n_sims)]
+    
+    #initalize the simulated replicate
+    name=uuid.uuid4().hex[:8]
+    
+    sim=scm.de_novo_simulation(location=root,
+                            name=f"sim_{name}",
+                            client=client,
+                            libraries=libraries,
+                            library_mapping="corresponding",
+                            flatten_overtransfection=False,
+                            n_sims=n_sims,
+                            experiment_bounds=bound,
+                            ground_truth=gt_df)
+    sim.gamut()
+    
+    return name, sim
+
+def pow_curve(df,n_bins=100):
+    """
+    Takes a df of bool reject_null and fc (fold change)
+    such as is produced by `sum_pow` and makes a power plot.
+    You can choose the number of bins with `n_bins`
+    """
+    # bin comp_mean
+    df = df.copy()
+    df["fc"] = pd.cut(df["fc"], bins=n_bins)
+
+    # aggregate: fraction of True in each bin
+    binned = (
+        df.groupby("fc", observed=True)["reject_null"]
+        .mean()
+        .reset_index(name="reject_frac")
+    )
+
+    # bin centers for plotting
+    binned["bin_center"] = binned["fc"].apply(lambda x: x.mid)
+
+    # plot
+    sns.lineplot(
+        data=binned,
+        x="bin_center",
+        y="reject_frac",
+        marker="o"
+    )
+
+    plt.xlabel("fc (binned)")
+    plt.ylabel("Power")
+    plt.ylim(0, 1)
+    plt.tight_layout()
+    plt.show()

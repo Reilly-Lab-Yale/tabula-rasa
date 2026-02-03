@@ -74,6 +74,7 @@ from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
+from .utils import one_library_replicate, pow_curve
 logger = logging.getLogger("scMPRAforge")
 
 def dump_df_debug(df, prefix="debug_df", outdir="."):
