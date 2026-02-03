@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[10]:
+# In[2]:
 
 
 #imports
@@ -11,7 +11,7 @@ import scMPRAforge as scm
 from scMPRAforge.core import _smart_matrix, _mom_from_training_data, _matricies_to_order, _tensorzinb_fit
 
 
-# In[11]:
+# In[3]:
 
 
 import pandas as pd
@@ -32,30 +32,28 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
 
 cluster=SLURMCluster(
-    cores=8,#cores per slurm job
+    cores=2,#cores per slurm job
     memory="512G",#memory per slurm job
     processes=1,#dask workers per slurm job
     job_extra_directives=["-p week", 
-        f"--job-name=cell_type_1_worker_job",
-        f"--time=7-00:00:00",
-        f"--output=worker_cell_type_1_%j.out"]
+        f"--job-name=seelig_fit_worker",
+        f"--time=4-00:00:00",
+        f"--output=worker_%j.out"]
 )
 
-cluster.scale(jobs=1)
+cluster.scale(jobs=2)
 
 client = Client(cluster,
         timeout=f"{5*60}s",   # Client <-> scheduler timeout 
         heartbeat_interval="20s"  # Worker heartbeat interval
     )
 
-index = 1
-
 #from dask.distributed import Client, LocalCluster
 #cluster=LocalCluster(memory_limit='8GB')
 #client = Client(cluster)
 
 
-# In[ ]:
+# In[7]:
 
 
 print(client.dashboard_link, flush=True)
@@ -68,6 +66,8 @@ print(client.dashboard_link, flush=True)
 
 
 data_root="/nfs/roberts/project/pi_skr2/shared/tabula_data"
+path=f"{data_root}/seelig"
+name="ortho_seelig_v1"
 
 def load_and_preprocess_data(data_root):
     """Load, preprocess the data and return processed data object."""
@@ -78,75 +78,72 @@ def load_and_preprocess_data(data_root):
     seelig.ortho_filter()
     return seelig
 
+import os
+if os.path.isdir(path+"/"+name):
+    print("[+] Model found. Loading...")
+    primordial=scm.ortho.load(client,path,name)
+    shendure=primordial.training_data
+else:
+    print("[+] Model not found. Creating...")
 
+    #load data
+    seelig = load_and_preprocess_data(data_root)
+    print('data loaded', flush=True)
 
-seelig = load_and_preprocess_data(data_root)
-print('data loaded', flush=True)
-
-
-# In[ ]:
-
-
-def single_model_fit(data, split, index, client):
-    data = data.data
-    levels=data[split].unique()
-    t = levels[index]
-
-    #smart matrix
-    t_future = client.submit(
-            _smart_matrix,
-            data=data[data[split]==t],
-            split=split
-        )
-    print('smart matrix done', flush=True)
-    # mom for training data, matrices to order
-    if split=="cell_type":
-        init_method="pass"
-        init_vals=client.submit(_mom_from_training_data, 
-                data=data,
-                split="cell_type",
-                subset=t,
-                indicies=client.submit(_matricies_to_order, matricies=t_future)
-                )
-        print('MoM done', flush=True)
-
-    else:
-            init_method="nb"
-            init_vals= None 
-
-    #tensorzinb fit
-    print('submited fitting', flush=True)
-    tzinb_futures = client.submit(
-                _tensorzinb_fit,
-                t_future,
-                t,
-                init_method=init_method,
-                init_vals=init_vals
-            )
-
-    print('fitting done', flush=True)
-    return(scm.experiment_model(model={t:tzinb_futures},
-                                split=split),
-            {t:t_future})
-
+    primordial=scm.ortho()
+    primordial.criss_cross(client=client,
+                       dat=seelig)
+    primordial.extract_params(client)
+    primordial.save(path,name)
 
 
 # In[ ]:
 
 
-model, design = single_model_fit(seelig, 'cell_type', index, client)
+# def single_model_fit(data, split, design_only=False):
+#     data = data.data
+#     levels=data[split].unique()
+#     t = levels[0]
 
+#     #smart matrix
+#     t_future = client.submit(
+#             _smart_matrix,
+#             data=data[data[split]==t],
+#             split=split
+#         )
+#     if design_only:
+#         return {t:t_future}
+#     print('smart matrix done', flush=True)
+#     # mom for training data, matrices to order
+#     if split=="cell_type":
+#         init_method="pass"
+#         init_vals=client.submit(_mom_from_training_data, 
+#                 data=data,
+#                 split="cell_type",
+#                 subset=t,
+#                 indicies=client.submit(_matricies_to_order, matricies=t_future)
+#                 )
+#         print('MoM done', flush=True)
 
-# In[ ]:
+#     else:
+#             init_method="nb"
+#             init_vals= None 
 
+#     #tensorzinb fit
+#     print('submited fitting', flush=True)
+#     tzinb_futures = client.submit(
+#                 _tensorzinb_fit,
+#                 t_future,
+#                 t,
+#                 init_method=init_method,
+#                 init_vals=init_vals
+#             )
 
-model.save(f"{data_root}/seelig/ortho_test_seelig/7_daycell_type_1_model.pkl")
+#     print('fitting done', flush=True)
+#     return(scm.experiment_model(model={t:tzinb_futures},
+#                                 split=split),
+#             {t:t_future})
 
-
-# In[ ]:
-
-
-print("finished!", flush=True)
 
 
 # In[ ]:
