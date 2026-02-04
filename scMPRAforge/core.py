@@ -980,6 +980,7 @@ from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
 SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
+COHEN_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_bounds.tgz")
 
 class scMPRA_data:
     """
