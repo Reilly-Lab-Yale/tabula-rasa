@@ -900,7 +900,7 @@ class Bounds:
             if var=="by_cell_type_parameters":
                 reference_mus=[]
                 for key in getattr(inp,var).nb:
-                    df=getattr(inp,var).nb["Mesoderm"].result()
+                    df=getattr(inp,var).nb[key].result()
                     assert len(df.loc["reference"])==1; "Multi reference"
                     reference_mus.append(df.loc["reference"]["mu"])
                 ret.by_cell_type_reference_activity=np.mean(reference_mus)
@@ -948,7 +948,7 @@ class Bounds:
         #save the preferred model direction
         ret.preferred=preferred
         
-        #chose representative parameters based on preferred model direction
+        #choose representative parameters based on preferred model direction
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
