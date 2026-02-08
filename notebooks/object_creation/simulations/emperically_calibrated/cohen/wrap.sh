@@ -2,8 +2,8 @@
 #SBATCH --job-name=fit
 #SBATCH --partition=week
 #SBATCH --time=72:00:00
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=3
+#SBATCH --mem=256G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 

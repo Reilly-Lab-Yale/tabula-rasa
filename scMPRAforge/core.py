@@ -1576,11 +1576,17 @@ def standard_fit(client,data,split):
     data=data.data
     levels=data[split].unique()
 
+    if split=="cell_type":
+        mat_resource={"CELL_DESIGN":1}
+    else:
+        mat_resource={"CRE_DESIGN":1}
+    
     mats_futures = {
         t: client.submit(
             _smart_matrix,
             data=data[data[split]==t],
-            split=split
+            split=split,
+            resources=mat_resource
         )
         for t in levels
     }
@@ -1873,7 +1879,10 @@ class ortho:
         
     
     def extract_params(self,client):
-        """Extracts parameters for all models in the object"""
+        """
+        Extracts parameters for all models in the object
+        Silently passes either / both directions if not computed previous
+        """
 
         if not self.by_cre is None:
             self.by_cre_parameters=extract_parameters(
