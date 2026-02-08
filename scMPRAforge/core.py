@@ -25,10 +25,8 @@ import itertools
 import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
 
-
 import statsmodels.api as sm
 import statsmodels.discrete.discrete_model as smd
-
 
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
@@ -1588,16 +1586,19 @@ def standard_fit(client,data,split):
     }
 
     if split=="cell_type":
-        init_method="pass"
-        init_vals={
-            t:client.submit(_mom_from_training_data, 
-                data=data,
-                split="cell_type",
-                subset=t,
-                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
-                )
-            for t in levels
-        }
+        #init_method="pass"
+        #init_vals={
+        #    t:client.submit(_mom_from_training_data, 
+        #        data=data,
+        #        split="cell_type",
+        #        subset=t,
+        #        indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
+        #        )
+        #    for t in levels
+        #}
+        #TEMP OVERRIDE
+        init_method="nb"
+        init_vals={t:None for t in levels}
     else:
         init_method="nb"
         init_vals={t:None for t in levels}
@@ -1608,7 +1609,8 @@ def standard_fit(client,data,split):
                 mats_futures[t],
                 t,
                 init_method=init_method,
-                init_vals=init_vals[t]
+                init_vals=init_vals[t],
+                resources={'FIT': 1}
             )
         for t in levels
     }
