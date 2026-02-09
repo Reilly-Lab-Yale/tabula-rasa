@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=fit
 #SBATCH --partition=week
-#SBATCH --time=72:00:00
-#SBATCH --cpus-per-task=3
-#SBATCH --mem=256G
+#SBATCH --time=3-00:00:00
+#SBATCH --cpus-per-task=5
+#SBATCH --mem=512G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 
