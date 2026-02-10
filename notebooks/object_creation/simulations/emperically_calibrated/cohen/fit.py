@@ -7,8 +7,19 @@ import time
 import os
 
 def main():
+    
+    import os, psutil
+    print("SLURM_CPUS_PER_TASK =", os.getenv("SLURM_CPUS_PER_TASK"),flush=True)
+    print("os.cpu_count()      =", os.cpu_count(),flush=True)
+    print("affinity            =", len(os.sched_getaffinity(0)),flush=True)
+    print("psutil affinity     =", len(psutil.Process().cpu_affinity()),flush=True)
+    
     with dask.config.set({"distributed.worker.resources.FIT":1,"CELL_DESIGN":1}):
-        cluster=LocalCluster()
+        cluster=LocalCluster(
+            n_workers=6,
+            threads_per_worker=1,
+            processes=True
+        )
         client=Client(cluster)
         
         job_id = os.environ.get('SLURM_JOB_ID', 'local')
