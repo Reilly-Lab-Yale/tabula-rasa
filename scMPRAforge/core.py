@@ -1576,7 +1576,7 @@ def standard_fit(client,data,split):
     data=data.data
     levels=data[split].unique()
 
-    mat_resources={}
+    mat_resource={}
     #if split=="cell_type":
     #    mat_resource={"CELL_DESIGN":1}
     #else:
