@@ -1582,7 +1582,7 @@ def standard_fit(client,data,split):
     #else:
     #    mat_resource={"CRE_DESIGN":1}
 
-    worker_addrs=sorted(client.schedulre_info()["workers"])
+    worker_addrs=sorted(client.scheduler_info()["workers"])
     nW=len(worker_addrs)
 
     def worker_for_t(i: int) -> str:
@@ -1609,9 +1609,10 @@ def standard_fit(client,data,split):
 
 
     mats_futures={}
-    tzinb_fures={}
+    tzinb_futures={}
     for i, t in enumerate(levels):
-        
+        w=worker_for_t(i)
+
         mats_futures[t]=client.submit(
             _smart_matrix,
             data=data[data[split]==t],
