@@ -3,7 +3,7 @@
 #SBATCH --partition=day
 #SBATCH --time=00:10:00
 #SBATCH --cpus-per-task=6
-#SBATCH --mem=8G
+#SBATCH --mem=256G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 
