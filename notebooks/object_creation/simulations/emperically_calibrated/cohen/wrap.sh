@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=fit
-#SBATCH --partition=ycga_long
+#SBATCH --partition=week
 #SBATCH --time=5-00:10:00
 #SBATCH -c 6
-#SBATCH --mem=239G
+#SBATCH --mem=512G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 module reset

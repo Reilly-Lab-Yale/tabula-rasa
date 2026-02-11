@@ -15,7 +15,7 @@ def main():
     print("psutil affinity     =", len(psutil.Process().cpu_affinity()),flush=True)
 
     cluster=LocalCluster(
-        n_workers=4,
+        n_workers=6,
         threads_per_worker=10,
         resources={"CELL_DESIGN": 1},
         processes=True
