@@ -14,11 +14,7 @@ def main():
     print("affinity            =", len(os.sched_getaffinity(0)),flush=True)
     print("psutil affinity     =", len(psutil.Process().cpu_affinity()),flush=True)
 
-    cluster=LocalCluster(
-        n_workers=6,
-        threads_per_worker=1,
-        processes=True
-    )
+    cluster=LocalCluster()
     client=Client(cluster)
     job_id = os.environ.get('SLURM_JOB_ID', 'local')
     report_filename = f"dask-report-job-{job_id}.html"
