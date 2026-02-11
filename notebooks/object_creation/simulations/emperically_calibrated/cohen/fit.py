@@ -24,7 +24,8 @@ def main():
     report_filename = f"dask-report-job-{job_id}.html"
     
     with performance_report(filename=report_filename):
-        data_root=Path("/nfs/roberts/project/pi_skr2/shared/tabula_data")
+        data_root=Path("/gpfs/gibbs/pi/reilly/tabula_data")#mccleary
+        #data_root=Path("/nfs/roberts/project/pi_skr2/shared/tabula_data")#bouchet
         print(client.dashboard_link,flush=True)
         sim=scm.de_novo_simulation(location=data_root,
                                    name="twothird_pow_sim_2026-02-05",

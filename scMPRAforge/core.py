@@ -1567,7 +1567,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     
     return result
 
-def standard_fit(client,data,split):
+def standard_fit(client,data,split,disable_mom=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -1592,20 +1592,17 @@ def standard_fit(client,data,split):
         for t in levels
     }
 
-    if split=="cell_type":
-        #init_method="pass"
-        #init_vals={
-        #    t:client.submit(_mom_from_training_data, 
-        #        data=data,
-        #        split="cell_type",
-        #        subset=t,
-        #        indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
-        #        )
-        #    for t in levels
-        #}
-        #TEMP OVERRIDE
-        init_method="nb"
-        init_vals={t:None for t in levels}
+    if split=="cell_type" and not disable_mom:
+        init_method="pass"
+        init_vals={
+            t:client.submit(_mom_from_training_data, 
+                data=data,
+                split="cell_type",
+                subset=t,
+                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
+                )
+            for t in levels
+        }
     else:
         init_method="nb"
         init_vals={t:None for t in levels}
@@ -1853,29 +1850,31 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
-                                                     split="cre_id")
+                                                     split="cre_id",
+                                                     disable_mom=disable_mom)
         self.by_cre.label_regressors(client,self.by_cre_design)
         
 
         
-    def fit_by_cell_type_models(self,client,dat=None):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
-                                                        split="cell_type")
+                                                        split="cell_type",
+                                                        disable_mom=disable_mom)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
         
     
-    def criss_cross(self,client,dat):
+    def criss_cross(self,client,dat,disable_mom=False):
         """
         Makes by_cre and by_cell_type models.
         """
-        self.fit_by_cre_models(client=client,dat=dat)
-        self.fit_by_cell_type_models(client=client,dat=dat)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom)
+        self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom)
         
         
     
@@ -5530,7 +5529,7 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self, direction="both", serial_orthos: bool = False):
+    def fit_orthos(self, direction="both", disable_mom=False, serial_orthos: bool = False):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
@@ -5573,11 +5572,11 @@ class de_novo_simulation:
             primordial = ortho()
 
             if direction == "both":
-                primordial.criss_cross(client=client, dat=data)
+                primordial.criss_cross(client=client, dat=data, disable_mom=disable_mom)
             elif direction == "by_cre":
-                primordial.fit_by_cre_models(client=client, dat=data)
+                primordial.fit_by_cre_models(client=client, dat=data, disable_mom=disable_mom)
             elif direction == "by_cell_type":
-                primordial.fit_by_cell_type_models(client=client, dat=data)
+                primordial.fit_by_cell_type_models(client=client, dat=data, disable_mom=disable_mom)
 
             primordial.extract_params(client)
 
