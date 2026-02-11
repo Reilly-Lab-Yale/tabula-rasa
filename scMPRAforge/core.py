@@ -1581,13 +1581,16 @@ def standard_fit(client,data,split):
     #    mat_resource={"CELL_DESIGN":1}
     #else:
     #    mat_resource={"CRE_DESIGN":1}
-
-    worker_addrs=sorted(client.schedulre_info()["workers"])
-    nW=len(worker_addrs)
-
-    def worker_for_t(i: int) -> str:
-        return worker_addrs[i % nW]
-
+    
+    mats_futures = {
+        t: client.submit(
+            _smart_matrix,
+            data=data[data[split]==t],
+            split=split,
+            resources=mat_resource
+        )
+        for t in levels
+    }
 
     if split=="cell_type":
         #init_method="pass"
@@ -1607,32 +1610,17 @@ def standard_fit(client,data,split):
         init_method="nb"
         init_vals={t:None for t in levels}
 
-
-    mats_futures={}
-    tzinb_fures={}
-    for i, t in enumerate(levels):
-        
-        mats_futures[t]=client.submit(
-            _smart_matrix,
-            data=data[data[split]==t],
-            split=split,
-            resources=mat_resource,
-            workers=[w],
-            allow_other_workers=False,
-            pure=False
-        )
-
-        tzinb_futures[t]=client.submit(
+    tzinb_futures = {
+        t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
                 t,
                 init_method=init_method,
-                init_vals=init_vals[t],
-                workers=[w],
-                allow_other_workers=False,
-                pure=False
+                init_vals=init_vals[t]#,
                 #resources={'FIT': 1}
             )
+        for t in levels
+    }
     
     return(experiment_model(model=tzinb_futures,
                                 split=split),
