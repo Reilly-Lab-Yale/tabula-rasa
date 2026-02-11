@@ -5066,15 +5066,13 @@ class de_novo_simulation:
             futures = [client.submit(lambda x: x, v, pure=False) for v in flat]
             arr = pd.array(futures, dtype="object").to_numpy().reshape(rawfut.shape)
             
-            self.futures=pd.DataFrame(arr,
-                                      index=rawfut.index,
-                                      columns=rawfut.columns)
+
         else:
             logger.info(f"No 'state.parquet' found for '{name}'. Initalizing new object.")
             
             self.state = pd.DataFrame()
             
-            self.futures = pd.DataFrame(index=range(n_sims))
+
             
             required = ("libraries", 
                         "library_mapping",
@@ -5189,7 +5187,6 @@ class de_novo_simulation:
             
             transfection_tracker.append(ret)
         
-        self.futures["transfection"]=transfection_tracker
 
     def set_state_field(self,field,value):
         self.state[field]=[value]
@@ -5530,37 +5527,25 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self, direction="both", serial_orthos: bool = False):
+    def fit_orthos(self, direction="both"):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
 
         direction can be 'both', 'by_cre' or 'by_cell_type'
 
-        If serial_orthos is True, only one _fit_ortho_helper will run at a time by
-        chaining each submission to depend on the previous ortho future.
+        BLOCKING
         """
         valid_directions = ["both", "by_cre", "by_cell_type"]
         if direction not in valid_directions:
             raise ValueError(f"Invalid direction {direction}, valid directions are {valid_directions}")
 
-        # Check to make sure previous step has at least been queued.
-        if "transcription" not in self.futures.columns:
-            raise RuntimeError(
-                "Tried to fit orthos, but transcription has not yet been simulated! "
-                "You probably want to run 'gamut' first."
-            )
-
-        # Pull out the futures tracking
-        tscription_futures = self.futures["transcription"].to_list()
 
         # Make output directory
         self.orthod.mkdir(exist_ok=True)
 
         # Function to submit
-        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output, _prev_ortho=None):
-            # NOTE: tscription_future and _prev_ortho are passed to enforce dependencies.
-            # We intentionally do NOT call .result() on them here to avoid blocking a worker.
+        def _fit_ortho_helper(tscription_future, path_scmpradat, path_output, name_output):
 
             # Load data
             data = scMPRA_data.from_parquet(path_scmpradat)
@@ -5581,22 +5566,16 @@ class de_novo_simulation:
 
             primordial.extract_params(client)
 
-            # Write the ortho to disk
-            # could save space with strip_training_data=True
-            primordial.save(path=path_output, name=name_output)
+            return primordial
 
-            return True
-
-        ortho_tracker = []
-        prev_ortho_future = None
 
         n_sims = self.get_state_field("n_sims")
+        
+        #submit & get all orthos
         for idx in range(0, n_sims):
             kwargs = dict(
                 tscription_future=tscription_futures[idx],
                 path_scmpradat=self.scmpradatp / f"{idx}.scmpra",
-                path_output=self.orthod,
-                name_output=str(idx),
             )
 
             # If serial_orthos, chain each ortho task to the previous ortho future.
@@ -5604,23 +5583,22 @@ class de_novo_simulation:
             if serial_orthos:
                 kwargs["_prev_ortho"] = prev_ortho_future
 
-            r = self.client.submit(_fit_ortho_helper, **kwargs)
+            prim = self.client.submit(_fit_ortho_helper, **kwargs)
+            ortho_tracker.append(prim)
+        
+        #save all orthos.
+        for idx in range(0, n_sims):
+            path_output=self.orthod
+            name_output=str(idx)
+            primordial.save(path=path_output, name=name_output)
 
-            ortho_tracker.append(r)
-            prev_ortho_future = r
 
-        self.futures["ortho"] = ortho_tracker
     
     def _simulate_transcription(self):
         """
         Simulates transcription.
         Most of the logic is offloaded to the non-method simulate_from_description.
         """
-        #check to make sure previous step has at least been queued...
-        if "transfection" not in self.futures.columns:
-                raise RuntimeError("Tried to simulate transcription, but transfection has not yet been simulated!")
-        
-        tfection_futures=self.futures["transfection"].to_list()
 
         #make output directory
         self.scmpradatp.mkdir(exist_ok=True)
@@ -5668,7 +5646,6 @@ class de_novo_simulation:
             #append the 
             transcription_tracker.append(r)
         
-        self.futures["transcription"]=transcription_tracker
 
     def _block_until_all_tests_are_done(self):
         dummy = [f.result() for f in self.testqueue]
@@ -5678,20 +5655,7 @@ class de_novo_simulation:
         self.state.to_parquet(state_path)
 
         self._block_until_all_tests_are_done()
-        
-        
-        #block until all queued steps are done
-        fut=self.futures.to_numpy().ravel()
-        dask.distributed.wait(fut)
-        
-        results = [f.result() for f in fut]
-        
-        arr = pd.array(results, dtype="bool").to_numpy().reshape(self.futures.shape)
-        resolved = pd.DataFrame(arr, index=self.futures.index, columns=self.futures.columns)
 
-        resolved.to_csv(self.fullp/"futures.tsv.gz",
-                sep="\t",
-                compression="gzip")
 
     def mwu(self,name):
         """
@@ -5712,13 +5676,7 @@ class de_novo_simulation:
 
         testd.mkdir()
         
-        #check to make sure previous step has at least been queued.
-        if "transcription" not in self.futures.columns:
-            raise RuntimeError("Tried to fit perfrom mwu testing, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
-        
-        #pull out the futures tracking 
-        tscription_futures=self.futures["transcription"].to_list()
-        
+      
         #little helper function to shuttle to workers
         def _mwu_helper(tscription_future,
                         path_scmpradat,
@@ -5759,14 +5717,6 @@ class de_novo_simulation:
         # pick input dir destination based on covariance matrix estimation procedure
         precompd = self._switch_cov_method(cov_method)
 
-        # check to make sure previous step has at least been queued.
-        if cov_method not in self.futures.columns:
-            raise RuntimeError(
-                f"wald precompute with coariance estimation method '{cov_method}' not yet run."
-            )
-
-        # extract precomp futures
-        precomp_futures = self.futures[cov_method]
 
         # init & load relevant hypothesis set...
         hypod = self.testd / name
