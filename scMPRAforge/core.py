@@ -2,6 +2,8 @@
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
 #all the main functions.
+import itertools
+prio_counter = itertools.count(start=0, step=1)
 
 #external imports
 import seaborn as sns
@@ -1620,7 +1622,8 @@ def standard_fit(client,data,split):
             resources=mat_resource,
             workers=[w],
             allow_other_workers=False,
-            pure=False
+            pure=False,
+            priority=next(prio_counter)
         )
 
         tzinb_futures[t]=client.submit(
@@ -1631,7 +1634,8 @@ def standard_fit(client,data,split):
                 init_vals=init_vals[t],
                 workers=[w],
                 allow_other_workers=False,
-                pure=False
+                pure=False,
+                priority=next(prio_counter)
                 #resources={'FIT': 1}
             )
     
@@ -1677,7 +1681,8 @@ class experiment_model:
         for key in self.model:
             self.model[key]=client.submit(experiment_model._label_tensorzinb_regressors,
                 model=self.model[key],
-                dm=design_matricies[key])
+                dm=design_matricies[key],
+                priority=next(prio_counter))
     
 
     def _unflatten_futures(self,client):
@@ -1686,7 +1691,7 @@ class experiment_model:
         wraps all the models in futures
         """
         for key in self.model:
-            self.model[key]=client.submit(lambda x: x, self.model[key])
+            self.model[key]=client.submit(lambda x: x, self.model[key],priority=next(prio_counter))
         
     
     def flattened_copy(self):
@@ -2035,6 +2040,7 @@ class ortho:
                         design_f,
                         df_ct,
                         opg_only=opg_only,   # <-- pass the flag
+                        priority=next(prio_counter)
                     )
             else:
                 by_ct=None
@@ -2052,6 +2058,7 @@ class ortho:
                         design_f,
                         df_cr,
                         opg_only=opg_only,   # <-- pass the flag
+                        priority=next(prio_counter)
                     )
             else:
                 by_cr=None
@@ -2113,9 +2120,9 @@ class parameters:
         Wraps all the models in futures
         """
         for key in self.keys:
-            self.nb[key]=client.submit(lambda x: x, self.nb[key])
-            self.zi[key]=client.submit(lambda x: x, self.zi[key])
-            self.theta[key]=client.submit(lambda x: x, self.theta[key])
+            self.nb[key]=client.submit(lambda x: x, self.nb[key],priority=next(prio_counter))
+            self.zi[key]=client.submit(lambda x: x, self.zi[key],priority=next(prio_counter))
+            self.theta[key]=client.submit(lambda x: x, self.theta[key],priority=next(prio_counter))
         
     
     def flattened_copy(self):
@@ -2228,14 +2235,17 @@ def extract_parameters(client,model,design,split):
         mus[level]=client.submit(_extract_mu,
                          split=split,
                          model=model.model[level],
-                         design_matrix=design[level])
+                         design_matrix=design[level],
+                         priority=next(prio_counter))
         
         zis[level]=client.submit(_extract_zi,
                          model=model.model[level],
-                         design_matrix=design[level])
+                         design_matrix=design[level],
+                         priority=next(prio_counter))
         
         thetas[level]=client.submit(_extract_theta,
-                            model=model.model[level])
+                            model=model.model[level],
+                            priority=next(prio_counter))
     
     return parameters(nb=mus,zi=zis,theta=thetas,broken_on=split)
 
@@ -2345,7 +2355,7 @@ def _flatten_param_representation(client: Client, params, split: str):
         return cartesian
 
     futures = [
-        client.submit(process_key, key, params_future)
+        client.submit(process_key, key, params_future,priority=next(prio_counter))
         for key in keys
     ]
     results = client.gather(futures)
@@ -2399,7 +2409,7 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         return mat
 
     keys = dat[split].unique()
-    futures = [client.submit(process_key, key, dat_future) for key in keys]
+    futures = [client.submit(process_key, key, dat_future,priority=next(prio_counter)) for key in keys]
     results = client.gather(futures)
     return pd.concat(results)
 
@@ -3032,7 +3042,7 @@ class WaldPrecomp:
             if d is None:
                 continue
             for k in list(d.keys()):
-                d[k] = client.submit(lambda x: x, d[k])
+                d[k] = client.submit(lambda x: x, d[k],priority=next(prio_counter))
 
     def flattened_copy(self):
         # gather futures to plain objects
@@ -4904,7 +4914,7 @@ class HypothesisTester:
         if client is not None:
             bundle_f = client.scatter(bundle, broadcast=True)
             # futures = client.map(self._row_fn, recs, repeat(bundle_f), pure=True)
-            futures = [client.submit(self._row_fn, r, bundle_f, **self.kw) for r in recs]
+            futures = [client.submit(self._row_fn, r, bundle_f, priority=next(prio_counter) **self.kw) for r in recs]
             results = client.gather(futures)
         else:
             results = [self._row_fn(r, bundle, **self.kw) for r in recs]
@@ -5076,7 +5086,7 @@ class de_novo_simulation:
             rawfut=pd.read_csv(fullp/"futures.tsv.gz",sep="\t",compression="gzip", index_col=0)
             flat=rawfut.to_numpy().ravel()
 
-            futures = [client.submit(lambda x: x, v, pure=False) for v in flat]
+            futures = [client.submit(lambda x: x, v, pure=False,priority=next(prio_counter)) for v in flat]
             arr = pd.array(futures, dtype="object").to_numpy().reshape(rawfut.shape)
             
             self.futures=pd.DataFrame(arr,
@@ -5198,7 +5208,8 @@ class de_novo_simulation:
                 experiment_bounds=experiment_bounds,
                 ground_truth=ground_truth,
                 library=lib,
-                pth=self.descripd/f"{idx}.tsv.gz")
+                pth=self.descripd/f"{idx}.tsv.gz",
+                priority=next(prio_counter))
             
             transfection_tracker.append(ret)
         
@@ -5538,7 +5549,8 @@ class de_novo_simulation:
                                 ortho_future=ortho_futures[idx],
                                 path_input=self.orthod,
                                 path_output=precompd,
-                                name=str(idx))
+                                name=str(idx),
+                                priority=next(prio_counter))
             precomp_tracker.append(r)
         
         self.futures[cov_method]=precomp_tracker
@@ -5617,7 +5629,7 @@ class de_novo_simulation:
             if serial_orthos:
                 kwargs["_prev_ortho"] = prev_ortho_future
 
-            r = self.client.submit(_fit_ortho_helper, **kwargs)
+            r = self.client.submit(_fit_ortho_helper, **kwargs,priority=next(prio_counter))
 
             ortho_tracker.append(r)
             prev_ortho_future = r
@@ -5677,7 +5689,8 @@ class de_novo_simulation:
                                path=path,
                                negative_controls=self.get_state_field("negative_controls"),
                                reference_cell_type=self.get_state_field("reference_cell_type"),
-                               flatten=self.get_state_field("flatten_overtransfection"))
+                               flatten=self.get_state_field("flatten_overtransfection"),
+                               priority=next(prio_counter))
             #append the 
             transcription_tracker.append(r)
         
@@ -5753,7 +5766,8 @@ class de_novo_simulation:
                     tscription_future=tscription_futures[idx],
                     path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
                     path_output=testd/f"{idx}_results.tsv",
-                    hypothesis_set=hypotheses)
+                    hypothesis_set=hypotheses,
+                    priority=next(prio_counter))
             
             self.testqueue.append(r)
             
@@ -5834,7 +5848,7 @@ class de_novo_simulation:
             if serial_orthos:
                 kwargs["_prev_wald"] = prev_wald_future
 
-            r = self.client.submit(_wald_helper, **kwargs)
+            r = self.client.submit(_wald_helper, **kwargs,priority=next(prio_counter))
 
             self.testqueue.append(r)
             prev_wald_future = r
