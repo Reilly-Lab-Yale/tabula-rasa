@@ -1577,10 +1577,10 @@ def standard_fit(client,data,split,disable_mom=False):
     levels=data[split].unique()
 
     mat_resource={}
-    #if split=="cell_type":
-    #    mat_resource={"CELL_DESIGN":1}
-    #else:
-    #    mat_resource={"CRE_DESIGN":1}
+    if split=="cell_type":
+        mat_resource={"CELL_DESIGN":1}
+    else:
+        mat_resource={"CRE_DESIGN":1}
     
     mats_futures = {
         t: client.submit(
