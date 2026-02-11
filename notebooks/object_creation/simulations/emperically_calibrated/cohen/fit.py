@@ -25,8 +25,12 @@ def main():
     client=Client(cluster)
     job_id = os.environ.get('SLURM_JOB_ID', 'local')
     report_filename = f"dask-report-job-{job_id}.html"
+    ts_path = f"dask-daskstream-job-{job_id}.jsonl"
     
     with performance_report(filename=report_filename):
+        
+        tlogger=scm.start_taskstream_logger(client,ts_path,interval_s=15)
+        
         data_root=Path("/gpfs/gibbs/pi/reilly/tabula_data")#mccleary
         #data_root=Path("/nfs/roberts/project/pi_skr2/shared/tabula_data")#bouchet
         print(client.dashboard_link,flush=True)
@@ -38,6 +42,9 @@ def main():
         print("SUBMITTED",flush=True)
         sim.save()
         print("DONE",flush=True)
+        
+        tlogger.stop()
+        
         time.sleep(60)
         client.close()
         cluster.close()
