@@ -16,7 +16,7 @@ def main():
 
     cluster=LocalCluster(
         n_workers=6,
-        threads_per_worker=1,
+        threads_per_worker=10,
         processes=True
     )
     client=Client(cluster)
