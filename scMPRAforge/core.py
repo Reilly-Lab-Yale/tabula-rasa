@@ -5536,13 +5536,13 @@ class de_novo_simulation:
 
         direction can be 'both', 'by_cre' or 'by_cell_type'
 
-        Orchestration is intentionally performed on the client (rather than by
-        submitting a long-running helper task per replicate). This avoids keeping
-        idle helper tasks resident on workers while they wait on upstream futures.
+        Orchestration is submitted to Dask with explicit future dependencies.
+        This allows the scheduler to keep tasks queued until dependencies are
+        ready rather than running idle worker tasks.
 
-        If serial_orthos is True, each replicate will be fit strictly in index
-        order. Otherwise the method still orchestrates from the client, but does
-        not enforce a dependency chain between replicate fits.
+        If serial_orthos is True, ortho fits are chained in index order.
+        Otherwise all ortho fits are submitted and can run in parallel as soon
+        as each replicate's transcription future is complete.
         """
         valid_directions = ["both", "by_cre", "by_cell_type"]
         if direction not in valid_directions:
@@ -5561,40 +5561,48 @@ class de_novo_simulation:
         # Make output directory
         self.orthod.mkdir(exist_ok=True)
 
-        def _fit_one_ortho(idx: int):
-            data = scMPRA_data.from_parquet(self.scmpradatp / f"{idx}.scmpra")
+        def _fit_one_ortho(tscription_future, path_scmpradat, path_output, name_output, _prev_ortho=None):
+            # NOTE: tscription_future and _prev_ortho exist to encode scheduler
+            # dependencies; we intentionally do not call .result() on either.
+            client = get_client()
+
+            data = scMPRA_data.from_parquet(path_scmpradat)
             data.ortho_filter()
 
             primordial = ortho()
             if direction == "both":
-                primordial.criss_cross(client=self.client, dat=data)
+                primordial.criss_cross(client=client, dat=data)
             elif direction == "by_cre":
-                primordial.fit_by_cre_models(client=self.client, dat=data)
+                primordial.fit_by_cre_models(client=client, dat=data)
             elif direction == "by_cell_type":
-                primordial.fit_by_cell_type_models(client=self.client, dat=data)
+                primordial.fit_by_cell_type_models(client=client, dat=data)
 
-            primordial.extract_params(self.client)
-            primordial.save(path=self.orthod, name=str(idx))
+            primordial.extract_params(client)
+            primordial.save(path=path_output, name=name_output)
 
-            # Track completion with an already-resolved future so downstream
-            # steps that expect futures continue to work unchanged.
-            return self.client.scatter(True, hash=False)
+            return True
 
         n_sims = self.get_state_field("n_sims")
-        ortho_tracker = [None] * n_sims
+        ortho_tracker = []
+        prev_ortho_future = None
 
-        if serial_orthos:
-            for idx in range(0, n_sims):
-                tscription_futures[idx].result()
-                ortho_tracker[idx] = _fit_one_ortho(idx)
-        else:
-            future_to_idx = {fut.key: idx for idx, fut in enumerate(tscription_futures)}
-            for fut in dask.distributed.as_completed(tscription_futures):
-                idx = future_to_idx[fut.key]
-                ortho_tracker[idx] = _fit_one_ortho(idx)
+        for idx in range(0, n_sims):
+            kwargs = dict(
+                tscription_future=tscription_futures[idx],
+                path_scmpradat=self.scmpradatp / f"{idx}.scmpra",
+                path_output=self.orthod,
+                name_output=str(idx),
+            )
+
+            if serial_orthos:
+                kwargs["_prev_ortho"] = prev_ortho_future
+
+            r = self.client.submit(_fit_one_ortho, **kwargs)
+            ortho_tracker.append(r)
+            prev_ortho_future = r
 
         self.futures["ortho"] = ortho_tracker
-    
+
     def _simulate_transcription(self):
         """
         Simulates transcription.
