@@ -31,7 +31,7 @@ def main():
                                    name="twothird_pow_sim_2026-02-05",
                                    client=client)
         print("LOADED",flush=True)
-        sim.fit_orthos(serial_orthos=False,direction="by_cell_type")
+        sim.fit_orthos(serial_orthos=False,direction="by_cell_type",disable_mom=True)
         print("SUBMITTED",flush=True)
         sim.save()
         print("DONE",flush=True)
