@@ -1744,10 +1744,9 @@ class ortho:
         #There are much nicer ways to structure this, but that level of effort
         #should be saved for non-pickle save/load
         full_path=Path(path)/name
-        full_path.mkdir(parents=True)
+        full_path.mkdir(parents=True,exist_ok=True)
 
         ## Function
-        
         def simple_write(obj,filename):
             with open(full_path/filename,"wb") as f:
                 pickle.dump(obj,f)
