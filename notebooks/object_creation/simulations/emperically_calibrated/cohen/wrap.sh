@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=fit
 #SBATCH --partition=week
-#SBATCH --time=5-00:10:00
+#SBATCH --time=2-00:10:00
 #SBATCH -c 6
 #SBATCH --mem=512G
 #SBATCH --output=slurm-%j.out
