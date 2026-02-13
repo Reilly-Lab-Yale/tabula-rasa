@@ -25,10 +25,8 @@ import itertools
 import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
 
-
 import statsmodels.api as sm
 import statsmodels.discrete.discrete_model as smd
-
 
 import patsy
 from tensorzinb.tensorzinb import TensorZINB
@@ -75,6 +73,9 @@ from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
 from .utils import one_library_replicate, pow_curve
+
+from .performance_logging import start_taskstream_logger
+
 logger = logging.getLogger("scMPRAforge")
 
 def dump_df_debug(df, prefix="debug_df", outdir="."):
@@ -900,7 +901,7 @@ class Bounds:
             if var=="by_cell_type_parameters":
                 reference_mus=[]
                 for key in getattr(inp,var).nb:
-                    df=getattr(inp,var).nb["Mesoderm"].result()
+                    df=getattr(inp,var).nb[key].result()
                     assert len(df.loc["reference"])==1; "Multi reference"
                     reference_mus.append(df.loc["reference"]["mu"])
                 ret.by_cell_type_reference_activity=np.mean(reference_mus)
@@ -948,7 +949,7 @@ class Bounds:
         #save the preferred model direction
         ret.preferred=preferred
         
-        #chose representative parameters based on preferred model direction
+        #choose representative parameters based on preferred model direction
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
@@ -980,6 +981,7 @@ from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
 SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
+COHEN_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_bounds.tgz")
 
 class scMPRA_data:
     """
@@ -1568,7 +1570,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     
     return result
 
-def standard_fit(client,data,split):
+def standard_fit(client,data,split,disable_mom=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -1577,16 +1579,23 @@ def standard_fit(client,data,split):
     data=data.data
     levels=data[split].unique()
 
+    mat_resource={}
+    if split=="cell_type":
+        mat_resource={"CELL_DESIGN":1}
+    else:
+        mat_resource={"CRE_DESIGN":1}
+    
     mats_futures = {
         t: client.submit(
             _smart_matrix,
             data=data[data[split]==t],
-            split=split
+            split=split,
+            resources=mat_resource
         )
         for t in levels
     }
 
-    if split=="cell_type":
+    if split=="cell_type" and not disable_mom:
         init_method="pass"
         init_vals={
             t:client.submit(_mom_from_training_data, 
@@ -1607,7 +1616,8 @@ def standard_fit(client,data,split):
                 mats_futures[t],
                 t,
                 init_method=init_method,
-                init_vals=init_vals[t]
+                init_vals=init_vals[t]#,
+                #resources={'FIT': 1}
             )
         for t in levels
     }
@@ -1734,10 +1744,9 @@ class ortho:
         #There are much nicer ways to structure this, but that level of effort
         #should be saved for non-pickle save/load
         full_path=Path(path)/name
-        full_path.mkdir(parents=True)
+        full_path.mkdir(parents=True,exist_ok=True)
 
         ## Function
-        
         def simple_write(obj,filename):
             with open(full_path/filename,"wb") as f:
                 pickle.dump(obj,f)
@@ -1843,34 +1852,39 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
-                                                     split="cre_id")
+                                                     split="cre_id",
+                                                     disable_mom=disable_mom)
         self.by_cre.label_regressors(client,self.by_cre_design)
         
 
         
-    def fit_by_cell_type_models(self,client,dat=None):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
-                                                        split="cell_type")
+                                                        split="cell_type",
+                                                        disable_mom=disable_mom)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
         
     
-    def criss_cross(self,client,dat):
+    def criss_cross(self,client,dat,disable_mom=False):
         """
         Makes by_cre and by_cell_type models.
         """
-        self.fit_by_cre_models(client=client,dat=dat)
-        self.fit_by_cell_type_models(client=client,dat=dat)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom)
+        self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom)
         
         
     
     def extract_params(self,client):
-        """Extracts parameters for all models in the object"""
+        """
+        Extracts parameters for all models in the object
+        Silently passes either / both directions if not computed previous
+        """
 
         if not self.by_cre is None:
             self.by_cre_parameters=extract_parameters(
@@ -5517,7 +5531,7 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self, direction="both", serial_orthos: bool = False):
+    def fit_orthos(self, direction="both", disable_mom=False, serial_orthos: bool = False):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
@@ -5560,11 +5574,11 @@ class de_novo_simulation:
             primordial = ortho()
 
             if direction == "both":
-                primordial.criss_cross(client=client, dat=data)
+                primordial.criss_cross(client=client, dat=data, disable_mom=disable_mom)
             elif direction == "by_cre":
-                primordial.fit_by_cre_models(client=client, dat=data)
+                primordial.fit_by_cre_models(client=client, dat=data, disable_mom=disable_mom)
             elif direction == "by_cell_type":
-                primordial.fit_by_cell_type_models(client=client, dat=data)
+                primordial.fit_by_cell_type_models(client=client, dat=data, disable_mom=disable_mom)
 
             primordial.extract_params(client)
 
