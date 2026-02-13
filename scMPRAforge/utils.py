@@ -142,8 +142,11 @@ def undo_one_hot_encoding(df, reference_label="reference"):
         cols, levels = zip(*cols_levels)
         subdf = df[list(cols)]
 
-        # Sparse-friendly row sum
-        row_sums = subdf.sum(axis=1)
+        #Force to sparse if it isnt already
+        subdf = subdf.astype(pd.SparseDtype("int", fill_value=0))
+        
+        # efficient row sum
+        row_sums = subdf.sparse.to_coo().sum(axis=1)
 
         # Check for multi-hot rows - convert to dense only for validation
         row_sums_check = row_sums.values if hasattr(row_sums, 'sparse') else row_sums

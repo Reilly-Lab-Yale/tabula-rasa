@@ -24,6 +24,7 @@ import itertools
 
 import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
+import scipy.sparse as sp
 
 import statsmodels.api as sm
 import statsmodels.discrete.discrete_model as smd
@@ -2155,8 +2156,14 @@ def extract_parameters(client,model,design,split):
         model_type=design_matrix["model_type"]
         reference=design_matrix["reference"]
 
-        #multiply design matrix by weights
-        linear_mu= X @ model["weights"]["x_mu"]
+        #multiply design matrix by weights: we convert to
+        #scipy sparse for performance reasons...
+        
+        w = np.asarray(model["weights"]["x_mu"], dtype=np.float32)
+        Xs = X.sparse.to_coo()
+        Xs = Xs.tocsr()#better for subsequent multiplication
+        linear_mu = Xs @ w
+        linear_mu = np.asarray(linear_mu).ravel().astype(np.float32, copy=False)
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
 
