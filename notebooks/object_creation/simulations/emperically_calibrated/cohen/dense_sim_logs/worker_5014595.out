@@ -1,0 +1,61 @@
+2026-02-18 20:19:16,871 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.86:33169'
+2026-02-18 20:19:17,875 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.86:39347
+2026-02-18 20:19:17,875 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.86:39347
+2026-02-18 20:19:17,875 - distributed.worker - INFO -           Worker name:            SLURMCluster-19
+2026-02-18 20:19:17,875 - distributed.worker - INFO -          dashboard at:          10.18.22.86:39811
+2026-02-18 20:19:17,875 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:17,875 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,875 - distributed.worker - INFO -               Threads:                          3
+2026-02-18 20:19:17,875 - distributed.worker - INFO -                Memory:                  29.80 GiB
+2026-02-18 20:19:17,875 - distributed.worker - INFO -       Local Directory: /tmp/tmp.U3O2JoqqDy/dask-scratch-space/worker-rlowkvqc
+2026-02-18 20:19:17,875 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,886 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-02-18 20:19:17,886 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:17,886 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,886 - distributed.core - INFO - Starting established connection to tcp://10.18.22.87:44865
+scMPRAforge: WARNING: 18111/34704 cells (52.187%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17588/34785 cells (50.562%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17955/34750 cells (51.669%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17818/34726 cells (51.310%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17828/34666 cells (51.428%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18351/34685 cells (52.908%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17943/34778 cells (51.593%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18091/34820 cells (51.956%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17922/34771 cells (51.543%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18206/34637 cells (52.562%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18177/34790 cells (52.248%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18054/34739 cells (51.970%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18021/34754 cells (51.853%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17848/34683 cells (51.460%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18020/34747 cells (51.861%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+2026-02-18 20:59:18,687 - distributed.core - INFO - Event loop was unresponsive in Worker for 10.34s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:33,889 - distributed.core - INFO - Event loop was unresponsive in Worker for 4.70s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:40,628 - distributed.core - INFO - Event loop was unresponsive in Worker for 6.74s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:01,078 - distributed.core - INFO - Event loop was unresponsive in Worker for 5.00s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:19,847 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.85s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:24,493 - distributed.core - INFO - Event loop was unresponsive in Worker for 4.65s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:38,066 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.68s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:45,377 - distributed.core - INFO - Event loop was unresponsive in Worker for 5.04s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:27:23,304 - distributed.core - INFO - Connection to tcp://10.18.22.87:44865 has been closed.
+2026-02-18 21:27:23,342 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.86:39347. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,343 - distributed.nanny - INFO - Closing Nanny gracefully at 'tcp://10.18.22.86:33169'. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,343 - distributed.worker - INFO - Removing Worker plugin shuffle
+2026-02-18 21:27:23,345 - distributed.nanny - INFO - Worker closed
+2026-02-18 21:27:26,149 - distributed.nanny - INFO - Closing Nanny at 'tcp://10.18.22.86:33169'. Reason: nanny-close-gracefully
+2026-02-18 21:27:26,149 - distributed.nanny - INFO - Nanny at 'tcp://10.18.22.86:33169' closed.
+2026-02-18 21:27:26,149 - distributed.dask_worker - INFO - End worker

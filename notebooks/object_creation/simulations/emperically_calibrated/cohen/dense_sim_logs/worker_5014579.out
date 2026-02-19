@@ -1,0 +1,94 @@
+2026-02-18 20:19:16,537 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.77:33649'
+2026-02-18 20:19:17,232 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.77:36701
+2026-02-18 20:19:17,232 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.77:36701
+2026-02-18 20:19:17,232 - distributed.worker - INFO -           Worker name:            SLURMCluster-23
+2026-02-18 20:19:17,233 - distributed.worker - INFO -          dashboard at:          10.18.22.77:37223
+2026-02-18 20:19:17,233 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:17,233 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,233 - distributed.worker - INFO -               Threads:                          3
+2026-02-18 20:19:17,233 - distributed.worker - INFO -                Memory:                  29.80 GiB
+2026-02-18 20:19:17,233 - distributed.worker - INFO -       Local Directory: /tmp/tmp.U3O2JoqqDy/dask-scratch-space/worker-8jliiysf
+2026-02-18 20:19:17,233 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,240 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-02-18 20:19:17,241 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:17,241 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:17,241 - distributed.core - INFO - Starting established connection to tcp://10.18.22.87:44865
+2026-02-18 20:19:51,555 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.39s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+scMPRAforge: WARNING: 17803/34637 cells (51.399%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18119/34587 cells (52.387%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18038/34868 cells (51.732%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18225/34789 cells (52.387%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17844/34727 cells (51.384%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17755/34738 cells (51.111%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17751/34808 cells (50.997%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18016/34768 cells (51.818%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17840/34714 cells (51.391%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18077/34695 cells (52.103%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17740/34643 cells (51.208%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17919/34694 cells (51.649%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18059/34667 cells (52.093%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17897/34747 cells (51.507%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18040/34788 cells (51.857%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18322/34818 cells (52.622%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17905/34793 cells (51.462%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+2026-02-18 20:59:16,448 - distributed.core - INFO - Event loop was unresponsive in Worker for 8.44s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:35,800 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.06s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:40,689 - distributed.core - INFO - Event loop was unresponsive in Worker for 4.89s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:58,739 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.24s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:02,681 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.94s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:22,135 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.52s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:26,018 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.88s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:44,204 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.95s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:57,788 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.25s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:27:23,303 - distributed.worker - ERROR - Failed to communicate with scheduler during heartbeat.
+Traceback (most recent call last):
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/tornado/iostream.py", line 861, in _read_to_buffer
+    bytes_read = self.read_from_fd(buf)
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/tornado/iostream.py", line 1113, in read_from_fd
+    return self.socket.recv_into(buf, len(buf))
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/worker.py", line 1273, in heartbeat
+    response = await retry_operation(
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/utils_comm.py", line 416, in retry_operation
+    return await retry(
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/utils_comm.py", line 395, in retry
+    return await coro()
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/core.py", line 1259, in send_recv_from_rpc
+    return await send_recv(comm=comm, op=key, **kwargs)
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/core.py", line 1018, in send_recv
+    response = await comm.read(deserializers=deserializers)
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/comm/tcp.py", line 237, in read
+    convert_stream_closed_error(self, e)
+  File "/home/mcn26/.conda/envs/env_tzinb/lib/python3.10/site-packages/distributed/comm/tcp.py", line 143, in convert_stream_closed_error
+    raise CommClosedError(f"in {obj}: {exc.__class__.__name__}: {exc}") from exc
+distributed.comm.core.CommClosedError: in <TCP (closed) ConnectionPool.heartbeat_worker local=tcp://10.18.22.77:38912 remote=tcp://10.18.22.87:44865>: ConnectionResetError: [Errno 104] Connection reset by peer
+2026-02-18 21:27:23,307 - distributed.core - INFO - Connection to tcp://10.18.22.87:44865 has been closed.
+2026-02-18 21:27:23,307 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.77:36701. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,308 - distributed.nanny - INFO - Closing Nanny gracefully at 'tcp://10.18.22.77:33649'. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,308 - distributed.worker - INFO - Removing Worker plugin shuffle
+2026-02-18 21:27:23,310 - distributed.nanny - INFO - Worker closed
+2026-02-18 21:27:25,311 - distributed.nanny - ERROR - Worker process died unexpectedly
+2026-02-18 21:27:25,980 - distributed.nanny - INFO - Closing Nanny at 'tcp://10.18.22.77:33649'. Reason: nanny-close-gracefully
+2026-02-18 21:27:25,980 - distributed.nanny - INFO - Nanny at 'tcp://10.18.22.77:33649' closed.
+2026-02-18 21:27:25,980 - distributed.dask_worker - INFO - End worker

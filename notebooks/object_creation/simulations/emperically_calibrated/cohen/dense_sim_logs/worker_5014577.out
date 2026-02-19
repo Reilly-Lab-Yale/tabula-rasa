@@ -1,0 +1,67 @@
+2026-02-18 20:19:17,583 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.41:42255'
+2026-02-18 20:19:18,679 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.41:36387
+2026-02-18 20:19:18,679 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.41:36387
+2026-02-18 20:19:18,679 - distributed.worker - INFO -           Worker name:             SLURMCluster-6
+2026-02-18 20:19:18,679 - distributed.worker - INFO -          dashboard at:          10.18.22.41:36887
+2026-02-18 20:19:18,679 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:18,679 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:18,679 - distributed.worker - INFO -               Threads:                          3
+2026-02-18 20:19:18,679 - distributed.worker - INFO -                Memory:                  29.80 GiB
+2026-02-18 20:19:18,679 - distributed.worker - INFO -       Local Directory: /tmp/tmp.U3O2JoqqDy/dask-scratch-space/worker-ciznd8gh
+2026-02-18 20:19:18,679 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:18,697 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-02-18 20:19:18,697 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.87:44865
+2026-02-18 20:19:18,697 - distributed.worker - INFO - -------------------------------------------------
+2026-02-18 20:19:18,697 - distributed.core - INFO - Starting established connection to tcp://10.18.22.87:44865
+2026-02-18 20:19:55,670 - distributed.core - INFO - Event loop was unresponsive in Worker for 8.39s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+scMPRAforge: WARNING: 17948/34650 cells (51.798%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17940/34803 cells (51.547%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18304/34852 cells (52.519%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18150/34787 cells (52.175%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17937/34740 cells (51.632%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18081/34768 cells (52.005%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17905/34715 cells (51.577%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18149/34720 cells (52.272%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17690/34740 cells (50.921%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17838/34699 cells (51.408%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18122/34822 cells (52.042%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18242/34627 cells (52.681%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18166/34704 cells (52.346%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17997/34746 cells (51.796%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 17690/34734 cells (50.930%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18008/34622 cells (52.013%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 18106/34743 cells (52.114%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+2026-02-18 20:59:12,505 - distributed.core - INFO - Event loop was unresponsive in Worker for 6.11s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:16,504 - distributed.core - INFO - Event loop was unresponsive in Worker for 4.00s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:30,735 - distributed.core - INFO - Event loop was unresponsive in Worker for 3.78s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:37,497 - distributed.core - INFO - Event loop was unresponsive in Worker for 5.34s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 20:59:58,689 - distributed.core - INFO - Event loop was unresponsive in Worker for 5.49s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:23,073 - distributed.core - INFO - Event loop was unresponsive in Worker for 8.31s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:43,301 - distributed.core - INFO - Event loop was unresponsive in Worker for 10.04s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:00:58,020 - distributed.core - INFO - Event loop was unresponsive in Worker for 5.16s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+2026-02-18 21:27:23,303 - distributed.core - INFO - Connection to tcp://10.18.22.87:44865 has been closed.
+2026-02-18 21:27:23,304 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.41:36387. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,305 - distributed.nanny - INFO - Closing Nanny gracefully at 'tcp://10.18.22.41:42255'. Reason: worker-handle-scheduler-connection-broken
+2026-02-18 21:27:23,305 - distributed.worker - INFO - Removing Worker plugin shuffle
+2026-02-18 21:27:23,306 - distributed.nanny - INFO - Worker closed
+2026-02-18 21:27:25,307 - distributed.nanny - ERROR - Worker process died unexpectedly
+2026-02-18 21:27:26,097 - distributed.nanny - INFO - Closing Nanny at 'tcp://10.18.22.41:42255'. Reason: nanny-close-gracefully
+2026-02-18 21:27:26,097 - distributed.nanny - INFO - Nanny at 'tcp://10.18.22.41:42255' closed.
+2026-02-18 21:27:26,097 - distributed.dask_worker - INFO - End worker
