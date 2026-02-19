@@ -66,14 +66,14 @@ from numpy.linalg import LinAlgError
 import uuid
 
 #internal imports
-from .utils import unimplemented
+from .utils import unimplemented, simulate_library
 from .utils import bcs_to_lut
 from .utils import undo_one_hot_encoding
 from .utils import dict_wrap, dict_unwrap
 from .utils import one_versus_all, find_treatment_column
 from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
-from .utils import one_library_replicate, pow_curve
+from .utils import pow_curve
 
 from .performance_logging import start_taskstream_logger
 
@@ -6057,3 +6057,60 @@ def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
     plt.title(title)
     plt.tight_layout()
     plt.show()
+
+def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_cres,minP,n_sims):
+    """
+    Notebook helper function.
+    Creates a de_novo_simulation in root, with a random name.
+    Assumes corresponding libraries. 
+    """
+    #create ground truth dataframe
+    rng = np.random.default_rng()
+    cre_gt=rng.uniform(min,max,size=n_cres-1)
+    cre_gt=np.append(cre_gt,minP)
+    names=[f"synthcre_{i}" for i in range(0,n_cres-1)]+["reference"]
+
+    gt_df=pd.DataFrame({"cre_id":names,"mu":cre_gt})
+    gt_df["cell_type"]="reference"
+
+    # simulate libraries
+    libraries=[simulate_library(CREs=gt_df["cre_id"],
+                 library_model=SHENDURE_BOUNDS.library_model)
+                 for i in range(n_sims)]
+    
+    #initalize the simulated replicate
+    name=uuid.uuid4().hex[:8]
+    
+    sim=de_novo_simulation(location=root,
+                            name=f"sim_{name}",
+                            client=client,
+                            libraries=libraries,
+                            library_mapping="corresponding",
+                            flatten_overtransfection=False,
+                            n_sims=n_sims,
+                            experiment_bounds=bound,
+                            ground_truth=gt_df)
+    sim.gamut()
+    
+    return name, sim
+
+def sum_pow(sims,hypothesis_set_name,test_type):
+    """
+    Notebook helper function.
+    Takes a list of sims and returns a minimal
+    df of fold change and hypothesis reject/not reject
+    to plot power curves.
+    """
+    results=[]
+
+    for sim in sims:
+        reps=sim.get_state_field("n_sims")
+        for i in range(reps):
+            mergy=sim._merge_in_ground_truth(hypothesis_set_name=hypothesis_set_name,test_type=test_type,index=i)
+            mergy["comparison_truth"]=mergy["comparison_truth"].astype(float)
+            mergy["reference_truth"]=mergy["reference_truth"].astype(float)
+            mergy["fc"]=mergy["comparison_truth"]/mergy["reference_truth"]
+            mergy=mergy[["reject_null","fc"]]
+            results.append(mergy)
+    mergy=pd.concat(results)
+    return mergy
