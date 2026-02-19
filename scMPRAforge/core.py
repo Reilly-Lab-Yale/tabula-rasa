@@ -5277,7 +5277,7 @@ class de_novo_simulation:
                     test_type,
                     index=idx)
 
-            df["meta"] = df["meta"].fillna(0)
+            df["meta"] = df["meta"].astype("string").fillna("0")
             
             #df drop nans
             nona=df.copy()
@@ -5457,7 +5457,7 @@ class de_novo_simulation:
             eval_df=self._merge_in_ground_truth(hypothesis_set_name=hypothesis_set_name,
                                     test_type=test,
                                     index=median_reps[test])
-            eval_df["meta"] = eval_df["meta"].fillna(0)
+            eval_df["meta"] = eval_df["meta"].astype("string").fillna("0")
             eval_df=eval_df.dropna()
 
             y_true = np.asarray((~eval_df["gt_null"]).astype(int))
