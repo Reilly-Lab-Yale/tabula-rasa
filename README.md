@@ -43,9 +43,9 @@ This repository is organzied as follows:
 conda create -n env_tensorzinb python=3.10
 conda activate env_tensorzinb
 echo "numpy <2" >> $CONDA_PREFIX/conda-meta/pinned
-#navigate to tensor zinb
+git clone https://github.com/wanglab-georgetown/tensorzinb.git
+cd tensorzinb; python setup.py install; cd ..
 #install apple silicon deps as below if necessary
-python setup.py install
 ```
 
 For apple silicon, may need
@@ -55,13 +55,11 @@ python -m pip install tensorflow-macos==2.9.2
 python -m pip install tensorflow-metal==0.5.1
 ```
 
-```
-conda install statsmodels 
-```
-
 Additional required packages
 ```
+conda install statsmodels 
 conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueue
+conda install scikit-learn
 ```
 
 may need to install `tensorflow keras` if you didn't above
