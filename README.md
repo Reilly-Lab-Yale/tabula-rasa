@@ -102,6 +102,15 @@ Fill in
 
 This section describes the various standard tabular formats used internally.
 
+## `.scmpra` file format
+
+`.scmpra` files are parquet files (gzip-compressed) written by `scMPRA_data.to_parquet(...)`.
+They contain:
+- the main table data (`scMPRA_data.data`)
+- serialized object members in parquet schema metadata under key `scMPRA_data.members`
+
+In practice, `.scmpra` is a filename convention over parquet, not a distinct binary container.
+
 ## MPRA data formatting
 
 Note that most of our code does not *require* that any of the barcode sequences should be actual nucleotide sequences. So you can replace them with, for example, numerical combinatorial barcoding sub-barcode ID strings with no consequence. The exception is barcode-deduplication. 
@@ -124,8 +133,8 @@ UMI = unique molecular identifier
 | cre_id                | str              | CRE id or name                       | T          |
 | cell_type             | str              | cell-type                            | T          |
 | mpra_bc               | str (nucleotide) | MPRA reporter barcode                | T          |
-| mpra_umi              | str (nucleotide) | MPRA umi                             | T          |
-| reads_mpra            | int              | number mpra reads                    | T          |
+| umi                   | str (nucleotide) | MPRA umi                             | T          |
+| reads                 | int              | number mpra reads                    | T          |
 | transfection_bc       | str (nucleotide) | transfection barcode                 | F          |
 | transfection_umi      | str (nucleotide) | transfection reporter umi            | F          |
 | reads_transfection_bc | int              | number transfection reporter reads   | F          |
@@ -134,11 +143,11 @@ UMI = unique molecular identifier
 **Umi-wise**
 | Column name           | Type             | Description                                                      | Mandatory? |
 | --------------------- | ---------------- | ---------------------------------------------------------------- | ---------- |
-| cell_bc               | str (nucleotide) | cell barcode                                                     | ~T          |
+| cell_bc               | str (nucleotide) | cell barcode                                                     | F (~T for empirical data) |
 | rep_id                | str              | replicate id                                                     | T          |
 | cre_id                | str              | CRE id or name                                                   | T          |
 | cell_type             | str              | cell-type                                                        | T          |
-| mpra_bc               | str (nucleotide) | MPRA reporter barcode                                            | T          |
+| mpra_bc               | str (nucleotide) | MPRA reporter barcode                                            | F (recommended) |
 | umis_mpra_bc          | int              | number of MPRA UMIs                                              | T          |
 | reads_mpra_bc         | int              | number of MPRA reads, summed across all UMIs                     | F          |
 | transfection_bc       | str (nucleotide) | transfection barcode                                             | F          |
@@ -149,6 +158,8 @@ UMI = unique molecular identifier
 (Though MPRA barcodes cannot be modeled individually, its undersierable to sum across to remove them : since this would inflate strength estimates of CREs with more MPRA barcodes)
 
 Simulated UMI-wise data doesn't currently require cell barcode. 
+
+`scMPRA_data.from_tsv(...)` uses subset matching, so extra columns are allowed as long as required columns are present.
 
 Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
 This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
@@ -205,7 +216,6 @@ These tables store made-up ground truth, for the purposes of simulation.
 | abundance   | float               | Relative abundance in DNA library | T          |
 
 Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
-
 
 
 
