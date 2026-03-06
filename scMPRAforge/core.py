@@ -287,15 +287,15 @@ def _to_pandas_df(df, columns=None):
 
 def _series_unique_str(series):
     if isinstance(series, dd.Series):
-        vals = series.dropna().astype(str).unique().compute().tolist()
+        vals = series.compute().dropna().astype(str).unique().tolist()
     else:
         vals = series.dropna().astype(str).unique().tolist()
     return [str(v) for v in vals]
 
 def _optimize_mpra_ddf(ddf: dd.DataFrame) -> dd.DataFrame:
     factor_cols = [c for c in MPRA_FACTOR_COLUMNS if c in ddf.columns]
-    if factor_cols:
-        ddf = ddf.categorize(columns=factor_cols)
+    for col in factor_cols:
+        ddf[col] = ddf[col].astype("string[pyarrow]")
 
     for col in sorted(MPRA_SPARSE_COUNT_COLUMNS.intersection(ddf.columns)):
         ddf[col] = ddf[col].fillna(0).astype("int64").astype(pd.SparseDtype("int64", fill_value=0))
@@ -1220,8 +1220,7 @@ class scMPRA_data:
         self.data = self.data.assign(cre_id=self.data["cre_id"].astype(str))
         mask = self.data["cre_id"].isin(list(map(str, negative_controls)))
         self.data = self.data.assign(cre_id=self.data["cre_id"].where(~mask, "reference"))
-        if _is_ddf(self.data):
-            self.data = self.data.categorize(columns=["cre_id"])
+        self.data = self.data.assign(cre_id=self.data["cre_id"].astype("string[pyarrow]"))
 
         #record which names we have flattened.
         #(Can be deduced from difference between cre_id and 
@@ -1237,8 +1236,7 @@ class scMPRA_data:
         self.data = self.data.assign(
             cell_type=self.data["cell_type"].where(self.data["cell_type"] != reference_cell_type, "reference")
         )
-        if _is_ddf(self.data):
-            self.data = self.data.categorize(columns=["cell_type"])
+        self.data = self.data.assign(cell_type=self.data["cell_type"].astype("string[pyarrow]"))
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
@@ -1716,18 +1714,24 @@ def standard_fit(client,data,split,disable_mom=False):
         mat_resource={"CELL_DESIGN":1}
     else:
         mat_resource={"CRE_DESIGN":1}
-    
-    subsets = {}
-    for t in levels:
-        subset = data[data[split] == t]
-        subset = _to_pandas_df(subset)
+
+    def _subset_to_pandas(dat, split_col, level):
+        subset = dat[dat[split_col] == level]
+        if isinstance(subset, dd.DataFrame):
+            subset = subset.compute()
+        subset = subset.copy()
         subset["umis_mpra_bc"] = pd.to_numeric(subset["umis_mpra_bc"], errors="coerce").fillna(0).astype("int64")
-        subsets[t] = subset
+        return subset
+
+    subset_futures = {
+        t: client.submit(_subset_to_pandas, data, split, t)
+        for t in levels
+    }
 
     mats_futures = {
         t: client.submit(
             _smart_matrix,
-            data=subsets[t],
+            data=subset_futures[t],
             split=split,
             resources=mat_resource
         )
@@ -1738,7 +1742,7 @@ def standard_fit(client,data,split,disable_mom=False):
         init_method="pass"
         init_vals={
             t:client.submit(_mom_from_training_data, 
-                data=subsets[t],
+                data=subset_futures[t],
                 split="cell_type",
                 subset=t,
                 indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
@@ -1748,6 +1752,8 @@ def standard_fit(client,data,split,disable_mom=False):
     else:
         init_method="nb"
         init_vals={t:None for t in levels}
+
+    del subset_futures
 
     tzinb_futures = {
         t: client.submit(
