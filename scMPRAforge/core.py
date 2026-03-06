@@ -1427,7 +1427,8 @@ class scMPRA_data:
             self.data[self.data['umis_mpra_bc'] > 0]
             .groupby(['cell_type', 'cre_id'])
             .size()
-            .reset_index(name='nonzero_count')
+            .reset_index()
+            .rename(columns={0: "nonzero_count"})
         )
 
         valid_combos = nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS][['cell_type', 'cre_id']]
