@@ -1247,6 +1247,10 @@ class scMPRA_data:
         for k, v in self.__dict__.items():
             if k in exclude:
                 setattr(result, k, None)  # or preserve original: self.__dict__[k]
+            elif k == "data" and dask.is_dask_collection(v):
+                # Dask expression objects are immutable and not reliably deepcopy-able.
+                # Keep a graph reference; deep-copy the rest of object state.
+                setattr(result, k, v)
             else:
                 setattr(result, k, copy.deepcopy(v, memo))
 
