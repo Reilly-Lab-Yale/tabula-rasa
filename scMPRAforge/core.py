@@ -120,6 +120,66 @@ HYPOTHESIS_REQUIRED = {"comparison_CRE", "comparison_cell_type"}
 HYPOTHESIS_OPTIONAL = {"reference_CRE", "reference_cell_type", "meta"}
 HYPOTHESIS_ALL = HYPOTHESIS_REQUIRED | HYPOTHESIS_OPTIONAL
 
+MPRA_READWISE_REQUIRED = {
+    "cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umi", "reads"
+}
+MPRA_READWISE_OPTIONAL = {
+    "transfection_bc", "transfection_umi", "reads_transfection_bc", "reads_DNA"
+}
+MPRA_READWISE_ALLOWED = MPRA_READWISE_REQUIRED | MPRA_READWISE_OPTIONAL
+MPRA_READWISE_COLUMN_ORDER = [
+    "cell_bc",
+    "rep_id",
+    "cre_id",
+    "cell_type",
+    "mpra_bc",
+    "umi",
+    "reads",
+    "transfection_bc",
+    "transfection_umi",
+    "reads_transfection_bc",
+    "reads_DNA",
+]
+
+MPRA_UMIWISE_REQUIRED = {"rep_id", "cre_id", "cell_type", "umis_mpra_bc"}
+MPRA_UMIWISE_OPTIONAL = {
+    "cell_bc",
+    "mpra_bc",
+    "reads_mpra_bc",
+    "transfection_bc",
+    "umis_transfection_bc",
+    "reads_transfection_bc",
+    "reads_DNA",
+}
+MPRA_UMIWISE_ALLOWED = MPRA_UMIWISE_REQUIRED | MPRA_UMIWISE_OPTIONAL
+MPRA_UMIWISE_COLUMN_ORDER = [
+    "cell_bc",
+    "rep_id",
+    "cre_id",
+    "cell_type",
+    "mpra_bc",
+    "umis_mpra_bc",
+    "reads_mpra_bc",
+    "transfection_bc",
+    "umis_transfection_bc",
+    "reads_transfection_bc",
+    "reads_DNA",
+]
+
+MPRA_FACTOR_COLUMNS = {
+    "cell_bc",
+    "rep_id",
+    "cre_id",
+    "cell_type",
+    "mpra_bc",
+    "umi",
+    "transfection_bc",
+    "transfection_umi",
+    "biol_rep",
+}
+MPRA_SPARSE_COUNT_COLUMNS = {"reads", "reads_mpra_bc", "reads_transfection_bc", "reads_DNA"}
+MPRA_DENSE_COUNT_COLUMNS = {"umis_mpra_bc", "umis_transfection_bc"}
+
 WARN_MULTI_TRANSFECTION_PERCENT=2.0
 
 ERROR_TEST_NAN_PERCENT=5
@@ -198,6 +258,59 @@ def table_type(column_names):
         matches += 1
 
     return ret if matches == 1 else 'malformed'
+
+def _strict_mpra_table_type(column_names):
+    cols = set(map(str, column_names))
+    ret = "malformed"
+    matches = 0
+
+    if MPRA_READWISE_REQUIRED <= cols and cols <= MPRA_READWISE_ALLOWED:
+        ret = "mpra_readwise"
+        matches += 1
+
+    if MPRA_UMIWISE_REQUIRED <= cols and cols <= MPRA_UMIWISE_ALLOWED:
+        ret = "mpra_umiwise"
+        matches += 1
+
+    return ret if matches == 1 else "malformed"
+
+def _is_ddf(x):
+    return isinstance(x, dd.DataFrame)
+
+def _to_pandas(obj):
+    return obj.compute() if dask.is_dask_collection(obj) else obj
+
+def _to_pandas_df(df, columns=None):
+    if columns is not None:
+        df = df[columns]
+    return df.compute() if _is_ddf(df) else df
+
+def _series_unique_str(series):
+    if isinstance(series, dd.Series):
+        vals = series.dropna().astype(str).unique().compute().tolist()
+    else:
+        vals = series.dropna().astype(str).unique().tolist()
+    return [str(v) for v in vals]
+
+def _optimize_mpra_ddf(ddf: dd.DataFrame) -> dd.DataFrame:
+    factor_cols = [c for c in MPRA_FACTOR_COLUMNS if c in ddf.columns]
+    if factor_cols:
+        ddf = ddf.categorize(columns=factor_cols)
+
+    for col in sorted(MPRA_SPARSE_COUNT_COLUMNS.intersection(ddf.columns)):
+        ddf[col] = ddf[col].fillna(0).astype("int64").astype(pd.SparseDtype("int64", fill_value=0))
+
+    for col in sorted(MPRA_DENSE_COUNT_COLUMNS.intersection(ddf.columns)):
+        ddf[col] = ddf[col].fillna(0).astype("int64")
+
+    return ddf
+
+def _densify_sparse_partition(pdf: pd.DataFrame) -> pd.DataFrame:
+    pdf = pdf.copy()
+    for col in pdf.columns:
+        if pd.api.types.is_sparse(pdf[col].dtype):
+            pdf[col] = pdf[col].sparse.to_dense().astype("int64")
+    return pdf
 
 import re
 
@@ -944,7 +1057,9 @@ class Bounds:
         ret.library_model=inp.training_data.describe_library()
 
         #cells per cell type
-        ret.cells_per_cell_type=inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
+        ret.cells_per_cell_type = _to_pandas(
+            inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
+        )
 
         
         #save the preferred model direction
@@ -963,15 +1078,15 @@ class Bounds:
             assert False, "Unrecognized direction."
 
         #total number of MPRA barcodes
-        ret.total_uniq_mpra_bc=len(inp.training_data.data["mpra_bc"].unique())
+        ret.total_uniq_mpra_bc = int(_to_pandas(inp.training_data.data["mpra_bc"].nunique()))
         
         #calculate post-hoc overtransfection. 
-        tfection=inp.training_data.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique().reset_index()
-        tfection=tfection.rename({"mpra_bc":"unique_mpra_bc"},axis=1)
-        observed=tfection["unique_mpra_bc"]
-        tfection["tot_plasmid"]=np.log(1-observed/ret.total_uniq_mpra_bc)/np.log((ret.total_uniq_mpra_bc-1)/ret.total_uniq_mpra_bc)
-        total_tfection=tfection['tot_plasmid'].sum()
-        excess=total_tfection-tfection["unique_mpra_bc"].sum()
+        tfection = inp.training_data.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique().reset_index()
+        tfection = _to_pandas_df(tfection).rename({"mpra_bc":"unique_mpra_bc"}, axis=1)
+        observed = tfection["unique_mpra_bc"]
+        tfection["tot_plasmid"] = np.log(1-observed/ret.total_uniq_mpra_bc)/np.log((ret.total_uniq_mpra_bc-1)/ret.total_uniq_mpra_bc)
+        total_tfection = tfection['tot_plasmid'].sum()
+        excess = total_tfection - tfection["unique_mpra_bc"].sum()
         logger.info(f"Computed a total of {excess} estimated collision events, out of a total of {total_tfection}, or {excess/total_tfection*100}%")
         ret.excess_tfection=excess
         ret.total_tfection=total_tfection
@@ -986,13 +1101,9 @@ COHEN_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_bounds.tgz")
 
 class scMPRA_data:
     """
-    Wrapper around a pandas dataframe of MPRA data. 
+    Wrapper around a Dask dataframe of MPRA data.
     The primary purpose of the object is to record what operations have been performed on the data
-    (Pandas does not support metadata)
-
-    Could possibly replace with an anndata object.
-    Alternatively. also allow pass-through of pandas operations & record them... 
-    Alternatively, just implement a couple common operations (subsetting & friends) manually
+    (DataFrames do not support object-level metadata cleanly).
     """
     def __init__(self):
         self.data=None
@@ -1045,10 +1156,8 @@ class scMPRA_data:
 
         df = self.data
         # Count per (rep, cell, mpra_bc)
-        triplet_counts = (
-            df.groupby(["rep_id", "cell_bc", "mpra_bc"])
-            .size()
-        )
+        triplet_counts = df.groupby(["rep_id", "cell_bc", "mpra_bc"]).size()
+        triplet_counts = _to_pandas(triplet_counts)
 
         # For each cell, did ANY barcode appear more than once?
         cell_has_dup = (
@@ -1086,7 +1195,8 @@ class scMPRA_data:
         """
         assert self.table_type=="mpra_umiwise"
 
-        unique_mpra_barcodes_per_cell=self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        unique_mpra_barcodes_per_cell = self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        unique_mpra_barcodes_per_cell = _to_pandas(unique_mpra_barcodes_per_cell)
         return simple_count(data=unique_mpra_barcodes_per_cell)
         
     def describe_library(self):
@@ -1094,7 +1204,8 @@ class scMPRA_data:
         Returns a simple_count object describing the number of unique MPRA
         barcodes for each cre_id
         """
-        y=self.data.groupby("cre_id")["mpra_bc"].nunique()
+        y = self.data.groupby("cre_id")["mpra_bc"].nunique()
+        y = _to_pandas(y)
         return simple_count(data=y)
 
     def set_negative_controls(self,negative_controls:list[str]):
@@ -1104,11 +1215,13 @@ class scMPRA_data:
 
         if self.negative_controls==[]:
             #User has set no negative controls before now. Back up cre_id information before we mutate it.
-            self.data["cre_id_original"]=self.data["cre_id"]
-        
-        #flatten all labels of negative controls
-        for control in negative_controls:
-            self.data["cre_id"]=self.data["cre_id"].replace(control, "reference")
+            self.data = self.data.assign(cre_id_original=self.data["cre_id"])
+
+        self.data = self.data.assign(cre_id=self.data["cre_id"].astype(str))
+        mask = self.data["cre_id"].isin(list(map(str, negative_controls)))
+        self.data = self.data.assign(cre_id=self.data["cre_id"].where(~mask, "reference"))
+        if _is_ddf(self.data):
+            self.data = self.data.categorize(columns=["cre_id"])
 
         #record which names we have flattened.
         #(Can be deduced from difference between cre_id and 
@@ -1120,7 +1233,12 @@ class scMPRA_data:
         
         self.reference_cell_type=reference_cell_type
 
-        self.data["cell_type"]=self.data["cell_type"].replace(reference_cell_type, "reference")
+        self.data = self.data.assign(cell_type=self.data["cell_type"].astype(str))
+        self.data = self.data.assign(
+            cell_type=self.data["cell_type"].where(self.data["cell_type"] != reference_cell_type, "reference")
+        )
+        if _is_ddf(self.data):
+            self.data = self.data.categorize(columns=["cell_type"])
     
     def copy(self, exclude=()):
         """Return a deepcopy of the object, optionally excluding fields."""
@@ -1138,19 +1256,27 @@ class scMPRA_data:
     
     def total_umi(self):
         #the same cell barcode in two different replicates is NOT the same cell. 
-        umis_per_cell=self.data.groupby(["cell_bc","rep_id"],as_index=False)["umis_mpra_bc"].sum()
-        mask=umis_per_cell["umis_mpra_bc"]<1
+        umis_per_cell = self.data.groupby(["cell_bc","rep_id"],as_index=False)["umis_mpra_bc"].sum()
+        mask = umis_per_cell["umis_mpra_bc"] < 1
 
-        total_cells=len(umis_per_cell[["cell_bc","rep_id"]].value_counts())
-        uniq_dropped=umis_per_cell[mask][["cell_bc","rep_id"]].value_counts()
-        num_cells_to_drop=len(uniq_dropped)
+        if _is_ddf(umis_per_cell):
+            total_cells = int(umis_per_cell[["cell_bc", "rep_id"]].drop_duplicates().shape[0].compute())
+            uniq_dropped = umis_per_cell[mask][["cell_bc", "rep_id"]].drop_duplicates().compute()
+        else:
+            total_cells = int(len(umis_per_cell[["cell_bc","rep_id"]].drop_duplicates()))
+            uniq_dropped = umis_per_cell[mask][["cell_bc","rep_id"]].drop_duplicates()
+        num_cells_to_drop = int(len(uniq_dropped))
 
         logger.info(f"Dropping {num_cells_to_drop} cells with no MPRA UMIs, leaving {total_cells-num_cells_to_drop}.")
 
-        umis_per_cell=umis_per_cell[~mask]
-        umis_per_cell["ln_cell_umis_mpra"]=np.log(umis_per_cell["umis_mpra_bc"])
+        umis_per_cell = umis_per_cell[~mask]
+        umis_per_cell = umis_per_cell.assign(ln_cell_umis_mpra=np.log(umis_per_cell["umis_mpra_bc"]))
 
-        self.data=self.data.merge(umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],on=["cell_bc","rep_id"],how="right")
+        self.data = self.data.merge(
+            umis_per_cell[["cell_bc","rep_id","ln_cell_umis_mpra"]],
+            on=["cell_bc","rep_id"],
+            how="right",
+        )
 
         self.operations.append(('total_umi',uniq_dropped))
     
@@ -1159,15 +1285,14 @@ class scMPRA_data:
         """
         Returns a <scMPRA_data> object with data loaded from `filepath`.
         """
-        tab=pd.read_csv(filepath,sep="\t")
-        tabtype=table_type(tab.columns)
-        
-        assert tabtype=="mpra_readwise" or tabtype=="mpra_umiwise", "Malformed table."
-        
-        ret=cls()
-        ret.data=tab
-        ret.table_type=tabtype
-        ret.source=filepath
+        tab = dd.read_csv(filepath, sep="\t", blocksize="64MB")
+        tabtype = _strict_mpra_table_type(tab.columns)
+        assert tabtype in {"mpra_readwise", "mpra_umiwise"}, "Malformed table."
+
+        ret = cls()
+        ret.data = _optimize_mpra_ddf(tab)
+        ret.table_type = tabtype
+        ret.source = filepath
 
         return ret
         
@@ -1175,45 +1300,48 @@ class scMPRA_data:
     def from_parquet(cls,path):
         """
         Returns a <scMPRA_data> object with data loaded from `path`.
-        Takes full path, /path/to/data.scmpra.
+        Takes full path, /path/to/data.scmpra (directory).
         """
-        #create return object
-        ret=cls()
-        
-        pa_data_table=pq.read_table(path)
-        data=pa_data_table.to_pandas(types_mapper=pd.ArrowDtype)
+        ret = cls()
+        base = Path(path)
 
-        ret.data=data
-        
-        #extract parquet metadata (bytes->bytes)
-        pa_metadata = pa_data_table.schema.metadata or {}
-        #extract & decode the item with members
-        meta_dict = json.loads(pa_metadata.get(b"scMPRA_data.members", b"{}").decode("utf-8"))
+        ret.data = _optimize_mpra_ddf(dd.read_parquet(base / "data.parquet", engine="pyarrow"))
 
-        # Restore all saved metadata members
+        with open(base / "members.json", "r") as f:
+            meta_dict = json.load(f)
         for k, v in meta_dict.items():
             setattr(ret, k, v)
+
+        ret.table_type = _strict_mpra_table_type(ret.data.columns)
+        assert ret.table_type in {"mpra_readwise", "mpra_umiwise"}, "Malformed table."
+        ret.source = str(path)
 
         return ret
 
     def to_parquet(self, path:str):
         """
-        Saves to a parquet file using gzip compression.
+        Saves to a parquet directory using gzip compression.
         Takes full path, /path/to/data.scmpra
         WILL clobber existing files with the same path.
         """
-        #create a parquet table from the scMPRA data
-        pa_data_table=pa.Table.from_pandas(self.data,preserve_index=True)
-        #extract parquet metadata created in above, defaulting to empty dict
-        pa_metadata=dict(pa_data_table.schema.metadata or {})
-        #get all members of the object other than the actual data
-        nondata={key:val for key, val in self.__dict__.items() if key != "data"}
-        #add the class members to parquet metadata
-        pa_metadata[b"scMPRA_data.members"]=json.dumps(nondata, default=str).encode("utf-8")
+        base = Path(path)
+        base.mkdir(parents=True, exist_ok=True)
 
-        #dump
-        pa_data_table=pa_data_table.replace_schema_metadata(pa_metadata)
-        pq.write_table(pa_data_table,path,compression="gzip")
+        ddf = self.data if _is_ddf(self.data) else dd.from_pandas(self.data, npartitions=2)
+        if self.table_type == "mpra_readwise":
+            keep = [c for c in MPRA_READWISE_COLUMN_ORDER if c in ddf.columns]
+        elif self.table_type == "mpra_umiwise":
+            keep = [c for c in MPRA_UMIWISE_COLUMN_ORDER if c in ddf.columns]
+        else:
+            raise ValueError(f"Unsupported table_type for parquet save: {self.table_type}")
+        ddf = ddf[keep]
+        meta = _densify_sparse_partition(ddf._meta)
+        ddf = ddf.map_partitions(_densify_sparse_partition, meta=meta)
+        ddf.to_parquet(base / "data.parquet", engine="pyarrow", compression="gzip", write_index=False, overwrite=True)
+
+        nondata = {key: val for key, val in self.__dict__.items() if key != "data"}
+        with open(base / "members.json", "w") as f:
+            json.dump(nondata, f, default=str)
   
     def graph_chimeric(self, *args, **kwargs):
         """
@@ -1231,8 +1359,8 @@ class scMPRA_data:
         customization. Particular useful are `bins`, `binrange`, and `log_scale`
         """
         assert table_type(self.data.columns) == "mpra_readwise"
-        
-        sns.histplot(self.data['reads'], *args, **kwargs)
+
+        sns.histplot(_to_pandas(self.data["reads"]), *args, **kwargs)
 
         plt.xlabel('Reads')
         plt.ylabel('Frequency')
@@ -1250,17 +1378,18 @@ class scMPRA_data:
         
         grouping_columns = [col for col in self.data.columns if col not in ['umi', 'reads']]
 
+        umis = self.data.groupby(grouping_columns)["umi"].nunique().reset_index()
+        umis = umis.rename(columns={"umi": "umis_mpra_bc"})
 
-        aggregations = {
-            'umis': ('umi', 'nunique')  # Count unique UMIs
-        }
-
-        # Conditionally include 'reads' sum
         if keep_reads:
-            aggregations['reads'] = ('reads', 'sum')
+            reads = self.data.groupby(grouping_columns)["reads"].sum().reset_index()
+            reads = reads.rename(columns={"reads": "reads_mpra_bc"})
+            grouped = umis.merge(reads, on=grouping_columns, how="left")
+        else:
+            grouped = umis
 
-        self.data = self.data.groupby(grouping_columns).agg(**aggregations).reset_index()
-        self.table_type="mpra_umiwise"
+        self.data = _optimize_mpra_ddf(grouped if _is_ddf(grouped) else dd.from_pandas(grouped, npartitions=2))
+        self.table_type = "mpra_umiwise"
         self.operations.append("read_wise_to_umi_wise")
     
     def cut_chimeric_reads(self,threshold):
@@ -1278,8 +1407,8 @@ class scMPRA_data:
         #Trim
         ret=self.data[self.data["reads"]>threshold]
 
-        original_umi_count=len(self.data["umi"].unique())
-        cut_umi_count=len(ret["umi"].unique())
+        original_umi_count = int(_to_pandas(self.data["umi"].nunique()))
+        cut_umi_count = int(_to_pandas(ret["umi"].nunique()))
 
         logger.info(f"Original={original_umi_count} UMIs, Cut={cut_umi_count} UMIs, Lost={original_umi_count-cut_umi_count} UMIs.")
 
@@ -1303,11 +1432,13 @@ class scMPRA_data:
             .reset_index(name='nonzero_count')
         )
 
-        valid_combos = nonzero_counts.query('nonzero_count >= @MIN_PTS')[['cell_type', 'cre_id']]
+        valid_combos = nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS][['cell_type', 'cre_id']]
         all_combos = self.data[['cell_type', 'cre_id']].drop_duplicates()
 
         # Compute dropped combos
-        dropped_combos = pd.merge(all_combos, valid_combos, on=['cell_type', 'cre_id'], how='outer', indicator=True)
+        valid_combos_pd = _to_pandas_df(valid_combos)
+        all_combos_pd = _to_pandas_df(all_combos)
+        dropped_combos = pd.merge(all_combos_pd, valid_combos_pd, on=['cell_type', 'cre_id'], how='outer', indicator=True)
         dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
 
         # Warn if reference was filtered out
@@ -1326,7 +1457,7 @@ class scMPRA_data:
         self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
 
         # Print stats
-        n_total = len(all_combos)
+        n_total = len(all_combos_pd)
         n_dropped = len(dropped_combos)
         logger.info(f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries.")
 
@@ -1577,8 +1708,8 @@ def standard_fit(client,data,split,disable_mom=False):
     specified by split.
     """
 
-    data=data.data
-    levels=data[split].unique()
+    data = data.data
+    levels = _series_unique_str(data[split])
 
     mat_resource={}
     if split=="cell_type":
@@ -1586,10 +1717,17 @@ def standard_fit(client,data,split,disable_mom=False):
     else:
         mat_resource={"CRE_DESIGN":1}
     
+    subsets = {}
+    for t in levels:
+        subset = data[data[split] == t]
+        subset = _to_pandas_df(subset)
+        subset["umis_mpra_bc"] = pd.to_numeric(subset["umis_mpra_bc"], errors="coerce").fillna(0).astype("int64")
+        subsets[t] = subset
+
     mats_futures = {
         t: client.submit(
             _smart_matrix,
-            data=data[data[split]==t],
+            data=subsets[t],
             split=split,
             resources=mat_resource
         )
@@ -1600,7 +1738,7 @@ def standard_fit(client,data,split,disable_mom=False):
         init_method="pass"
         init_vals={
             t:client.submit(_mom_from_training_data, 
-                data=data,
+                data=subsets[t],
                 split="cell_type",
                 subset=t,
                 indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
@@ -1938,7 +2076,8 @@ class ortho:
             #e.g. a by-cell-type model will have cell-type values for model_level
             subset=data[data[split]==model_level]
             
-            data_means=subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+            data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+            data_means = _to_pandas(data_means)
             data_means.name="mean(umis_mpra_bc)"
 
             mu_estimates=params.nb[model_level].result()
@@ -2015,9 +2154,8 @@ class ortho:
                 for ct in self.by_cell_type.model.keys():
                     model_f = self.by_cell_type.model[ct]
                     design_f = self.by_cell_type_design[ct]
-                    df_ct = self.training_data.data[
-                        self.training_data.data["cell_type"] == ct
-                    ]
+                    df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
+                    df_ct = _to_pandas_df(df_ct)
                     by_ct[ct] = client.submit(
                         _build_wald_precomp_for_subset,
                         model_f,
@@ -2032,9 +2170,8 @@ class ortho:
                 for cr in self.by_cre.model.keys():
                     model_f = self.by_cre.model[cr]
                     design_f = self.by_cre_design[cr]
-                    df_cr = self.training_data.data[
-                        self.training_data.data["cre_id"] == cr
-                    ]
+                    df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
+                    df_cr = _to_pandas_df(df_cr)
                     by_cr[cr] = client.submit(
                         _build_wald_precomp_for_subset,
                         model_f,
@@ -2258,8 +2395,8 @@ def describe_parameters(parameters,dat,split):
     anti=anti_split(split)
 
     #count cells per group
-    cell_counts=dat.groupby([split,anti,"rep_id"]).size()
-    cell_counts=pd.DataFrame({"cells":cell_counts})
+    cell_counts = dat.groupby([split, anti, "rep_id"]).size().rename("cells")
+    cell_counts = _to_pandas(cell_counts).to_frame()
     
     #cast rep id to string just in case.
     cell_counts.index = cell_counts.index.set_levels(
@@ -2372,6 +2509,8 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
 
     def process_key(key, dat):
         relevant_subset = dat[dat[split] == key]
+        if isinstance(relevant_subset, dd.DataFrame):
+            relevant_subset = relevant_subset.compute()
 
         relevant_subset=relevant_subset.drop(columns=[split])
 
@@ -2393,7 +2532,7 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         
         return mat
 
-    keys = dat[split].unique()
+    keys = _series_unique_str(dat[split])
     futures = [client.submit(process_key, key, dat_future) for key in keys]
     results = client.gather(futures)
     return pd.concat(results)
@@ -3071,7 +3210,7 @@ def _normalize_cre_label(label, scmpra: scMPRA_data):
         return None
     s = str(label)
     if "cre_id_original" in scmpra.data.columns:
-        df = scmpra.data[["cre_id", "cre_id_original"]].dropna()
+        df = _to_pandas_df(scmpra.data[["cre_id", "cre_id_original"]]).dropna()
         # Was this original label collapsed to 'reference'?
         if ((df["cre_id_original"] == s) & (df["cre_id"] == "reference")).any():
             return "reference"
@@ -3217,10 +3356,7 @@ def make_by_celltype_hypotheses(
 
     # What CREs exist in this cell type?
     df = counts.data
-    available = (
-        df.loc[df["cell_type"] == cell_type, "cre_id"]
-        .astype(str).unique().tolist()
-    )
+    available = _series_unique_str(df[df["cell_type"] == cell_type]["cre_id"])
 
     if comparison_cres == "all":
         cand = available.copy()
@@ -3283,10 +3419,7 @@ def make_by_cre_hypotheses(
 
     # What cell types exist for this CRE?
     df = counts.data
-    available = (
-        df.loc[df["cre_id"] == cre, "cell_type"]
-        .astype(str).unique().tolist()
-    )
+    available = _series_unique_str(df[df["cre_id"] == cre]["cell_type"])
 
     # Pick/validate reference cell type
     # Normalize the reference to internal labeling (e.g., "Pluripotent" -> "reference")
@@ -3362,7 +3495,7 @@ def make_all_by_celltype_hypotheses(
     if not isinstance(counts, scMPRA_data):
         raise TypeError("counts must be an scMPRA_data object.")
 
-    all_cts = sorted(map(str, counts.data["cell_type"].unique().tolist()))
+    all_cts = sorted(_series_unique_str(counts.data["cell_type"]))
 
     # Optional include/exclude
     if include_cell_types is not None:
@@ -3434,7 +3567,7 @@ def make_all_by_cre_hypotheses(
     if not isinstance(counts, scMPRA_data):
         raise TypeError("counts must be an scMPRA_data object.")
 
-    all_cres = sorted(map(str, counts.data["cre_id"].unique().tolist()))
+    all_cres = sorted(_series_unique_str(counts.data["cre_id"]))
     if drop_reference_cre and "reference" in all_cres:
         all_cres.remove("reference")
 
@@ -3497,7 +3630,7 @@ def make_bootstrap_activity_hypotheses(
         raise TypeError("counts must be an scMPRA_data object with a `.data` DataFrame.")
 
     df = counts.data
-    all_cres = sorted(map(str, df["cre_id"].unique().tolist()))
+    all_cres = sorted(_series_unique_str(df["cre_id"]))
 
     # Controls: explicit -> as provided; else try 'reference'
     if controls is None:
@@ -3616,10 +3749,11 @@ def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: boo
 
     # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
     #    We only need the set of originals that ended up as 'reference'
-    if "cre_id_original" in getattr(scmpra, "data", pd.DataFrame()).columns:
-        collapsed = scmpra.data.loc[
-            scmpra.data["cre_id"] == "reference", "cre_id_original"
-        ].astype(str).unique()
+    sc_data = getattr(scmpra, "data", pd.DataFrame())
+    if "cre_id_original" in getattr(sc_data, "columns", []):
+        collapsed = _series_unique_str(
+            sc_data[sc_data["cre_id"] == "reference"]["cre_id_original"]
+        )
         if len(collapsed) > 0:
             collapsed_set = set(collapsed)
             m = df[cre_cols].isin(collapsed_set)
@@ -4307,14 +4441,16 @@ def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     reduces overhead when running under Dask.
     """
     if hasattr(models_or_counts, "data"):
-        df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+        df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]]
     elif hasattr(models_or_counts, "training_data"):
-        df = models_or_counts.training_data.data[["cell_type", "cre_id", "umis_mpra_bc"]].copy()
+        df = models_or_counts.training_data.data[["cell_type", "cre_id", "umis_mpra_bc"]]
     else:
         raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
 
+    df = _to_pandas_df(df).copy()
     df["cell_type"] = df["cell_type"].astype(str)
     df["cre_id"] = df["cre_id"].astype(str)
+    df["umis_mpra_bc"] = pd.to_numeric(df["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
 
     # Group once: (cell_type, cre_id) → np.array of counts
     grouped = (
@@ -4485,17 +4621,6 @@ def _bootstrap_build_bundle(
     else:
         raise ValueError("Neither 'normalized_umis_mpra_bc' nor 'umis_mpra_bc' present in counts table.")
 
-    # ---- Derive/ensure biol_rep ----
-    if "biol_rep" in df.columns:
-        biol = df["biol_rep"].astype(str)
-    elif rep_to_biol is not None:
-        # Mapping provided
-        biol = df["rep_id"].astype(str).map(rep_to_biol).fillna(df["rep_id"].astype(str))
-    else:
-        # Fall back: treat rep_id as biological replicate
-        biol = df["rep_id"].astype(str)
-    df = df.assign(biol_rep=biol)
-
     # ---- Controls from hypotheses ----
     hdf = hypotheses.to_dataframe()
     controls_from_hs = sorted(set(hdf["reference_CRE"].dropna().astype(str).unique()))
@@ -4507,9 +4632,24 @@ def _bootstrap_build_bundle(
     all_wanted_cres = set(controls_from_hs).union(compare_cres)
 
     # ---- Filter counts to only needed CREs (comp + controls) ----
-    df = df[df["cre_id"].astype(str).isin(all_wanted_cres)].copy()
+    df = df[df["cre_id"].astype(str).isin(all_wanted_cres)]
+    keep_cols = ["cell_type", "cre_id", "rep_id", "cell_bc", "transfection_bc", metric_col]
+    if "biol_rep" in df.columns:
+        keep_cols.append("biol_rep")
+    df = _to_pandas_df(df[keep_cols]).copy()
     if df.empty:
         raise ValueError("After filtering to hypothesis CREs + controls, no rows remain in counts.")
+
+    # ---- Derive/ensure biol_rep ----
+    if "biol_rep" in df.columns:
+        biol = df["biol_rep"].astype(str)
+    elif rep_to_biol is not None:
+        # Mapping provided
+        biol = df["rep_id"].astype(str).map(rep_to_biol).fillna(df["rep_id"].astype(str))
+    else:
+        # Fall back: treat rep_id as biological replicate
+        biol = df["rep_id"].astype(str)
+    df = df.assign(biol_rep=biol)
 
     # ---- Validate controls presence ----
     present_controls = sorted(set(df.loc[df["cre_id"].astype(str).isin(controls_from_hs), "cre_id"].astype(str).unique()))
