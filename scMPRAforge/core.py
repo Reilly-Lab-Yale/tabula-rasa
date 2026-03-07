@@ -1730,10 +1730,10 @@ def standard_fit(client,data,split,disable_mom=False):
     levels = _series_unique_str(data[split])
 
     mat_resource={}
-    if split=="cell_type":
-        mat_resource={"CELL_DESIGN":1}
-    else:
-        mat_resource={"CRE_DESIGN":1}
+    #if split=="cell_type":
+    #    mat_resource={"CELL_DESIGN":1}
+    #else:
+    #    mat_resource={"CRE_DESIGN":1}
 
     def _subset_to_pandas(dat, split_col, level):
         subset = dat[dat[split_col] == level]
