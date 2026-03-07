@@ -2102,7 +2102,7 @@ class ortho:
             #e.g. a by-cell-type model will have cell-type values for model_level
             subset=data[data[split]==model_level]
             
-            data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean").sort_values()
+            data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
             data_means = _to_pandas(data_means)
             data_means.name="mean(umis_mpra_bc)"
 
