@@ -301,7 +301,14 @@ def _optimize_mpra_ddf(ddf: dd.DataFrame) -> dd.DataFrame:
         ddf[col] = ddf[col].fillna(0).astype("int64").astype(pd.SparseDtype("int64", fill_value=0))
 
     for col in sorted(MPRA_DENSE_COUNT_COLUMNS.intersection(ddf.columns)):
-        ddf[col] = ddf[col].fillna(0).astype("int64")
+        if pd.api.types.is_numeric_dtype(ddf[col].dtype):
+            ddf[col] = ddf[col].fillna(0)
+        else:
+            ddf[col] = ddf[col].map_partitions(
+                pd.to_numeric,
+                errors="coerce",
+                meta=(col, "float64"),
+            ).fillna(0)
 
     return ddf
 
@@ -1426,21 +1433,21 @@ class scMPRA_data:
         tabtype = table_type(self.data.columns)
         assert tabtype == "mpra_umiwise", "Malformed table."
 
-        # Count non-zero values per (cell_type, cre_id) group
+        # Force global counting on a narrow projection to avoid any partition/planner edge-cases.
+        working = _to_pandas_df(self.data[["cell_type", "cre_id", "umis_mpra_bc"]]).copy()
+        working["umis_mpra_bc"] = pd.to_numeric(working["umis_mpra_bc"], errors="coerce").fillna(0)
+
         nonzero_counts = (
-            self.data[self.data['umis_mpra_bc'] > 0]
-            .groupby(['cell_type', 'cre_id'])
+            working[working["umis_mpra_bc"] > 0]
+            .groupby(["cell_type", "cre_id"], as_index=False)
             .size()
-            .reset_index()
-            .rename(columns={0: "nonzero_count"})
+            .rename(columns={"size": "nonzero_count"})
         )
 
-        valid_combos = nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS][['cell_type', 'cre_id']]
-        all_combos = self.data[['cell_type', 'cre_id']].drop_duplicates()
+        valid_combos_pd = nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS][["cell_type", "cre_id"]]
+        all_combos_pd = working[["cell_type", "cre_id"]].drop_duplicates()
 
         # Compute dropped combos
-        valid_combos_pd = _to_pandas_df(valid_combos)
-        all_combos_pd = _to_pandas_df(all_combos)
         dropped_combos = pd.merge(all_combos_pd, valid_combos_pd, on=['cell_type', 'cre_id'], how='outer', indicator=True)
         dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
 
@@ -1457,7 +1464,15 @@ class scMPRA_data:
             )
 
         # Keep only rows matching valid (cell_type, cre_id) combos
-        self.data = self.data.merge(valid_combos, on=['cell_type', 'cre_id'], how='inner')
+        if _is_ddf(self.data):
+            valid_combos_pd = valid_combos_pd.copy()
+            valid_combos_pd["cell_type"] = valid_combos_pd["cell_type"].astype("string[pyarrow]")
+            valid_combos_pd["cre_id"] = valid_combos_pd["cre_id"].astype("string[pyarrow]")
+            nparts = max(1, min(64, int(np.ceil(len(valid_combos_pd) / 50_000))))
+            valid_combos = dd.from_pandas(valid_combos_pd, npartitions=nparts)
+            self.data = self.data.merge(valid_combos, on=["cell_type", "cre_id"], how="inner")
+        else:
+            self.data = self.data.merge(valid_combos_pd, on=["cell_type", "cre_id"], how="inner")
 
         # Print stats
         n_total = len(all_combos_pd)
