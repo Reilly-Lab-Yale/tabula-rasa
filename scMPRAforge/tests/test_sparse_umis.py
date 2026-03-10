@@ -19,7 +19,7 @@ from scMPRAforge.core import (
 def _is_sparse_int64(series: pd.Series) -> bool:
     dtype = series.dtype
     return (
-        pd.api.types.is_sparse(dtype)
+        isinstance(dtype, pd.SparseDtype)
         and dtype.subtype == np.dtype("int64")
         and dtype.fill_value == 0
     )
@@ -121,10 +121,10 @@ def test_prepare_subset_for_modeling_densifies_umis_for_standard_fit_boundary():
     )
 
     prepared = _prepare_subset_for_modeling(raw)
-    assert not pd.api.types.is_sparse(prepared["umis_mpra_bc"].dtype)
+    assert not isinstance(prepared["umis_mpra_bc"].dtype, pd.SparseDtype)
     assert prepared["umis_mpra_bc"].dtype == np.dtype("int64")
 
     mats = _smart_matrix(prepared, split="cell_type")
     regressand_dtype = mats["regressand"]["umis_mpra_bc"].dtype
-    assert not pd.api.types.is_sparse(regressand_dtype)
+    assert not isinstance(regressand_dtype, pd.SparseDtype)
     assert pd.api.types.is_numeric_dtype(regressand_dtype)

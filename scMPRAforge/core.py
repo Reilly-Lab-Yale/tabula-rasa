@@ -323,7 +323,7 @@ def _optimize_mpra_ddf(ddf: dd.DataFrame) -> dd.DataFrame:
 def _densify_sparse_partition(pdf: pd.DataFrame) -> pd.DataFrame:
     pdf = pdf.copy()
     for col in pdf.columns:
-        if pd.api.types.is_sparse(pdf[col].dtype):
+        if isinstance(pdf[col].dtype, pd.SparseDtype):
             pdf[col] = pdf[col].sparse.to_dense().astype("int64")
     return pdf
 
@@ -1499,6 +1499,131 @@ class scMPRA_data:
         # Record that we performed this operation
         self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}",dropped_combos))
 
+    def consider_missing(self, max_rows: int | None = 50_000_000):
+        """
+        Expand UMI-wise data to all (rep_id, cell_bc, mpra_bc) combinations.
+
+        For each replicate, creates all combinations of observed cell barcodes and
+        MPRA barcodes. Missing combinations are added with `umis_mpra_bc = 0`.
+        Metadata are imputed from strict one-to-one mappings within each replicate:
+          - cell_bc -> cell_type
+          - mpra_bc -> cre_id
+
+        Keeps only the minimal UMI-wise columns:
+        `cell_bc, rep_id, cre_id, cell_type, mpra_bc, umis_mpra_bc`
+
+        Parameters
+        ----------
+        max_rows : int | None
+            Safety cap on total expanded row count. If None, no cap is applied.
+        """
+        if self.table_type != "mpra_umiwise":
+            raise ValueError("consider_missing only supports UMI-wise tables.")
+
+        required = {"rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"}
+        missing_cols = sorted(required.difference(set(map(str, self.data.columns))))
+        if missing_cols:
+            raise ValueError(
+                "consider_missing requires columns "
+                f"{sorted(required)}; missing {missing_cols}."
+            )
+
+        if max_rows is not None and max_rows <= 0:
+            raise ValueError("max_rows must be positive or None.")
+
+        ddf = self.data if _is_ddf(self.data) else dd.from_pandas(self.data, npartitions=2)
+        working = ddf[["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"]]
+
+        for col in ["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id"]:
+            null_count = int(working[col].isna().sum().compute())
+            if null_count:
+                raise ValueError(f"Column '{col}' contains {null_count} missing values; cannot impute mappings.")
+
+        for col in ["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id"]:
+            working[col] = working[col].astype("string[pyarrow]")
+
+        working["umis_mpra_bc"] = working["umis_mpra_bc"].map_partitions(
+            pd.to_numeric, errors="coerce", meta=("umis_mpra_bc", "float64")
+        ).fillna(0).astype("int64")
+
+        cell_map = working[["rep_id", "cell_bc", "cell_type"]].drop_duplicates()
+        mpra_map = working[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates()
+
+        bad_cells = (
+            cell_map.groupby(["rep_id", "cell_bc"])
+            .size()
+            .rename("n_cell_type")
+            .reset_index()
+        )
+        bad_cells = bad_cells[bad_cells["n_cell_type"] > 1]
+        n_bad_cells = int(bad_cells.shape[0].compute())
+        if n_bad_cells:
+            sample = _to_pandas_df(bad_cells.head(10)).to_dict("records")
+            raise ValueError(
+                "Non-unique mapping detected for (rep_id, cell_bc) -> cell_type. "
+                f"Found {n_bad_cells} ambiguous keys. Examples: {sample}"
+            )
+
+        bad_mpras = (
+            mpra_map.groupby(["rep_id", "mpra_bc"])
+            .size()
+            .rename("n_cre_id")
+            .reset_index()
+        )
+        bad_mpras = bad_mpras[bad_mpras["n_cre_id"] > 1]
+        n_bad_mpras = int(bad_mpras.shape[0].compute())
+        if n_bad_mpras:
+            sample = _to_pandas_df(bad_mpras.head(10)).to_dict("records")
+            raise ValueError(
+                "Non-unique mapping detected for (rep_id, mpra_bc) -> cre_id. "
+                f"Found {n_bad_mpras} ambiguous keys. Examples: {sample}"
+            )
+
+        observed = (
+            working.groupby(["rep_id", "cell_bc", "mpra_bc"])["umis_mpra_bc"]
+            .sum()
+            .reset_index()
+        )
+
+        n_cells = cell_map.groupby("rep_id").size().rename("n_cells").reset_index()
+        n_mpras = mpra_map.groupby("rep_id").size().rename("n_mpras").reset_index()
+        rep_sizes = n_cells.merge(n_mpras, on="rep_id", how="inner")
+        rep_sizes["target_rows"] = rep_sizes["n_cells"] * rep_sizes["n_mpras"]
+
+        expanded_rows = int(rep_sizes["target_rows"].sum().compute())
+        observed_rows = int(observed.shape[0].compute())
+        rows_added = max(0, expanded_rows - observed_rows)
+
+        if max_rows is not None and expanded_rows > int(max_rows):
+            raise ValueError(
+                f"consider_missing would create {expanded_rows} rows (> max_rows={max_rows}). "
+                "Increase max_rows to proceed."
+            )
+
+        full = cell_map.merge(mpra_map, on="rep_id", how="inner")
+        expanded = full.merge(observed, on=["rep_id", "cell_bc", "mpra_bc"], how="left")
+        expanded["umis_mpra_bc"] = expanded["umis_mpra_bc"].fillna(0).astype("int64")
+
+        keep = ["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]
+        expanded = expanded[keep]
+
+        self.data = _optimize_mpra_ddf(expanded)
+        self.table_type = "mpra_umiwise"
+        self.operations.append(
+            (
+                "consider_missing",
+                {
+                    "observed_rows": observed_rows,
+                    "expanded_rows": expanded_rows,
+                    "rows_added": rows_added,
+                    "max_rows": max_rows,
+                },
+            )
+        )
+        logger.info(
+            f"consider_missing expanded {observed_rows} observed rows to "
+            f"{expanded_rows} rows by adding {rows_added} zero rows."
+        )
 
     @unimplemented
     def round_down_zeroes():
