@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pandas as pd
 import pytest
@@ -6,7 +7,15 @@ pytest.importorskip("dask")
 dd = pytest.importorskip("dask.dataframe")
 pytest.importorskip("tensorzinb.tensorzinb")
 
-from scMPRAforge.core import _optimize_mpra_ddf, scMPRA_data
+from scMPRAforge.core import (
+    _bootstrap_build_bundle,
+    _mwu_make_bundle,
+    _optimize_mpra_ddf,
+    HypothesisSet,
+    make_by_celltype_hypotheses,
+    make_by_cre_hypotheses,
+    scMPRA_data,
+)
 
 
 def _make_obj(pdf: pd.DataFrame, table_type: str = "mpra_umiwise") -> scMPRA_data:
@@ -16,125 +25,186 @@ def _make_obj(pdf: pd.DataFrame, table_type: str = "mpra_umiwise") -> scMPRA_dat
     return obj
 
 
-def test_consider_missing_expands_replicate_cartesian_and_zero_fills():
-    # r1: 2 cells x 2 mpra = 4 rows expected
-    # r2: 1 cell x 2 mpra = 2 rows expected
-    # total expected = 6
-    pdf = pd.DataFrame(
-        {
-            "rep_id": ["r1", "r1", "r1", "r2", "r2"],
-            "cell_bc": ["c1", "c1", "c2", "c3", "c3"],
-            "cell_type": ["ct1", "ct1", "ct2", "ct3", "ct3"],
-            "mpra_bc": ["m1", "m1", "m2", "m3", "m4"],
-            "cre_id": ["creA", "creA", "creB", "creC", "creD"],
-            # duplicate (r1,c1,m1) to test summation before filling
-            "umis_mpra_bc": [2, 3, 7, 1, 4],
-            "reads_mpra_bc": [20, 30, 70, 10, 40],
-        }
-    )
-
-    obj = _make_obj(pdf)
-    obj.consider_missing(max_memory_gb=1.0)
-    out = obj.data.compute().sort_values(["rep_id", "cell_bc", "mpra_bc"]).reset_index(drop=True)
-
-    assert list(out.columns) == ["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]
-    assert len(out) == 6
-    assert isinstance(out["umis_mpra_bc"].dtype, pd.SparseDtype)
-    assert out["umis_mpra_bc"].dtype.subtype == np.dtype("int64")
-
-    # Existing summed combo retained
-    v = out.loc[(out["rep_id"] == "r1") & (out["cell_bc"] == "c1") & (out["mpra_bc"] == "m1"), "umis_mpra_bc"]
-    assert int(v.iloc[0]) == 5
-
-    # Missing combos added with zeros
-    z1 = out.loc[(out["rep_id"] == "r1") & (out["cell_bc"] == "c1") & (out["mpra_bc"] == "m2"), "umis_mpra_bc"]
-    z2 = out.loc[(out["rep_id"] == "r1") & (out["cell_bc"] == "c2") & (out["mpra_bc"] == "m1"), "umis_mpra_bc"]
-    assert int(z1.iloc[0]) == 0
-    assert int(z2.iloc[0]) == 0
-
-    # Operation tracking
-    op_name, payload = obj.operations[-1]
-    assert op_name == "consider_missing"
-    assert payload["observed_rows"] == 4
-    assert payload["expanded_rows"] == 6
-    assert payload["rows_added"] == 2
-    assert payload["estimated_peak_memory_gb"] > 0
-
-
-def test_consider_missing_rejects_non_umiwise_tables():
-    pdf = pd.DataFrame(
-        {
-            "cell_bc": ["c1"],
-            "rep_id": ["r1"],
-            "cre_id": ["creA"],
-            "cell_type": ["ct1"],
-            "mpra_bc": ["m1"],
-            "umi": ["u1"],
-            "reads": [1],
-        }
-    )
-    obj = _make_obj(pdf, table_type="mpra_readwise")
-    with pytest.raises(ValueError, match="UMI-wise"):
-        obj.consider_missing()
-
-
-def test_consider_missing_rejects_missing_required_columns():
-    pdf = pd.DataFrame(
-        {
-            "rep_id": ["r1"],
-            "cre_id": ["creA"],
-            "cell_type": ["ct1"],
-            "umis_mpra_bc": [1],
-        }
-    )
-    obj = _make_obj(pdf)
-    with pytest.raises(ValueError, match="missing"):
-        obj.consider_missing()
-
-
-def test_consider_missing_rejects_ambiguous_cell_mapping():
-    pdf = pd.DataFrame(
-        {
-            "rep_id": ["r1", "r1"],
-            "cell_bc": ["c1", "c1"],
-            "cell_type": ["ct1", "ct2"],  # ambiguous within replicate
-            "mpra_bc": ["m1", "m2"],
-            "cre_id": ["creA", "creB"],
-            "umis_mpra_bc": [1, 2],
-        }
-    )
-    obj = _make_obj(pdf)
-    with pytest.raises(ValueError, match="cell_bc"):
-        obj.consider_missing()
-
-
-def test_consider_missing_rejects_ambiguous_mpra_mapping():
-    pdf = pd.DataFrame(
+def _toy_missing_pdf() -> pd.DataFrame:
+    # One replicate, two cell types, two CREs/barcodes; each observed in one cell type only.
+    return pd.DataFrame(
         {
             "rep_id": ["r1", "r1"],
             "cell_bc": ["c1", "c2"],
-            "cell_type": ["ct1", "ct2"],
-            "mpra_bc": ["m1", "m1"],  # ambiguous within replicate
-            "cre_id": ["creA", "creB"],
-            "umis_mpra_bc": [1, 2],
+            "cell_type": ["ctA", "ctB"],
+            "mpra_bc": ["m1", "m2"],
+            "cre_id": ["cre1", "cre2"],
+            "umis_mpra_bc": [5, 7],
         }
     )
-    obj = _make_obj(pdf)
-    with pytest.raises(ValueError, match="mpra_bc"):
-        obj.consider_missing()
 
 
-def test_consider_missing_respects_memory_guard():
+def test_consider_missing_policy_defaults_and_setter_validation():
+    obj = _make_obj(_toy_missing_pdf())
+    assert obj.consider_missing_enabled is False
+    assert obj.consider_missing_max_memory_gb == 100.0
+    assert obj.consider_missing_peak_overhead_factor == 4.0
+    assert obj.consider_missing_subset_semantics == "full_replicate"
+
+    obj.set_consider_missing(True, max_memory_gb=120.0, peak_overhead_factor=3.0)
+    assert obj.consider_missing_enabled is True
+    assert obj.consider_missing_max_memory_gb == 120.0
+    assert obj.consider_missing_peak_overhead_factor == 3.0
+
+    with pytest.raises(ValueError, match="max_memory_gb"):
+        obj.set_consider_missing(True, max_memory_gb=0.0)
+    with pytest.raises(ValueError, match="peak_overhead_factor"):
+        obj.set_consider_missing(True, peak_overhead_factor=0.0)
+
+
+def test_get_data_requires_split_context_when_enabled():
+    obj = _make_obj(_toy_missing_pdf())
+    obj.set_consider_missing(True)
+
+    with pytest.raises(ValueError, match="requires a context"):
+        obj.get_data(include_missing=True)
+    with pytest.raises(ValueError, match="Global consider_missing inflation is disallowed"):
+        obj.get_data(include_missing=True, context={"kind": "global"})
+
+    raw = obj.get_data(include_missing=False).compute()
+    assert len(raw) == 2
+
+
+def test_split_level_inflation_cell_type_and_cre_id():
+    obj = _make_obj(_toy_missing_pdf())
+    obj.set_consider_missing(True, max_memory_gb=10.0)
+
+    ct = obj.get_data(
+        include_missing=True,
+        context={"kind": "split_level", "split": "cell_type", "level": "ctA"},
+    ).compute().sort_values(["cell_bc", "mpra_bc"]).reset_index(drop=True)
+    assert list(ct.columns) == ["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]
+    assert len(ct) == 2
+    assert isinstance(ct["umis_mpra_bc"].dtype, pd.SparseDtype)
+    assert int(ct.loc[ct["mpra_bc"] == "m1", "umis_mpra_bc"].iloc[0]) == 5
+    assert int(ct.loc[ct["mpra_bc"] == "m2", "umis_mpra_bc"].iloc[0]) == 0
+
+    cr = obj.get_data(
+        include_missing=True,
+        context={"kind": "split_level", "split": "cre_id", "level": "cre1"},
+    ).compute().sort_values(["cell_bc", "mpra_bc"]).reset_index(drop=True)
+    assert len(cr) == 2
+    assert int(cr.loc[cr["cell_bc"] == "c1", "umis_mpra_bc"].iloc[0]) == 5
+    assert int(cr.loc[cr["cell_bc"] == "c2", "umis_mpra_bc"].iloc[0]) == 0
+
+
+def test_split_level_inflation_hard_memory_cap():
+    obj = _make_obj(_toy_missing_pdf())
+    obj.set_consider_missing(True, max_memory_gb=1e-9)
+    with pytest.raises(ValueError, match="estimated peak memory"):
+        obj.get_data(
+            include_missing=True,
+            context={"kind": "split_level", "split": "cell_type", "level": "ctA"},
+        ).compute()
+
+
+def test_consider_missing_policy_persistence_and_legacy_defaults(tmp_path):
+    obj = _make_obj(_toy_missing_pdf())
+    obj.set_consider_missing(True, max_memory_gb=123.0, peak_overhead_factor=2.5)
+    out = tmp_path / "policy.scmpra"
+    obj.to_parquet(str(out))
+
+    loaded = scMPRA_data.from_parquet(str(out))
+    assert loaded.consider_missing_enabled is True
+    assert loaded.consider_missing_max_memory_gb == 123.0
+    assert loaded.consider_missing_peak_overhead_factor == 2.5
+    assert loaded.consider_missing_subset_semantics == "full_replicate"
+
+    members_path = out / "members.json"
+    members = json.loads(members_path.read_text())
+    for k in [
+        "consider_missing_enabled",
+        "consider_missing_max_memory_gb",
+        "consider_missing_peak_overhead_factor",
+        "consider_missing_subset_semantics",
+    ]:
+        members.pop(k, None)
+    members_path.write_text(json.dumps(members))
+
+    legacy = scMPRA_data.from_parquet(str(out))
+    assert legacy.consider_missing_enabled is False
+    assert legacy.consider_missing_max_memory_gb == 100.0
+    assert legacy.consider_missing_peak_overhead_factor == 4.0
+    assert legacy.consider_missing_subset_semantics == "full_replicate"
+
+
+def test_hypothesis_builders_and_mwu_respect_policy():
+    obj = _make_obj(_toy_missing_pdf())
+
+    hs_raw = make_by_celltype_hypotheses(
+        comparison_cell_type="ctA",
+        counts=obj,
+        comparison_cres="all",
+        reference_cre="reference",
+    ).to_dataframe()
+    assert set(hs_raw["comparison_CRE"].astype(str)) == {"cre1"}
+
+    hs_cre_raw = make_by_cre_hypotheses(
+        comparison_cre="cre1",
+        counts=obj,
+        comparison_cell_types="all",
+        reference_cell_type="ctA",
+    ).to_dataframe()
+    assert len(hs_cre_raw) == 0
+
+    obj.set_consider_missing(True, max_memory_gb=10.0)
+    hs_miss = make_by_celltype_hypotheses(
+        comparison_cell_type="ctA",
+        counts=obj,
+        comparison_cres="all",
+        reference_cre="reference",
+    ).to_dataframe()
+    assert set(hs_miss["comparison_CRE"].astype(str)) == {"cre1", "cre2"}
+
+    hs_cre_miss = make_by_cre_hypotheses(
+        comparison_cre="cre1",
+        counts=obj,
+        comparison_cell_types="all",
+        reference_cell_type="ctA",
+    ).to_dataframe()
+    assert set(hs_cre_miss["comparison_cell_type"].astype(str)) == {"ctB"}
+
+    bundle = _mwu_make_bundle(hypotheses=HypothesisSet.from_dataframe(hs_miss), models_or_counts=obj)
+    assert ("ctA", "cre2") in bundle["counts"]
+    assert np.all(bundle["counts"][("ctA", "cre2")] == 0.0)
+
+
+def test_bootstrap_opt_out_warns_and_uses_raw_semantics():
     pdf = pd.DataFrame(
         {
-            "rep_id": ["r1", "r1", "r1", "r1"],
-            "cell_bc": ["c1", "c2", "c1", "c2"],
-            "cell_type": ["ct1", "ct2", "ct1", "ct2"],
-            "mpra_bc": ["m1", "m1", "m2", "m2"],
-            "cre_id": ["creA", "creA", "creB", "creB"],
-            "umis_mpra_bc": [1, 1, 1, 1],
+            "rep_id": ["r1", "r1", "r1"],
+            "cell_bc": ["c1", "c2", "c2"],
+            "transfection_bc": ["t1", "t2", "t2"],
+            "cell_type": ["ctA", "ctA", "ctA"],
+            "cre_id": ["reference", "creX", "creX"],
+            "umis_mpra_bc": [0, 3, 1],
         }
     )
     obj = _make_obj(pdf)
-    with pytest.raises(ValueError, match="max_memory_gb"):
-        obj.consider_missing(max_memory_gb=1e-9)
+    obj.set_consider_missing(True, max_memory_gb=10.0)
+
+    hs = HypothesisSet.from_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "comparison_CRE": "creX",
+                    "comparison_cell_type": "MAX",
+                    "reference_CRE": "reference",
+                    "reference_cell_type": "MAX",
+                    "meta": "bootstrap_activity",
+                }
+            ]
+        )
+    )
+
+    with pytest.warns(UserWarning, match="bootstrap uses raw data semantics"):
+        bundle = _bootstrap_build_bundle(hypotheses=hs, models_or_counts=obj, n_bootstraps=10)
+
+    integrations = bundle["integrations"]
+    # Raw semantics: one integration row for reference (c1,t1) and one for creX (c2,t2)
+    assert len(integrations) == 2

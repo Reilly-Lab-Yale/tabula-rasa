@@ -1080,8 +1080,9 @@ class Bounds:
         ret.library_model=inp.training_data.describe_library()
 
         #cells per cell type
+        td_raw = inp.training_data.get_data(include_missing=False)
         ret.cells_per_cell_type = _to_pandas(
-            inp.training_data.data.groupby("cell_type")["cell_bc"].nunique()
+            td_raw.groupby("cell_type")["cell_bc"].nunique()
         )
 
         
@@ -1101,10 +1102,10 @@ class Bounds:
             assert False, "Unrecognized direction."
 
         #total number of MPRA barcodes
-        ret.total_uniq_mpra_bc = int(_to_pandas(inp.training_data.data["mpra_bc"].nunique()))
+        ret.total_uniq_mpra_bc = int(_to_pandas(td_raw["mpra_bc"].nunique()))
         
         #calculate post-hoc overtransfection. 
-        tfection = inp.training_data.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique().reset_index()
+        tfection = td_raw.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique().reset_index()
         tfection = _to_pandas_df(tfection).rename({"mpra_bc":"unique_mpra_bc"}, axis=1)
         observed = tfection["unique_mpra_bc"]
         tfection["tot_plasmid"] = np.log(1-observed/ret.total_uniq_mpra_bc)/np.log((ret.total_uniq_mpra_bc-1)/ret.total_uniq_mpra_bc)
@@ -1136,6 +1137,251 @@ class scMPRA_data:
         self.operations=[]
         self.negative_controls=[]
         self.reference_cell_type=None
+        self.consider_missing_enabled=False
+        self.consider_missing_max_memory_gb=100.0
+        self.consider_missing_peak_overhead_factor=4.0
+        self.consider_missing_subset_semantics="full_replicate"
+        self._consider_missing_cache=None
+
+    def _ensure_consider_missing_defaults(self):
+        if not hasattr(self, "consider_missing_enabled"):
+            self.consider_missing_enabled = False
+        if not hasattr(self, "consider_missing_max_memory_gb"):
+            self.consider_missing_max_memory_gb = 100.0
+        if not hasattr(self, "consider_missing_peak_overhead_factor"):
+            self.consider_missing_peak_overhead_factor = 4.0
+        if not hasattr(self, "consider_missing_subset_semantics"):
+            self.consider_missing_subset_semantics = "full_replicate"
+        if not hasattr(self, "_consider_missing_cache"):
+            self._consider_missing_cache = None
+
+    def _raw_ddf(self) -> dd.DataFrame:
+        return self.data if _is_ddf(self.data) else dd.from_pandas(self.data, npartitions=2)
+
+    def _cache_key(self):
+        ddf = self._raw_ddf()
+        return (id(ddf), tuple(map(str, ddf.columns)))
+
+    def set_consider_missing(
+        self,
+        enabled: bool,
+        *,
+        max_memory_gb: float | None = None,
+        peak_overhead_factor: float | None = None,
+    ) -> None:
+        self._ensure_consider_missing_defaults()
+
+        if enabled and self.table_type != "mpra_umiwise":
+            raise ValueError("consider_missing policy only supports UMI-wise tables.")
+
+        if max_memory_gb is not None and max_memory_gb <= 0:
+            raise ValueError("max_memory_gb must be positive or None.")
+        if peak_overhead_factor is not None and peak_overhead_factor <= 0:
+            raise ValueError("peak_overhead_factor must be positive.")
+
+        self.consider_missing_enabled = bool(enabled)
+        if max_memory_gb is not None:
+            self.consider_missing_max_memory_gb = float(max_memory_gb)
+        if peak_overhead_factor is not None:
+            self.consider_missing_peak_overhead_factor = float(peak_overhead_factor)
+
+    def _empty_missing_ddf(self) -> dd.DataFrame:
+        meta = pd.DataFrame({
+            "cell_bc": pd.Series([], dtype="string[pyarrow]"),
+            "rep_id": pd.Series([], dtype="string[pyarrow]"),
+            "cre_id": pd.Series([], dtype="string[pyarrow]"),
+            "cell_type": pd.Series([], dtype="string[pyarrow]"),
+            "mpra_bc": pd.Series([], dtype="string[pyarrow]"),
+            "umis_mpra_bc": pd.Series([], dtype="int64"),
+        })
+        return _optimize_mpra_ddf(dd.from_pandas(meta, npartitions=1))
+
+    def _get_missing_maps(self):
+        self._ensure_consider_missing_defaults()
+        if self.table_type != "mpra_umiwise":
+            raise ValueError("consider_missing policy only supports UMI-wise tables.")
+
+        required = {"rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"}
+        ddf = self._raw_ddf()
+        missing_cols = sorted(required.difference(set(map(str, ddf.columns))))
+        if missing_cols:
+            raise ValueError(
+                "consider_missing requires columns "
+                f"{sorted(required)}; missing {missing_cols}."
+            )
+
+        key = self._cache_key()
+        cache = self._consider_missing_cache
+        if cache is not None and cache.get("key") == key:
+            return cache
+
+        working = ddf[["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"]]
+        for col in ["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id"]:
+            null_count = int(working[col].isna().sum().compute())
+            if null_count:
+                raise ValueError(f"Column '{col}' contains {null_count} missing values; cannot impute mappings.")
+            working[col] = working[col].astype("string[pyarrow]")
+
+        working["umis_mpra_bc"] = working["umis_mpra_bc"].map_partitions(
+            pd.to_numeric, errors="coerce", meta=("umis_mpra_bc", "float64")
+        ).fillna(0).astype("int64")
+
+        cell_map = working[["rep_id", "cell_bc", "cell_type"]].drop_duplicates()
+        mpra_map = working[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates()
+
+        bad_cells = (
+            cell_map.groupby(["rep_id", "cell_bc"])
+            .size()
+            .rename("n_cell_type")
+            .reset_index()
+        )
+        bad_cells = bad_cells[bad_cells["n_cell_type"] > 1]
+        n_bad_cells = int(bad_cells.shape[0].compute())
+        if n_bad_cells:
+            sample = _to_pandas_df(bad_cells.head(10)).to_dict("records")
+            raise ValueError(
+                "Non-unique mapping detected for (rep_id, cell_bc) -> cell_type. "
+                f"Found {n_bad_cells} ambiguous keys. Examples: {sample}"
+            )
+
+        bad_mpras = (
+            mpra_map.groupby(["rep_id", "mpra_bc"])
+            .size()
+            .rename("n_cre_id")
+            .reset_index()
+        )
+        bad_mpras = bad_mpras[bad_mpras["n_cre_id"] > 1]
+        n_bad_mpras = int(bad_mpras.shape[0].compute())
+        if n_bad_mpras:
+            sample = _to_pandas_df(bad_mpras.head(10)).to_dict("records")
+            raise ValueError(
+                "Non-unique mapping detected for (rep_id, mpra_bc) -> cre_id. "
+                f"Found {n_bad_mpras} ambiguous keys. Examples: {sample}"
+            )
+
+        observed = (
+            working.groupby(["rep_id", "cell_bc", "mpra_bc"])["umis_mpra_bc"]
+            .sum()
+            .reset_index()
+        )
+        ret = {
+            "key": key,
+            "cell_map": cell_map,
+            "mpra_map": mpra_map,
+            "observed": observed,
+        }
+        self._consider_missing_cache = ret
+        return ret
+
+    def _inflate_missing_split_level(self, split: str, level: str) -> dd.DataFrame:
+        maps = self._get_missing_maps()
+        cell_map = maps["cell_map"]
+        mpra_map = maps["mpra_map"]
+        observed = maps["observed"]
+
+        split = str(split)
+        level = str(level)
+        if split not in {"cell_type", "cre_id"}:
+            raise ValueError("split_level context requires split in {'cell_type','cre_id'}.")
+
+        if split == "cell_type":
+            cell_subset = cell_map[cell_map["cell_type"] == level]
+            mpra_subset = mpra_map
+        else:
+            cell_subset = cell_map
+            mpra_subset = mpra_map[mpra_map["cre_id"] == level]
+
+        n_cells_total = int(cell_subset.shape[0].compute())
+        n_mpras_total = int(mpra_subset.shape[0].compute())
+        if n_cells_total == 0 or n_mpras_total == 0:
+            return self._empty_missing_ddf()
+
+        n_cells = cell_subset.groupby("rep_id").size().rename("n_cells").reset_index()
+        n_mpras = mpra_subset.groupby("rep_id").size().rename("n_mpras").reset_index()
+        rep_sizes = n_cells.merge(n_mpras, on="rep_id", how="inner")
+        rep_sizes["target_rows"] = rep_sizes["n_cells"] * rep_sizes["n_mpras"]
+        expanded_rows = int(rep_sizes["target_rows"].sum().compute())
+
+        def _mean_strlen(series):
+            val = _to_pandas(series.str.len().mean())
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                return 0.0
+            return float(val)
+
+        avg_len = {
+            "rep_id": _mean_strlen(n_cells["rep_id"]),
+            "cell_bc": _mean_strlen(cell_subset["cell_bc"]),
+            "cell_type": _mean_strlen(cell_subset["cell_type"]),
+            "mpra_bc": _mean_strlen(mpra_subset["mpra_bc"]),
+            "cre_id": _mean_strlen(mpra_subset["cre_id"]),
+        }
+        per_string_overhead = 4.125
+        bytes_per_row_strings = sum(v + per_string_overhead for v in avg_len.values())
+        bytes_per_row_structural = 24.0
+        steady_bytes_est = expanded_rows * (bytes_per_row_strings + bytes_per_row_structural)
+        peak_bytes_est = steady_bytes_est * float(self.consider_missing_peak_overhead_factor)
+        peak_gb_est = peak_bytes_est / 1_000_000_000.0
+
+        if (
+            self.consider_missing_max_memory_gb is not None
+            and peak_gb_est > float(self.consider_missing_max_memory_gb)
+        ):
+            raise ValueError(
+                "consider_missing split-level expansion estimated peak memory "
+                f"{peak_gb_est:.2f} GB exceeds cap "
+                f"{self.consider_missing_max_memory_gb} GB."
+            )
+
+        full = cell_subset.merge(mpra_subset, on="rep_id", how="inner")
+        expanded = full.merge(observed, on=["rep_id", "cell_bc", "mpra_bc"], how="left")
+        expanded["umis_mpra_bc"] = expanded["umis_mpra_bc"].fillna(0).astype("int64")
+        expanded = expanded[["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]]
+        return _optimize_mpra_ddf(expanded)
+
+    def get_data(
+        self,
+        *,
+        include_missing: bool | None = None,
+        context: dict | None = None,
+        columns: list[str] | None = None,
+    ) -> dd.DataFrame:
+        self._ensure_consider_missing_defaults()
+
+        use_missing = self.consider_missing_enabled if include_missing is None else bool(include_missing)
+
+        if not use_missing:
+            ret = self._raw_ddf()
+            if columns is not None:
+                missing = sorted(set(columns).difference(set(map(str, ret.columns))))
+                if missing:
+                    raise ValueError(f"Requested columns not present in raw data: {missing}")
+                ret = ret[columns]
+            return ret
+
+        if context is None:
+            raise ValueError("consider_missing access requires a context; global inflation is disallowed.")
+
+        kind = context.get("kind")
+        if kind == "global":
+            raise ValueError("Global consider_missing inflation is disallowed; use split_level context.")
+        if kind != "split_level":
+            raise ValueError("Unsupported context kind. Expected {'kind': 'split_level', 'split': ..., 'level': ...}.")
+
+        split = context.get("split")
+        level = context.get("level")
+        if split is None or level is None:
+            raise ValueError("split_level context requires both 'split' and 'level'.")
+
+        ret = self._inflate_missing_split_level(split=split, level=level)
+        if columns is not None:
+            missing = sorted(set(columns).difference(set(map(str, ret.columns))))
+            if missing:
+                raise ValueError(
+                    "Expanded consider_missing data only exposes minimal UMI-wise columns. "
+                    f"Missing requested columns: {missing}"
+                )
+            ret = ret[columns]
+        return ret
     
     def flag_synthetic(self):
         self.metadata["synthetic"]=True
@@ -1274,6 +1520,9 @@ class scMPRA_data:
                 # Dask expression objects are immutable and not reliably deepcopy-able.
                 # Keep a graph reference; deep-copy the rest of object state.
                 setattr(result, k, v)
+            elif k == "_consider_missing_cache":
+                # Cache can contain Dask objects; rebuild lazily in the copy.
+                setattr(result, k, None)
             else:
                 setattr(result, k, copy.deepcopy(v, memo))
 
@@ -1336,6 +1585,7 @@ class scMPRA_data:
             meta_dict = json.load(f)
         for k, v in meta_dict.items():
             setattr(ret, k, v)
+        ret._ensure_consider_missing_defaults()
 
         ret.table_type = _strict_mpra_table_type(ret.data.columns)
         assert ret.table_type in {"mpra_readwise", "mpra_umiwise"}, "Malformed table."
@@ -1364,7 +1614,7 @@ class scMPRA_data:
         ddf = ddf.map_partitions(_densify_sparse_partition, meta=meta)
         ddf.to_parquet(base / "data.parquet", engine="pyarrow", compression="gzip", write_index=False, overwrite=True)
 
-        nondata = {key: val for key, val in self.__dict__.items() if key != "data"}
+        nondata = {key: val for key, val in self.__dict__.items() if key not in {"data", "_consider_missing_cache"}}
         with open(base / "members.json", "w") as f:
             json.dump(nondata, f, default=str)
   
@@ -1498,168 +1748,6 @@ class scMPRA_data:
 
         # Record that we performed this operation
         self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}",dropped_combos))
-
-    def consider_missing(
-        self,
-        max_memory_gb: float | None = 100.0,
-        peak_overhead_factor: float = 4.0,
-    ):
-        """
-        Expand UMI-wise data to all (rep_id, cell_bc, mpra_bc) combinations.
-
-        For each replicate, creates all combinations of observed cell barcodes and
-        MPRA barcodes. Missing combinations are added with `umis_mpra_bc = 0`.
-        Metadata are imputed from strict one-to-one mappings within each replicate:
-          - cell_bc -> cell_type
-          - mpra_bc -> cre_id
-
-        Keeps only the minimal UMI-wise columns:
-        `cell_bc, rep_id, cre_id, cell_type, mpra_bc, umis_mpra_bc`
-
-        Note
-        ----
-        Factor-like columns currently remain `string[pyarrow]`. A future
-        optimization may switch these to categorical codes to reduce memory
-        further, but this method does not do that yet.
-
-        Parameters
-        ----------
-        max_memory_gb : float | None
-            Approximate peak-memory cap (GB) used as a safety guard for the
-            expansion and joins. If None, no cap is applied.
-        peak_overhead_factor : float
-            Multiplier that inflates steady-state memory estimate to approximate
-            Dask merge/shuffle peak usage.
-        """
-        if self.table_type != "mpra_umiwise":
-            raise ValueError("consider_missing only supports UMI-wise tables.")
-
-        required = {"rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"}
-        missing_cols = sorted(required.difference(set(map(str, self.data.columns))))
-        if missing_cols:
-            raise ValueError(
-                "consider_missing requires columns "
-                f"{sorted(required)}; missing {missing_cols}."
-            )
-
-        if max_memory_gb is not None and max_memory_gb <= 0:
-            raise ValueError("max_memory_gb must be positive or None.")
-        if peak_overhead_factor <= 0:
-            raise ValueError("peak_overhead_factor must be positive.")
-
-        ddf = self.data if _is_ddf(self.data) else dd.from_pandas(self.data, npartitions=2)
-        working = ddf[["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"]]
-
-        for col in ["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id"]:
-            null_count = int(working[col].isna().sum().compute())
-            if null_count:
-                raise ValueError(f"Column '{col}' contains {null_count} missing values; cannot impute mappings.")
-
-        for col in ["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id"]:
-            working[col] = working[col].astype("string[pyarrow]")
-
-        working["umis_mpra_bc"] = working["umis_mpra_bc"].map_partitions(
-            pd.to_numeric, errors="coerce", meta=("umis_mpra_bc", "float64")
-        ).fillna(0).astype("int64")
-
-        cell_map = working[["rep_id", "cell_bc", "cell_type"]].drop_duplicates()
-        mpra_map = working[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates()
-
-        bad_cells = (
-            cell_map.groupby(["rep_id", "cell_bc"])
-            .size()
-            .rename("n_cell_type")
-            .reset_index()
-        )
-        bad_cells = bad_cells[bad_cells["n_cell_type"] > 1]
-        n_bad_cells = int(bad_cells.shape[0].compute())
-        if n_bad_cells:
-            sample = _to_pandas_df(bad_cells.head(10)).to_dict("records")
-            raise ValueError(
-                "Non-unique mapping detected for (rep_id, cell_bc) -> cell_type. "
-                f"Found {n_bad_cells} ambiguous keys. Examples: {sample}"
-            )
-
-        bad_mpras = (
-            mpra_map.groupby(["rep_id", "mpra_bc"])
-            .size()
-            .rename("n_cre_id")
-            .reset_index()
-        )
-        bad_mpras = bad_mpras[bad_mpras["n_cre_id"] > 1]
-        n_bad_mpras = int(bad_mpras.shape[0].compute())
-        if n_bad_mpras:
-            sample = _to_pandas_df(bad_mpras.head(10)).to_dict("records")
-            raise ValueError(
-                "Non-unique mapping detected for (rep_id, mpra_bc) -> cre_id. "
-                f"Found {n_bad_mpras} ambiguous keys. Examples: {sample}"
-            )
-
-        observed = (
-            working.groupby(["rep_id", "cell_bc", "mpra_bc"])["umis_mpra_bc"]
-            .sum()
-            .reset_index()
-        )
-
-        n_cells = cell_map.groupby("rep_id").size().rename("n_cells").reset_index()
-        n_mpras = mpra_map.groupby("rep_id").size().rename("n_mpras").reset_index()
-        rep_sizes = n_cells.merge(n_mpras, on="rep_id", how="inner")
-        rep_sizes["target_rows"] = rep_sizes["n_cells"] * rep_sizes["n_mpras"]
-
-        expanded_rows = int(rep_sizes["target_rows"].sum().compute())
-        observed_rows = int(observed.shape[0].compute())
-        rows_added = max(0, expanded_rows - observed_rows)
-
-        # Approximate memory model:
-        # - string[pyarrow] columns: avg UTF8 bytes + offset/null overhead
-        # - plus coarse structural bytes/row for index+frame bookkeeping
-        avg_str_len = {}
-        for col in ["rep_id", "cell_bc", "mpra_bc", "cre_id", "cell_type"]:
-            avg_str_len[col] = float(working[col].str.len().mean().compute())
-
-        per_string_overhead = 4.125  # 4-byte offset + 1-bit null bitmap
-        string_cols = ["rep_id", "cell_bc", "mpra_bc", "cre_id", "cell_type"]
-        bytes_per_row_strings = sum(avg_str_len[col] + per_string_overhead for col in string_cols)
-        bytes_per_row_structural = 24.0  # coarse index/dataframe bookkeeping allowance
-        steady_bytes_est = expanded_rows * (bytes_per_row_strings + bytes_per_row_structural)
-        peak_bytes_est = steady_bytes_est * float(peak_overhead_factor)
-        peak_gb_est = peak_bytes_est / 1_000_000_000.0
-
-        if max_memory_gb is not None and peak_gb_est > float(max_memory_gb):
-            raise ValueError(
-                "consider_missing estimated peak memory "
-                f"{peak_gb_est:.2f} GB exceeds max_memory_gb={max_memory_gb}. "
-                "Increase max_memory_gb, lower data size, or skip this transform."
-            )
-
-        full = cell_map.merge(mpra_map, on="rep_id", how="inner")
-        expanded = full.merge(observed, on=["rep_id", "cell_bc", "mpra_bc"], how="left")
-        expanded["umis_mpra_bc"] = expanded["umis_mpra_bc"].fillna(0).astype("int64")
-
-        keep = ["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]
-        expanded = expanded[keep]
-
-        self.data = _optimize_mpra_ddf(expanded)
-        self.table_type = "mpra_umiwise"
-        self.operations.append(
-            (
-                "consider_missing",
-                {
-                    "observed_rows": observed_rows,
-                    "expanded_rows": expanded_rows,
-                    "rows_added": rows_added,
-                    "max_memory_gb": max_memory_gb,
-                    "peak_overhead_factor": peak_overhead_factor,
-                    "estimated_peak_memory_gb": peak_gb_est,
-                },
-            )
-        )
-        logger.info(
-            f"consider_missing expanded {observed_rows} observed rows to "
-            f"{expanded_rows} rows by adding {rows_added} zero rows. "
-            f"Estimated peak memory: {peak_gb_est:.2f} GB "
-            f"(cap={max_memory_gb}, factor={peak_overhead_factor})."
-        )
 
     @unimplemented
     def round_down_zeroes():
@@ -1903,8 +1991,12 @@ def standard_fit(client,data,split,disable_mom=False):
     specified by split.
     """
 
-    data = data.data
-    levels = _series_unique_str(data[split])
+    if not isinstance(data, scMPRA_data):
+        raise TypeError("standard_fit expects an scMPRA_data object.")
+
+    raw = data.get_data(include_missing=False)
+    levels = _series_unique_str(raw[split])
+    use_missing = bool(getattr(data, "consider_missing_enabled", False))
 
     mat_resource={}
     #if split=="cell_type":
@@ -1912,16 +2004,22 @@ def standard_fit(client,data,split,disable_mom=False):
     #else:
     #    mat_resource={"CRE_DESIGN":1}
 
-    def _subset_to_pandas(dat, split_col, level):
-        subset = dat[dat[split_col] == level]
+    def _subset_to_pandas(subset):
         if isinstance(subset, dd.DataFrame):
             subset = subset.compute()
         return _prepare_subset_for_modeling(subset)
 
-    subset_futures = {
-        t: client.submit(_subset_to_pandas, data, split, t)
-        for t in levels
-    }
+    subset_inputs = {}
+    for t in levels:
+        if use_missing:
+            subset_inputs[t] = data.get_data(
+                include_missing=True,
+                context={"kind": "split_level", "split": split, "level": t},
+            )
+        else:
+            subset_inputs[t] = raw[raw[split] == t]
+
+    subset_futures = {t: client.submit(_subset_to_pandas, subset_inputs[t]) for t in levels}
 
     mats_futures = {
         t: client.submit(
@@ -2269,13 +2367,20 @@ class ortho:
         split=params.broken_on
         anti=anti_split(split)
 
-        data=scMPRAdat.data
+        use_missing = bool(getattr(scMPRAdat, "consider_missing_enabled", False))
+        data = scMPRAdat.get_data(include_missing=False)
 
         QC={}
         for model_level in params.keys:
             #model level are the levels of the split
             #e.g. a by-cell-type model will have cell-type values for model_level
-            subset=data[data[split]==model_level]
+            if use_missing:
+                subset = scMPRAdat.get_data(
+                    include_missing=True,
+                    context={"kind": "split_level", "split": split, "level": model_level},
+                )
+            else:
+                subset = data[data[split] == model_level]
             
             data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
             data_means = _to_pandas(data_means)
@@ -2351,12 +2456,21 @@ class ortho:
         #Very Lame retry hack due to extremely rare failures in _hessian_se
         #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         with dask.annotate(retries=10):
+            td = self.training_data
+            td_raw = td.get_data(include_missing=False)
+            td_use_missing = bool(getattr(td, "consider_missing_enabled", False))
             if not self.by_cell_type is None:
                 for ct in self.by_cell_type.model.keys():
                     model_f = self.by_cell_type.model[ct]
                     design_f = self.by_cell_type_design[ct]
-                    df_ct = self.training_data.data[self.training_data.data["cell_type"] == ct]
-                    df_ct = _to_pandas_df(df_ct)
+                    if td_use_missing:
+                        df_ct = td.get_data(
+                            include_missing=True,
+                            context={"kind": "split_level", "split": "cell_type", "level": ct},
+                        )
+                    else:
+                        df_ct = td_raw[td_raw["cell_type"] == ct]
+                    df_ct = _prepare_subset_for_modeling(_to_pandas_df(df_ct))
                     by_ct[ct] = client.submit(
                         _build_wald_precomp_for_subset,
                         model_f,
@@ -2371,8 +2485,14 @@ class ortho:
                 for cr in self.by_cre.model.keys():
                     model_f = self.by_cre.model[cr]
                     design_f = self.by_cre_design[cr]
-                    df_cr = self.training_data.data[self.training_data.data["cre_id"] == cr]
-                    df_cr = _to_pandas_df(df_cr)
+                    if td_use_missing:
+                        df_cr = td.get_data(
+                            include_missing=True,
+                            context={"kind": "split_level", "split": "cre_id", "level": cr},
+                        )
+                    else:
+                        df_cr = td_raw[td_raw["cre_id"] == cr]
+                    df_cr = _prepare_subset_for_modeling(_to_pandas_df(df_cr))
                     by_cr[cr] = client.submit(
                         _build_wald_precomp_for_subset,
                         model_f,
@@ -2702,19 +2822,24 @@ def anti_split(split):
 
 def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
     """
-    Takes a dask client and a pandas DataFrame `dat` containing MPRA data.
+    Takes a dask client and MPRA data (DataFrame or scMPRA_data object).
     """
-    # Broadcast dat to all workers once
-    # probably want to change this later once dat is always a future
-    dat_future = client.scatter(dat, broadcast=True)
+    if isinstance(dat, scMPRA_data):
+        counts_obj = dat
+        raw = counts_obj.get_data(include_missing=False)
+        keys = _series_unique_str(raw[split])
+        use_missing = bool(getattr(counts_obj, "consider_missing_enabled", False))
+    else:
+        counts_obj = None
+        raw = dat
+        keys = _series_unique_str(raw[split])
+        use_missing = False
 
-    def process_key(key, dat):
-        relevant_subset = dat[dat[split] == key]
+    def process_subset(key, relevant_subset):
         if isinstance(relevant_subset, dd.DataFrame):
             relevant_subset = relevant_subset.compute()
         relevant_subset = _prepare_subset_for_modeling(relevant_subset)
-
-        relevant_subset=relevant_subset.drop(columns=[split])
+        relevant_subset = relevant_subset.drop(columns=[split])
 
         anti=anti_split(split)
         formula = Formula(f"umis_mpra_bc ~ C({anti}) + C(rep_id) - 1")
@@ -2734,8 +2859,16 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         
         return mat
 
-    keys = _series_unique_str(dat[split])
-    futures = [client.submit(process_key, key, dat_future) for key in keys]
+    futures = []
+    for key in keys:
+        if counts_obj is not None and use_missing:
+            subset = counts_obj.get_data(
+                include_missing=True,
+                context={"kind": "split_level", "split": split, "level": key},
+            )
+        else:
+            subset = raw[raw[split] == key]
+        futures.append(client.submit(process_subset, key, subset))
     results = client.gather(futures)
     return pd.concat(results)
 
@@ -2815,14 +2948,14 @@ class simulation_batch:
     def describe_primordial(self):
         """Generates and saves descriptions of the primordial which are necessary for subsequent simulation"""
         self.description_primordial_by_cre=describe_parameters(parameters=self.primordial.by_cre_parameters,
-                                                                   dat=self.primordial.training_data.data,
+                                                                   dat=self.primordial.training_data.get_data(include_missing=False),
                                                                    split="cre_id")
 
         self.description_primordial_by_cre=auto_partition(self.description_primordial_by_cre,
                                                               self.partition_mb)
 
         self.description_primordial_by_cell_type=describe_parameters(parameters=self.primordial.by_cell_type_parameters,
-                                                                     dat=self.primordial.training_data.data,
+                                                                     dat=self.primordial.training_data.get_data(include_missing=False),
                                                                      split="cell_type")
         
         self.description_primordial_by_cell_type=auto_partition(self.description_primordial_by_cell_type,
@@ -3298,7 +3431,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
         logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cell_type=describe_parameters(parameters=inp_ortho.by_cell_type_parameters,
-                            dat=inp_ortho.training_data.data,
+                            dat=inp_ortho.training_data.get_data(include_missing=False),
                             split="cell_type")
         
         by_cell_type=by_cell_type.set_index(['cell_type','cre_id'])
@@ -3317,7 +3450,7 @@ def versus_truth(ground_truth_mu:pd.DataFrame,inp_ortho:ortho):
         logger.warning("Missing parameters. Maybe run ortho.extract_params(client) first.")
     else:
         by_cre=describe_parameters(parameters=inp_ortho.by_cre_parameters,
-                            dat=inp_ortho.training_data.data,
+                            dat=inp_ortho.training_data.get_data(include_missing=False),
                             split="cre_id")
         
         by_cre=by_cre.set_index(['cell_type','cre_id'])
@@ -3411,12 +3544,32 @@ def _normalize_cre_label(label, scmpra: scMPRA_data):
     if label is None or (isinstance(label, float) and pd.isna(label)):
         return None
     s = str(label)
-    if "cre_id_original" in scmpra.data.columns:
-        df = _to_pandas_df(scmpra.data[["cre_id", "cre_id_original"]]).dropna()
+    sc_data = scmpra.get_data(include_missing=False)
+    if "cre_id_original" in sc_data.columns:
+        df = _to_pandas_df(sc_data[["cre_id", "cre_id_original"]]).dropna()
         # Was this original label collapsed to 'reference'?
         if ((df["cre_id_original"] == s) & (df["cre_id"] == "reference")).any():
             return "reference"
     return s
+
+def _policy_subset_for_counts(
+    counts: "scMPRA_data",
+    *,
+    split: str,
+    level: str,
+    columns: "list[str] | None" = None,
+):
+    if getattr(counts, "consider_missing_enabled", False):
+        return counts.get_data(
+            include_missing=True,
+            context={"kind": "split_level", "split": split, "level": str(level)},
+            columns=columns,
+        )
+    raw = counts.get_data(include_missing=False)
+    subset = raw[raw[split] == str(level)]
+    if columns is not None:
+        subset = subset[columns]
+    return subset
 
 class HypothesisSet:
     """
@@ -3557,8 +3710,13 @@ def make_by_celltype_hypotheses(
     cell_type = str(comparison_cell_type)
 
     # What CREs exist in this cell type?
-    df = counts.data
-    available = _series_unique_str(df[df["cell_type"] == cell_type]["cre_id"])
+    df = _policy_subset_for_counts(
+        counts,
+        split="cell_type",
+        level=cell_type,
+        columns=["cre_id"],
+    )
+    available = _series_unique_str(df["cre_id"])
 
     if comparison_cres == "all":
         cand = available.copy()
@@ -3620,8 +3778,13 @@ def make_by_cre_hypotheses(
     cre = str(comparison_cre)
 
     # What cell types exist for this CRE?
-    df = counts.data
-    available = _series_unique_str(df[df["cre_id"] == cre]["cell_type"])
+    df = _policy_subset_for_counts(
+        counts,
+        split="cre_id",
+        level=cre,
+        columns=["cell_type"],
+    )
+    available = _series_unique_str(df["cell_type"])
 
     # Pick/validate reference cell type
     # Normalize the reference to internal labeling (e.g., "Pluripotent" -> "reference")
@@ -3697,7 +3860,7 @@ def make_all_by_celltype_hypotheses(
     if not isinstance(counts, scMPRA_data):
         raise TypeError("counts must be an scMPRA_data object.")
 
-    all_cts = sorted(_series_unique_str(counts.data["cell_type"]))
+    all_cts = sorted(_series_unique_str(counts.get_data(include_missing=False)["cell_type"]))
 
     # Optional include/exclude
     if include_cell_types is not None:
@@ -3769,7 +3932,7 @@ def make_all_by_cre_hypotheses(
     if not isinstance(counts, scMPRA_data):
         raise TypeError("counts must be an scMPRA_data object.")
 
-    all_cres = sorted(_series_unique_str(counts.data["cre_id"]))
+    all_cres = sorted(_series_unique_str(counts.get_data(include_missing=False)["cre_id"]))
     if drop_reference_cre and "reference" in all_cres:
         all_cres.remove("reference")
 
@@ -3831,7 +3994,12 @@ def make_bootstrap_activity_hypotheses(
     if not hasattr(counts, "data"):
         raise TypeError("counts must be an scMPRA_data object with a `.data` DataFrame.")
 
-    df = counts.data
+    if getattr(counts, "consider_missing_enabled", False):
+        warnings.warn(
+            "[make_bootstrap_activity_hypotheses] consider_missing policy is enabled, "
+            "but bootstrap paths use raw data semantics."
+        )
+    df = counts.get_data(include_missing=False)
     all_cres = sorted(_series_unique_str(df["cre_id"]))
 
     # Controls: explicit -> as provided; else try 'reference'
@@ -3951,7 +4119,7 @@ def canonicalize_hypotheses(hs: HypothesisSet, scmpra: scMPRA_data, inplace: boo
 
     # 2) CREs: any original CRE that was flattened to "reference" -> "reference" (vectorized)
     #    We only need the set of originals that ended up as 'reference'
-    sc_data = getattr(scmpra, "data", pd.DataFrame())
+    sc_data = scmpra.get_data(include_missing=False) if isinstance(scmpra, scMPRA_data) else pd.DataFrame()
     if "cre_id_original" in getattr(sc_data, "columns", []):
         collapsed = _series_unique_str(
             sc_data[sc_data["cre_id"] == "reference"]["cre_id_original"]
@@ -4642,24 +4810,41 @@ def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     full counts dataframe for every hypothesis row, which drastically
     reduces overhead when running under Dask.
     """
-    if hasattr(models_or_counts, "data"):
-        df = models_or_counts.data[["cell_type", "cre_id", "umis_mpra_bc"]]
-    elif hasattr(models_or_counts, "training_data"):
-        df = models_or_counts.training_data.data[["cell_type", "cre_id", "umis_mpra_bc"]]
+    if isinstance(models_or_counts, scMPRA_data):
+        counts_obj = models_or_counts
+    elif hasattr(models_or_counts, "training_data") and isinstance(models_or_counts.training_data, scMPRA_data):
+        counts_obj = models_or_counts.training_data
     else:
-        raise TypeError("MWU requires a scMPRA_data object (UMI-wise) or training data attribute to be in ortho object.")
+        raise TypeError("MWU requires a scMPRA_data object (or ortho with scMPRA_data training_data).")
 
-    df = _to_pandas_df(df).copy()
-    df["cell_type"] = df["cell_type"].astype(str)
-    df["cre_id"] = df["cre_id"].astype(str)
-    df["umis_mpra_bc"] = pd.to_numeric(df["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
+    use_missing = bool(getattr(counts_obj, "consider_missing_enabled", False))
+    counts_dict = {}
 
-    # Group once: (cell_type, cre_id) → np.array of counts
-    grouped = (
-        df.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
-          .apply(lambda s: s.to_numpy())
-    )
-    counts_dict = {key: arr for key, arr in grouped.items()}
+    if use_missing:
+        ct_levels = _series_unique_str(counts_obj.get_data(include_missing=False, columns=["cell_type"])["cell_type"])
+        for ct in ct_levels:
+            sub = counts_obj.get_data(
+                include_missing=True,
+                context={"kind": "split_level", "split": "cell_type", "level": ct},
+                columns=["cell_type", "cre_id", "umis_mpra_bc"],
+            )
+            pdf = _to_pandas_df(sub).copy()
+            pdf["cell_type"] = pdf["cell_type"].astype(str)
+            pdf["cre_id"] = pdf["cre_id"].astype(str)
+            pdf["umis_mpra_bc"] = pd.to_numeric(pdf["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
+            grouped = pdf.groupby(["cell_type", "cre_id"])["umis_mpra_bc"].apply(lambda s: s.to_numpy())
+            counts_dict.update({key: arr for key, arr in grouped.items()})
+    else:
+        df = counts_obj.get_data(include_missing=False, columns=["cell_type", "cre_id", "umis_mpra_bc"])
+        df = _to_pandas_df(df).copy()
+        df["cell_type"] = df["cell_type"].astype(str)
+        df["cre_id"] = df["cre_id"].astype(str)
+        df["umis_mpra_bc"] = pd.to_numeric(df["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
+        grouped = (
+            df.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
+            .apply(lambda s: s.to_numpy())
+        )
+        counts_dict = {key: arr for key, arr in grouped.items()}
 
     return {"counts": counts_dict}
 
@@ -4801,11 +4986,20 @@ def _bootstrap_build_bundle(
       - Filters to only CREs referenced by the hypothesis set (comparison + control).
     """
     # ---- Validate counts object ----
-    counts = models_or_counts
-    if not hasattr(counts, "data"):
-        raise TypeError("bootstrap_activity expects a scMPRA_data-like object with a `.data` DataFrame.")
+    if isinstance(models_or_counts, scMPRA_data):
+        counts = models_or_counts
+    elif hasattr(models_or_counts, "training_data") and isinstance(models_or_counts.training_data, scMPRA_data):
+        counts = models_or_counts.training_data
+    else:
+        raise TypeError("bootstrap_activity expects scMPRA_data (or ortho with scMPRA_data training_data).")
 
-    df = counts.data
+    if getattr(counts, "consider_missing_enabled", False):
+        warnings.warn(
+            "[bootstrap_activity] consider_missing policy is enabled, "
+            "but bootstrap uses raw data semantics (no missing inflation)."
+        )
+
+    df = counts.get_data(include_missing=False)
     needed = {"cell_type", "cre_id", "rep_id", "cell_bc", "transfection_bc"}
     missing = sorted(needed - set(df.columns))
     if missing:
