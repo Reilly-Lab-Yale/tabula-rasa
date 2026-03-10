@@ -34,7 +34,7 @@ def test_consider_missing_expands_replicate_cartesian_and_zero_fills():
     )
 
     obj = _make_obj(pdf)
-    obj.consider_missing(max_rows=1000)
+    obj.consider_missing(max_memory_gb=1.0)
     out = obj.data.compute().sort_values(["rep_id", "cell_bc", "mpra_bc"]).reset_index(drop=True)
 
     assert list(out.columns) == ["cell_bc", "rep_id", "cre_id", "cell_type", "mpra_bc", "umis_mpra_bc"]
@@ -58,6 +58,7 @@ def test_consider_missing_expands_replicate_cartesian_and_zero_fills():
     assert payload["observed_rows"] == 4
     assert payload["expanded_rows"] == 6
     assert payload["rows_added"] == 2
+    assert payload["estimated_peak_memory_gb"] > 0
 
 
 def test_consider_missing_rejects_non_umiwise_tables():
@@ -123,7 +124,7 @@ def test_consider_missing_rejects_ambiguous_mpra_mapping():
         obj.consider_missing()
 
 
-def test_consider_missing_respects_max_rows_guard():
+def test_consider_missing_respects_memory_guard():
     pdf = pd.DataFrame(
         {
             "rep_id": ["r1", "r1", "r1", "r1"],
@@ -135,6 +136,5 @@ def test_consider_missing_respects_max_rows_guard():
         }
     )
     obj = _make_obj(pdf)
-    # expanded rows would be 2*2=4
-    with pytest.raises(ValueError, match="max_rows"):
-        obj.consider_missing(max_rows=3)
+    with pytest.raises(ValueError, match="max_memory_gb"):
+        obj.consider_missing(max_memory_gb=1e-9)

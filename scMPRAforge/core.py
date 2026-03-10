@@ -1499,7 +1499,11 @@ class scMPRA_data:
         # Record that we performed this operation
         self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}",dropped_combos))
 
-    def consider_missing(self, max_rows: int | None = 50_000_000):
+    def consider_missing(
+        self,
+        max_memory_gb: float | None = 100.0,
+        peak_overhead_factor: float = 4.0,
+    ):
         """
         Expand UMI-wise data to all (rep_id, cell_bc, mpra_bc) combinations.
 
@@ -1512,10 +1516,20 @@ class scMPRA_data:
         Keeps only the minimal UMI-wise columns:
         `cell_bc, rep_id, cre_id, cell_type, mpra_bc, umis_mpra_bc`
 
+        Note
+        ----
+        Factor-like columns currently remain `string[pyarrow]`. A future
+        optimization may switch these to categorical codes to reduce memory
+        further, but this method does not do that yet.
+
         Parameters
         ----------
-        max_rows : int | None
-            Safety cap on total expanded row count. If None, no cap is applied.
+        max_memory_gb : float | None
+            Approximate peak-memory cap (GB) used as a safety guard for the
+            expansion and joins. If None, no cap is applied.
+        peak_overhead_factor : float
+            Multiplier that inflates steady-state memory estimate to approximate
+            Dask merge/shuffle peak usage.
         """
         if self.table_type != "mpra_umiwise":
             raise ValueError("consider_missing only supports UMI-wise tables.")
@@ -1528,8 +1542,10 @@ class scMPRA_data:
                 f"{sorted(required)}; missing {missing_cols}."
             )
 
-        if max_rows is not None and max_rows <= 0:
-            raise ValueError("max_rows must be positive or None.")
+        if max_memory_gb is not None and max_memory_gb <= 0:
+            raise ValueError("max_memory_gb must be positive or None.")
+        if peak_overhead_factor <= 0:
+            raise ValueError("peak_overhead_factor must be positive.")
 
         ddf = self.data if _is_ddf(self.data) else dd.from_pandas(self.data, npartitions=2)
         working = ddf[["rep_id", "cell_bc", "cell_type", "mpra_bc", "cre_id", "umis_mpra_bc"]]
@@ -1594,10 +1610,26 @@ class scMPRA_data:
         observed_rows = int(observed.shape[0].compute())
         rows_added = max(0, expanded_rows - observed_rows)
 
-        if max_rows is not None and expanded_rows > int(max_rows):
+        # Approximate memory model:
+        # - string[pyarrow] columns: avg UTF8 bytes + offset/null overhead
+        # - plus coarse structural bytes/row for index+frame bookkeeping
+        avg_str_len = {}
+        for col in ["rep_id", "cell_bc", "mpra_bc", "cre_id", "cell_type"]:
+            avg_str_len[col] = float(working[col].str.len().mean().compute())
+
+        per_string_overhead = 4.125  # 4-byte offset + 1-bit null bitmap
+        string_cols = ["rep_id", "cell_bc", "mpra_bc", "cre_id", "cell_type"]
+        bytes_per_row_strings = sum(avg_str_len[col] + per_string_overhead for col in string_cols)
+        bytes_per_row_structural = 24.0  # coarse index/dataframe bookkeeping allowance
+        steady_bytes_est = expanded_rows * (bytes_per_row_strings + bytes_per_row_structural)
+        peak_bytes_est = steady_bytes_est * float(peak_overhead_factor)
+        peak_gb_est = peak_bytes_est / 1_000_000_000.0
+
+        if max_memory_gb is not None and peak_gb_est > float(max_memory_gb):
             raise ValueError(
-                f"consider_missing would create {expanded_rows} rows (> max_rows={max_rows}). "
-                "Increase max_rows to proceed."
+                "consider_missing estimated peak memory "
+                f"{peak_gb_est:.2f} GB exceeds max_memory_gb={max_memory_gb}. "
+                "Increase max_memory_gb, lower data size, or skip this transform."
             )
 
         full = cell_map.merge(mpra_map, on="rep_id", how="inner")
@@ -1616,13 +1648,17 @@ class scMPRA_data:
                     "observed_rows": observed_rows,
                     "expanded_rows": expanded_rows,
                     "rows_added": rows_added,
-                    "max_rows": max_rows,
+                    "max_memory_gb": max_memory_gb,
+                    "peak_overhead_factor": peak_overhead_factor,
+                    "estimated_peak_memory_gb": peak_gb_est,
                 },
             )
         )
         logger.info(
             f"consider_missing expanded {observed_rows} observed rows to "
-            f"{expanded_rows} rows by adding {rows_added} zero rows."
+            f"{expanded_rows} rows by adding {rows_added} zero rows. "
+            f"Estimated peak memory: {peak_gb_est:.2f} GB "
+            f"(cap={max_memory_gb}, factor={peak_overhead_factor})."
         )
 
     @unimplemented
