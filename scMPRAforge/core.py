@@ -177,8 +177,8 @@ MPRA_FACTOR_COLUMNS = {
     "transfection_umi",
     "biol_rep",
 }
-MPRA_SPARSE_COUNT_COLUMNS = {"reads", "reads_mpra_bc", "reads_transfection_bc", "reads_DNA"}
-MPRA_DENSE_COUNT_COLUMNS = {"umis_mpra_bc", "umis_transfection_bc"}
+MPRA_SPARSE_COUNT_COLUMNS = {"reads", "reads_mpra_bc", "reads_transfection_bc", "reads_DNA", "umis_mpra_bc"}
+MPRA_DENSE_COUNT_COLUMNS = {"umis_transfection_bc"}
 
 WARN_MULTI_TRANSFECTION_PERCENT=2.0
 
@@ -298,7 +298,15 @@ def _optimize_mpra_ddf(ddf: dd.DataFrame) -> dd.DataFrame:
         ddf[col] = ddf[col].astype("string[pyarrow]")
 
     for col in sorted(MPRA_SPARSE_COUNT_COLUMNS.intersection(ddf.columns)):
-        ddf[col] = ddf[col].fillna(0).astype("int64").astype(pd.SparseDtype("int64", fill_value=0))
+        if pd.api.types.is_numeric_dtype(ddf[col].dtype):
+            numeric = ddf[col].fillna(0)
+        else:
+            numeric = ddf[col].map_partitions(
+                pd.to_numeric,
+                errors="coerce",
+                meta=(col, "float64"),
+            ).fillna(0)
+        ddf[col] = numeric.astype("int64").astype(pd.SparseDtype("int64", fill_value=0))
 
     for col in sorted(MPRA_DENSE_COUNT_COLUMNS.intersection(ddf.columns)):
         if pd.api.types.is_numeric_dtype(ddf[col].dtype):
@@ -317,6 +325,14 @@ def _densify_sparse_partition(pdf: pd.DataFrame) -> pd.DataFrame:
     for col in pdf.columns:
         if pd.api.types.is_sparse(pdf[col].dtype):
             pdf[col] = pdf[col].sparse.to_dense().astype("int64")
+    return pdf
+
+def _prepare_subset_for_modeling(pdf: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure model regressands are dense numeric arrays at fit/design boundaries.
+    """
+    pdf = pdf.copy()
+    pdf["umis_mpra_bc"] = pd.to_numeric(pdf["umis_mpra_bc"], errors="coerce").fillna(0).astype("int64")
     return pdf
 
 import re
@@ -1739,9 +1755,7 @@ def standard_fit(client,data,split,disable_mom=False):
         subset = dat[dat[split_col] == level]
         if isinstance(subset, dd.DataFrame):
             subset = subset.compute()
-        subset = subset.copy()
-        subset["umis_mpra_bc"] = pd.to_numeric(subset["umis_mpra_bc"], errors="coerce").fillna(0).astype("int64")
-        return subset
+        return _prepare_subset_for_modeling(subset)
 
     subset_futures = {
         t: client.submit(_subset_to_pandas, data, split, t)
@@ -2537,6 +2551,7 @@ def get_cell_counts(client: Client, dat: pd.DataFrame, split: str):
         relevant_subset = dat[dat[split] == key]
         if isinstance(relevant_subset, dd.DataFrame):
             relevant_subset = relevant_subset.compute()
+        relevant_subset = _prepare_subset_for_modeling(relevant_subset)
 
         relevant_subset=relevant_subset.drop(columns=[split])
 
