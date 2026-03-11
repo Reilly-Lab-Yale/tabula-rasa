@@ -1559,7 +1559,8 @@ class scMPRA_data:
         """
         Returns a <scMPRA_data> object with data loaded from `filepath`.
         """
-        tab = dd.read_csv(filepath, sep="\t", blocksize="64MB")
+        # Smaller blocks -> more partitions -> better concurrency on load
+        tab = dd.read_csv(filepath, sep="\t", blocksize="32MB")
         tabtype = _strict_mpra_table_type(tab.columns)
         assert tabtype in {"mpra_readwise", "mpra_umiwise"}, "Malformed table."
 
@@ -1691,63 +1692,67 @@ class scMPRA_data:
 
         self.operations.append(f"cut_chimeric_reads, threshold={threshold}")
     
+
     def ortho_filter(self):
         """
-        Removes combinations of cre_id, cell_type which have less than MIN_PTS non-zero observations. 
-        This is much stricter than filter_low_umi_count
+        Removes combinations of (cre_id, cell_type) with < MIN_PTS non-zero entries.
+        Dask-native implementation to preserve parallelism.
         """
         tabtype = table_type(self.data.columns)
         assert tabtype == "mpra_umiwise", "Malformed table."
 
-        # Force global counting on a narrow projection to avoid any partition/planner edge-cases.
-        working = _to_pandas_df(self.data[["cell_type", "cre_id", "umis_mpra_bc"]]).copy()
-        working["umis_mpra_bc"] = pd.to_numeric(working["umis_mpra_bc"], errors="coerce").fillna(0)
+        ddf = self.data
 
+        # Ensure numeric counts; remain on Dask
+        if pd.api.types.is_numeric_dtype(ddf["umis_mpra_bc"].dtype):
+            ddf = ddf.assign(umis_mpra_bc=ddf["umis_mpra_bc"].fillna(0))
+        else:
+            numeric = ddf["umis_mpra_bc"].map_partitions(
+                pd.to_numeric, errors="coerce", meta=("umis_mpra_bc", "float64")
+            ).fillna(0)
+            ddf = ddf.assign(umis_mpra_bc=numeric)
+
+        # Count non-zero observations per key
         nonzero_counts = (
-            working[working["umis_mpra_bc"] > 0]
-            .groupby(["cell_type", "cre_id"], as_index=False)
-            .size()
-            .rename(columns={"size": "nonzero_count"})
+            ddf[ddf["umis_mpra_bc"] > 0]
+            .groupby(["cell_type", "cre_id"]).size()
+            .to_frame("nonzero_count")
         )
 
-        valid_combos_pd = nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS][["cell_type", "cre_id"]]
-        all_combos_pd = working[["cell_type", "cre_id"]].drop_duplicates()
+        valid_combos = (
+            nonzero_counts[nonzero_counts["nonzero_count"] >= MIN_PTS]
+            .reset_index()[["cell_type", "cre_id"]]
+        )
 
-        # Compute dropped combos
-        dropped_combos = pd.merge(all_combos_pd, valid_combos_pd, on=['cell_type', 'cre_id'], how='outer', indicator=True)
-        dropped_combos = dropped_combos[dropped_combos['_merge'] == 'left_only'][['cell_type', 'cre_id']]
+        # Parallel filter via merge
+        self.data = ddf.merge(valid_combos, on=["cell_type", "cre_id"], how="inner")
 
-        # Warn if reference was filtered out
+        # Stats on unique keys only (small); OK to compute here
+        all_combos_pd = ddf[["cell_type", "cre_id"]].drop_duplicates().compute()
+        valid_combos_pd = valid_combos.compute()
+        dropped_combos = (
+            all_combos_pd.merge(valid_combos_pd, on=["cell_type", "cre_id"], how="outer", indicator=True)
+            .query('_merge == "left_only"')[['cell_type', 'cre_id']]
+        )
+
         ref_mask = (
             (dropped_combos["cell_type"] == "reference")
             | (dropped_combos["cre_id"] == "reference")
         )
-
         if ref_mask.any():
-            n_ref = ref_mask.sum()
+            n_ref = int(ref_mask.sum())
             logger.warning(
-                f"ortho_filter removed {n_ref} combinations involving 'reference' "
+                f"ortho_filter removed {n_ref} combinations involving 'reference'"
             )
 
-        # Keep only rows matching valid (cell_type, cre_id) combos
-        if _is_ddf(self.data):
-            valid_combos_pd = valid_combos_pd.copy()
-            valid_combos_pd["cell_type"] = valid_combos_pd["cell_type"].astype("string[pyarrow]")
-            valid_combos_pd["cre_id"] = valid_combos_pd["cre_id"].astype("string[pyarrow]")
-            nparts = max(1, min(64, int(np.ceil(len(valid_combos_pd) / 50_000))))
-            valid_combos = dd.from_pandas(valid_combos_pd, npartitions=nparts)
-            self.data = self.data.merge(valid_combos, on=["cell_type", "cre_id"], how="inner")
-        else:
-            self.data = self.data.merge(valid_combos_pd, on=["cell_type", "cre_id"], how="inner")
+        n_total = int(len(all_combos_pd))
+        n_dropped = int(len(dropped_combos))
+        logger.info(
+            f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries."
+        )
 
-        # Print stats
-        n_total = len(all_combos_pd)
-        n_dropped = len(dropped_combos)
-        logger.info(f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries.")
+        self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}", dropped_combos))
 
-
-        # Record that we performed this operation
-        self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}",dropped_combos))
 
     @unimplemented
     def round_down_zeroes():
