@@ -2,6 +2,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
+import warnings
 
 pytest.importorskip("dask")
 dd = pytest.importorskip("dask.dataframe")
@@ -46,7 +47,8 @@ def test_consider_missing_policy_defaults_and_setter_validation():
     assert obj.consider_missing_peak_overhead_factor == 4.0
     assert obj.consider_missing_subset_semantics == "full_replicate"
 
-    obj.set_consider_missing(True, max_memory_gb=120.0, peak_overhead_factor=3.0)
+    with pytest.warns(UserWarning, match="enabled after ortho_filter"):
+        obj.set_consider_missing(True, max_memory_gb=120.0, peak_overhead_factor=3.0)
     assert obj.consider_missing_enabled is True
     assert obj.consider_missing_max_memory_gb == 120.0
     assert obj.consider_missing_peak_overhead_factor == 3.0
@@ -55,6 +57,27 @@ def test_consider_missing_policy_defaults_and_setter_validation():
         obj.set_consider_missing(True, max_memory_gb=0.0)
     with pytest.raises(ValueError, match="peak_overhead_factor"):
         obj.set_consider_missing(True, peak_overhead_factor=0.0)
+
+
+def test_set_consider_missing_after_ortho_filter_does_not_warn():
+    pdf = pd.DataFrame(
+        {
+            "rep_id": ["r1", "r1", "r1", "r1"],
+            "cell_bc": ["c1", "c2", "c3", "c4"],
+            "cell_type": ["ctA", "ctA", "ctA", "ctA"],
+            "mpra_bc": ["m1", "m2", "m3", "m4"],
+            "cre_id": ["cre1", "cre1", "cre1", "cre2"],
+            "umis_mpra_bc": [1, 1, 1, 1],
+        }
+    )
+    obj = _make_obj(pdf)
+    obj.ortho_filter()
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        obj.set_consider_missing(True)
+
+    assert len(record) == 0
 
 
 def test_get_data_requires_split_context_when_enabled():

@@ -1142,6 +1142,7 @@ class scMPRA_data:
         self.consider_missing_peak_overhead_factor=4.0
         self.consider_missing_subset_semantics="full_replicate"
         self._consider_missing_cache=None
+        self._ortho_filter_applied=False
 
     def _ensure_consider_missing_defaults(self):
         if not hasattr(self, "consider_missing_enabled"):
@@ -1178,6 +1179,13 @@ class scMPRA_data:
             raise ValueError("max_memory_gb must be positive or None.")
         if peak_overhead_factor is not None and peak_overhead_factor <= 0:
             raise ValueError("peak_overhead_factor must be positive.")
+
+        if enabled and not getattr(self, "_ortho_filter_applied", False):
+            warnings.warn(
+                "consider_missing is typically enabled after ortho_filter(); "
+                "enabling it first can inflate unfiltered data and reduce cache reuse.",
+                UserWarning,
+            )
 
         self.consider_missing_enabled = bool(enabled)
         if max_memory_gb is not None:
@@ -1264,6 +1272,12 @@ class scMPRA_data:
             .sum()
             .reset_index()
         )
+        try:
+            client = get_client()
+        except ValueError:
+            client = None
+        if client is not None:
+            cell_map, mpra_map, observed = client.persist([cell_map, mpra_map, observed])
         ret = {
             "key": key,
             "cell_map": cell_map,
@@ -1751,6 +1765,8 @@ class scMPRA_data:
             f"Dropped {n_dropped} of {n_total} (cell_type, cre_id) combos with fewer than {MIN_PTS} nonzero entries."
         )
 
+        self._consider_missing_cache = None
+        self._ortho_filter_applied = True
         self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}", dropped_combos))
 
 
