@@ -63,6 +63,6 @@ Fix applied after this run:
 - Added SIGTERM handler to `shendure_consider_missing.py` so that `scancel` triggers a graceful Python shutdown (performance report + client/cluster close)
 
 Next configuration to try:
-- Investigate whether workers are truly OOM or hitting wall-time limits (check nanny logs more carefully)
-- Consider reducing `cluster_jobs` or further splitting work to avoid large shuffles
-- Consider using `repartition` more conservatively or avoiding P2P merges in `_subset_to_pandas`
+- Memory pressure on workers is the most likely culprit based on dashboard observation
+- Reduce `processes` from `2` to `1` so each worker gets the full `128G` instead of ~60G
+- Keep `cluster_jobs=8` so still 8 workers total (down from 16), each with 128G headroom

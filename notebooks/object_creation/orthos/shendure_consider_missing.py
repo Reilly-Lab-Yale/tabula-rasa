@@ -24,7 +24,7 @@ local=False
 if not local:
     worker_cores = 4
     worker_memory = "128G"
-    worker_processes = 2
+    worker_processes = 1
     cluster_jobs = 8
 
     cluster=SLURMCluster(
