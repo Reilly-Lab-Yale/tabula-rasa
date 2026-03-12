@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+
 #SBATCH --job-name=fit
 #SBATCH --partition=ycga
 #SBATCH --time=1-12:10:00
