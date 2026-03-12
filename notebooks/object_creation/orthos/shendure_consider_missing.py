@@ -8,9 +8,12 @@ from formulaic import Formula
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os
+import signal
 from tensorzinb.tensorzinb import TensorZINB
 import scMPRAforge as scm
 
+# Allow graceful shutdown via SIGTERM (e.g. scancel) so finally/context managers run
+signal.signal(signal.SIGTERM, lambda s, f: (_ for _ in ()).throw(KeyboardInterrupt()))
 
 ### create dask cluster ###
 
