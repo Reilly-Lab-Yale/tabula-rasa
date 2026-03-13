@@ -104,12 +104,10 @@ This section describes the various standard tabular formats used internally.
 
 ## `.scmpra` file format
 
-`.scmpra` files are parquet files (gzip-compressed) written by `scMPRA_data.to_parquet(...)`.
+`.scmpra` paths are directories written by `scMPRA_data.to_parquet(...)`.
 They contain:
-- the main table data (`scMPRA_data.data`)
-- serialized object members in parquet schema metadata under key `scMPRA_data.members`
-
-In practice, `.scmpra` is a filename convention over parquet, not a distinct binary container.
+- `data.parquet/` (gzip-compressed parquet dataset for `scMPRA_data.data`)
+- `members.json` (serialized object members other than `.data`)
 
 ## MPRA data formatting
 
@@ -159,7 +157,7 @@ UMI = unique molecular identifier
 
 Simulated UMI-wise data doesn't currently require cell barcode. 
 
-`scMPRA_data.from_tsv(...)` uses subset matching, so extra columns are allowed as long as required columns are present.
+`scMPRA_data.from_tsv(...)` enforces the spec strictly: required columns must be present and extra columns are rejected.
 
 Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
 This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
@@ -216,6 +214,5 @@ These tables store made-up ground truth, for the purposes of simulation.
 | abundance   | float               | Relative abundance in DNA library | T          |
 
 Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
-
 
 
