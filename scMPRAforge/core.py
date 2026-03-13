@@ -6203,8 +6203,9 @@ class de_novo_simulation:
             working=simulate_from_description(description)
             working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
             scd=scMPRA_data()
-    
+
             scd.data=working
+            scd.table_type="mpra_umiwise"
             
             scd.set_negative_controls(negative_controls)
             scd.set_reference_cell(reference_cell_type)
