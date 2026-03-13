@@ -6615,11 +6615,18 @@ def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
     plt.tight_layout()
     plt.show()
 
-def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_cres,minP,n_sims):
+def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_cres,minP,n_sims,cell_type="reference"):
     """
     Notebook helper function.
     Creates a de_novo_simulation in root, with a random name.
-    Assumes corresponding libraries. 
+    Assumes corresponding libraries.
+
+    Parameters
+    ----------
+    cell_type : str
+        Label for the simulated cell type in the ground truth and
+        cells_per_cell_type. Must match the index of bound.cells_per_cell_type.
+        Defaults to "reference" for backwards compatibility.
     """
     #create ground truth dataframe
     rng = np.random.default_rng()
@@ -6628,7 +6635,7 @@ def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_c
     names=[f"synthcre_{i}" for i in range(0,n_cres-1)]+["reference"]
 
     gt_df=pd.DataFrame({"cre_id":names,"mu":cre_gt})
-    gt_df["cell_type"]="reference"
+    gt_df["cell_type"]=cell_type
 
     # simulate libraries
     libraries=[simulate_library(CREs=gt_df["cre_id"],
