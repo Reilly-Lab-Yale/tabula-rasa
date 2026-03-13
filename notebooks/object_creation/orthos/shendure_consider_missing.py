@@ -22,10 +22,10 @@ from dask.distributed import Client, performance_report
 
 local=False
 if not local:
-    worker_cores = 4
+    worker_cores = 1
     worker_memory = "128G"
     worker_processes = 1
-    cluster_jobs = 8
+    cluster_jobs = 16
 
     cluster=SLURMCluster(
         cores=worker_cores,#cores per slurm job

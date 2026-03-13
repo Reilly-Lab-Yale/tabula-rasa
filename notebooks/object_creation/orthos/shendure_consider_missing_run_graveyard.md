@@ -66,3 +66,42 @@ Next configuration to try:
 - Memory pressure on workers is the most likely culprit based on dashboard observation
 - Reduce `processes` from `2` to `1` so each worker gets the full `128G` instead of ~60G
 - Keep `cluster_jobs=8` so still 8 workers total (down from 16), each with 128G headroom
+
+---
+
+## 2026-03-12 Attempt 3
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `36:10:00` walltime
+- Main job id: `1881657`, workers: `1881683`–`1881690`
+- Started: `2026-03-12 16:53`, failed: `2026-03-13 ~08:41` (~15.7 hours in)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=4, memory="128G", processes=1)`
+- `cluster.scale(jobs=8)`
+- Effective layout: `8` worker processes total, `~119.21 GiB` memory per worker process, `4` threads per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos with fewer than 3 nonzero entries
+- Fitting ran for ~15 hours before failure
+- Workers periodically hit `80%` memory budget (paused) then recovered, but eventually exceeded `95%` → nanny killed and restarted
+- "Unmanaged memory" warnings at 86–89 GiB on multiple workers — memory not released back to OS between tasks (likely Python/numpy/TF heap retention)
+- At least two workers hit the SLURM OOM killer directly: `slurmstepd: error: Detected 2 oom_kill events` (process exceeded SLURM's 128G hard limit, not just the Dask nanny threshold)
+- Multiple `_smart_matrix` tasks marked as **failed because 4 workers died** (at ~02:00, ~04:32, ~04:33, ~06:16)
+- Final `KilledWorker` raised during `.save()` → `flattened_copy()` → `future.result()` attempting to materialize a failed `_smart_matrix` future
+- SIGTERM handler worked: graceful shutdown printed `! Done, shutting down`; performance report was written
+
+Root cause:
+- With `4` threads per worker, up to 4 tasks run concurrently on a single 128 G node
+- Each task with `consider_missing=True` materializes a cartesian-product-expanded DataFrame, then builds dense design matrices in `_smart_matrix` (notably the dense `Z = C(rep_id)-1` indicator matrix)
+- The memory guard in `_inflate_missing_split_level` only estimates raw DataFrame size and caps at 100 GB; it does not account for downstream design matrix construction
+- Accumulated per-task memory from 4 concurrent tasks routinely exceeded 128 G → SLURM OOM kills → after 4 attempts, task permanently failed
+
+Fix applied after this run:
+- `worker_cores` reduced from `4` to `1` (single-threaded workers: exactly 1 task at a time per worker)
+- `cluster_jobs` increased from `8` to `16` to compensate for reduced per-worker parallelism
+
+Next configuration to try:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`, `cluster.scale(jobs=16)`
+- Effective layout: 16 single-threaded workers, each with 128 G exclusive to one task at a time
