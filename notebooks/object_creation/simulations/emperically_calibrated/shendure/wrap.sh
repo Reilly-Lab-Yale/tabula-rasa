@@ -10,8 +10,6 @@
 module load miniconda
 conda activate env_tzinb
 
-cd "$(dirname "$0")"
-
 jupyter nbconvert --to notebook --execute --inplace \
     --ExecutePreprocessor.timeout=-1 \
     shendure_power_mwu_all_cell_types.ipynb
