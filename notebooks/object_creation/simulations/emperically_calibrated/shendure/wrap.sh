@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=shend_pow
-#SBATCH --partition=day
-#SBATCH --time=18:00:00
+#SBATCH -A prio_reilly
+#SBATCH --partition=priority
+#SBATCH --time=18:10:00
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=32G
 #SBATCH --output=slurm-%j.out
