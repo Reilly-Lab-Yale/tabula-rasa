@@ -105,3 +105,36 @@ Fix applied after this run:
 Next configuration to try:
 - `SLURMCluster(cores=1, memory="128G", processes=1)`, `cluster.scale(jobs=16)`
 - Effective layout: 16 single-threaded workers, each with 128 G exclusive to one task at a time
+
+---
+
+## 2026-03-13 Attempt 4
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `36:10:00` walltime
+- Main job id: `1910351`, workers: `1910362`–`1910376` (15 running; `1910377` pending due to `QOSMaxMemoryPerUser`)
+- Started: `2026-03-13 10:26`, failed: `2026-03-13 ~19:58` (~9.5 hours in)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (only 15 launched; 1 blocked by QOS memory limit)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- Fitting ran for ~9.5 hours before failure
+- Workers again accumulated high unmanaged memory (~92 GiB), hit 80–95% thresholds, and were restarted by the Dask nanny (SIGKILL via signal 15)
+- Restarted workers disrupted an in-progress P2P shuffle → cascade of `P2PConsistencyError: No active shuffle ... found`
+- Final error: `MemoryError: Unable to allocate 560 MiB for an array with shape (73424955,) and dtype int64` in `_smart_matrix` → `formulaic` → `_get_columns_for_term`
+- Root cause: `formulaic` allocates a fully dense `int64` matrix before the `.astype(pd.SparseDtype(...))` conversion in `_smart_matrix`; for large cell types (73M rows) this intermediate allocation OOM'd workers already holding ~92 GiB of unmanaged data
+- SIGTERM handler worked: graceful shutdown printed `! Done, shutting down`; performance report written to `shendure_ortho_consider_missing_20260310_dask_performance_report.html`
+
+Fix applied after this run:
+- `_smart_matrix`: replaced `get_model_matrix(..., output='pandas')` + `.astype(SparseDtype)` with native sparse construction via `get_model_matrix(..., output='sparse')` — formulaic builds the CSC matrix directly from category indices with no dense intermediate
+- `y` (regressand) extracted directly as `data[["umis_mpra_bc"]]` (single column, no formula call needed)
+- `_tensorzinb_fit`: densify `nb_regressors` and `zi_regressors` once at top of function via `.toarray()` (scipy sparse API), since TensorZINB requires dense numpy throughout
+
+Next configuration to try:
+- Same worker layout (`cores=1, memory="128G", processes=1`, `scale(jobs=16)`)
+- Sparse design matrix construction should eliminate the dense intermediate OOM in `_smart_matrix`

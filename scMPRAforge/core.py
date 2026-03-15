@@ -1936,10 +1936,9 @@ def _smart_matrix(data,split):
     zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     
-    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
-    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
-
-    X = X.astype(pd.SparseDtype("int", fill_value=0))
+    y = data[["umis_mpra_bc"]]
+    X = Formula(nb_formula.split('~')[1].strip()).get_model_matrix(data, output='sparse')
+    Z = Formula(zi_formula).get_model_matrix(data, output='sparse')
     
     return {
         'nb_regressors':X,
@@ -1960,41 +1959,42 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     init_method takes "nb", "ones" or "pass".
     mom (method of moments) only implemented for by_cell_type models at the moment.
     """
+    import scipy.sparse as sp
+    endog = matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze()
+    nb_X = matricies["nb_regressors"]
+    zi_X = matricies["zi_regressors"]
+    nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
+    zi_X = zi_X.toarray() if sp.issparse(zi_X) else zi_X.to_numpy()
+
     if init_method=="nb":
-        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                        exog=matricies["nb_regressors"].to_numpy(),
-                        exog_infl=matricies["zi_regressors"].to_numpy())
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
         result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
         if not init_vals:
             raise ValueError("init_vals required for init_method=pass")
 
-        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                    exog=matricies["nb_regressors"].to_numpy(),
-                    exog_infl=matricies["zi_regressors"].to_numpy())
-        
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+
         result = zinbo.fit(return_history=True,init_weights=init_vals)
 
         del zinbo
 
     elif init_method=="ones":
-        num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
-        num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
-        if matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze().ndim == 1:
+        num_feat_zi = zi_X.shape[1]
+        num_feat_nb = nb_X.shape[1]
+        if endog.ndim == 1:
             num_out = 1
         else:
-            num_out = y.shape[1]
-        
+            num_out = endog.shape[1]
+
         ones_init = {}
         ones_init["x_mu"] = np.ones((num_feat_nb, num_out), dtype=np.float32)
         ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
         ones_init["theta"] = np.ones((1, num_out), dtype=np.float32)
-        
-        zinbo_ones = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                    exog=matricies["nb_regressors"].to_numpy(),
-                    exog_infl=matricies["zi_regressors"].to_numpy())
-        
+
+        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+
         result = zinbo_ones.fit(return_history=True,init_weights=ones_init)
 
         del zinbo_ones
