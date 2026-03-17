@@ -200,7 +200,30 @@ Observed result:
 
 Fix applied after this run:
 - Added `K.clear_session()` at the end of `_tensorzinb_fit` (after results extracted, before return) to explicitly release the TF/Keras session memory after each model fit
+- Identified fundamental problem: `consider_missing=True` inflates datasets to 12M–128M rows/cell type; NB design matrix (×211 CRE columns, float64) = 20–216 GB — 7 of 10 cell types exceed the 128 GB worker limit even with a single task; `nb_X.toarray()` in `_tensorzinb_fit` is therefore infeasible for most cell types regardless of session clearing
 
 Next configuration to try:
-- Same worker layout
-- TF session clear should prevent memory accumulation across tasks
+- Upgrade TensorZINB to accept sparse matrices natively (eliminate `nb_X.toarray()` altogether)
+- User upgraded TensorZINB in new conda env `tz` (TF 2.20, tf_keras 2.20.1); `.toarray()` calls already commented out in `core.py` in anticipation
+
+---
+
+## 2026-03-17 Pre-run notes / fixes applied
+
+Upgraded TensorZINB (`tz` conda env) assessed and two compatibility fixes applied before Attempt 7:
+
+**TensorZINB upgrade (sparse support):**
+- Added `SparseDense` custom layer: replaces `Dense` when input is sparse; uses `tf.sparse.sparse_dense_matmul` to avoid densification in the Keras graph
+- Sparse input detection flags (`_exog_is_sparse` etc.) in `__init__`; `_matrix_rank` / `_sparse_std` / `_sparse_col_mean` / `_sparse_dot` helpers replace numpy dense equivalents
+- `fit()`: `Input(sparse=True)` for sparse inputs; training via `tf.data.Dataset.from_tensors()` + `model.fit(dataset)`; LL retrieval via `SparseTensorValue` feeds to `K.function`
+- `_poisson_init_each`: skips statsmodels (can't handle sparse); uses intercept-only fallback
+- Migrated from `keras` (TF1-bundled) to `tf_keras` (standalone Keras 2 on TF2); keras 3.x present in env but not used by TensorZINB
+
+**Fix 1 — `K.clear_session()` backend mismatch (`core.py`):**
+- `tz` env has keras 3.13.2 alongside tf_keras 2.20.1; `import keras.backend as K` would call Keras 3's session clear, which does not clear the TF1 graph/session
+- Changed to `import tf_keras.backend as K` so `clear_session()` actually releases TF memory
+
+**Fix 2 — conda env (`wrap_shend_consider_missing.sh`):**
+- Changed `conda activate env_tensorzinb` → `conda activate tz`
+- Dask workers inherit the driver's Python binary; driver must be in `tz` for workers to use the sparse TensorZINB
+

@@ -9,7 +9,8 @@
 module reset
 module load miniconda
 #conda activate env_tzinb #bouchet
-conda activate env_tensorzinb #mccleary
+#conda activate env_tensorzinb #mccleary
+conda activate tz #mccleary (sparse TensorZINB)
 
 ipython shendure_consider_missing.py
 

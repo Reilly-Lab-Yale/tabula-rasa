@@ -1965,8 +1965,10 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     endog = matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze()
     nb_X = matricies["nb_regressors"]
     zi_X = matricies["zi_regressors"]
-    nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
-    zi_X = zi_X.toarray() if sp.issparse(zi_X) else zi_X.to_numpy()
+
+    #removing in anticipation of upgraded sparse-capable tensorzinb
+    #nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
+    #zi_X = zi_X.toarray() if sp.issparse(zi_X) else zi_X.to_numpy()
 
     if init_method=="nb":
         zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
@@ -2006,8 +2008,9 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
 
-    # Release TF/Keras session memory so it doesn't accumulate across tasks
-    import keras.backend as K
+    # Release tf_keras session memory so it doesn't accumulate across tasks.
+    # Must use tf_keras (not keras 3.x) to actually clear the TF1 graph session.
+    import tf_keras.backend as K
     K.clear_session()
 
     return result
