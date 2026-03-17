@@ -138,3 +138,69 @@ Fix applied after this run:
 Next configuration to try:
 - Same worker layout (`cores=1, memory="128G", processes=1`, `scale(jobs=16)`)
 - Sparse design matrix construction should eliminate the dense intermediate OOM in `_smart_matrix`
+
+---
+
+## 2026-03-15 Attempt 5
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `36:10:00` walltime
+- Main job id: `2155413`, workers: `2155415`–`2155429`
+- Started: `2026-03-15 18:02`, failed: `2026-03-16 ~04:51` (~10.8 hours in)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (15 running)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- **Sparse `_smart_matrix` fix worked** — no more OOM during design matrix construction; fitting ran successfully for hours
+- First `_label_tensorzinb_regressors` failure at `18:58` (worker 2155415), then many more across all workers
+- All failures identical: `AttributeError: 'csc_matrix' object has no attribute 'columns'` at `core.py:2110`
+- Root cause: `_label_tensorzinb_regressors` and `_matricies_to_order` accessed `.columns` on the design matrices, which is a pandas DataFrame attribute; the sparse `csc_matrix` returned by formulaic's `output='sparse'` does not have `.columns`
+- 1 worker also died from unrelated cause (`read-csv` task failed because 4 workers died)
+- **No memory warnings, no nanny restarts, no OOM kills** — major improvement over previous runs
+- SIGTERM handler worked; performance report written
+
+Resource usage (note: run failed at labeling stage, so later stages like `extract_params`/`save` materialization did not fully execute — actual peak for a successful run may be higher):
+- All workers requested `120 GiB`; actual MaxRSS ranged `8.0–31.8 GiB` (4–25% utilization)
+- Highest: worker `2155425` at `31.8 GiB` (30.3 GB per jobstats); most workers under `18 GiB`
+- CPU utilization `71–79%` across workers
+- Memory could potentially be trimmed to `64G` (~2x observed max) if a successful run confirms similar usage — but keeping `128G` for now given >4 hr run times and risk of spiky allocations in stages that didn't run
+
+Fix applied after this run:
+- `_smart_matrix` now stores column names as plain lists in the return dict: `nb_regressor_names` and `zi_regressor_names`, extracted from `ModelMatrix.model_spec.column_names` before the formulaic wrapper is stripped by Dask serialization
+- `_label_tensorzinb_regressors` and `_matricies_to_order` updated to read names from the dict keys, with fallback to `.columns` for backwards compatibility
+
+Next configuration to try:
+- Same worker layout
+- Column name fix should resolve the `AttributeError`
+
+---
+
+## 2026-03-16 Attempt 6
+
+Driver job:
+- Main job id: `2246714`, workers: `2246723`–`2246737`
+- Started: `2026-03-16 11:46`, still running at `2026-03-17 09:09` when last `_tensorzinb_fit` failure logged
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (15 running)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- Column name fix worked — no `AttributeError` in `_label_tensorzinb_regressors`
+- Fitting ran for many hours before failure; `_tensorzinb_fit` tasks permanently failed at `04:04`, `05:25`, `05:47`, `07:16`, `08:16`, `09:09` (each after 4 worker deaths)
+- Root cause: TF/Keras heap memory accumulates across tasks and is not released back to the OS between fits; after many tasks, workers reach ~87–90 GiB of unmanaged memory; `nb_X.toarray()` then tries to allocate the dense design matrix on top of that, tipping the worker over the 95% nanny budget → SIGKILL → restart → shuffle/task failure cascade
+- Exact error in `_tensorzinb_fit` at line 1968: `nb_X.toarray()` → `np.zeros(self.shape, ...)` → OOM
+
+Fix applied after this run:
+- Added `K.clear_session()` at the end of `_tensorzinb_fit` (after results extracted, before return) to explicitly release the TF/Keras session memory after each model fit
+
+Next configuration to try:
+- Same worker layout
+- TF session clear should prevent memory accumulation across tasks

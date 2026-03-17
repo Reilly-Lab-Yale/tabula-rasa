@@ -358,11 +358,11 @@ def _matricies_to_order(matricies):
     Helper function. Extracts column index order from matricies for use elsewhere.
     Replaces `Intercept` with `reference`.
     """
-    zi_idx=matricies["zi_regressors"].columns.to_list()
-    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_idx]
+    zi_names=matricies["zi_regressor_names"] if "zi_regressor_names" in matricies else list(matricies["zi_regressors"].columns)
+    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_names]
 
-    nb_idx=matricies["nb_regressors"].columns.to_list()
-    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_idx]
+    nb_names=matricies["nb_regressor_names"] if "nb_regressor_names" in matricies else list(matricies["nb_regressors"].columns)
+    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_names]
 
     return {'zi_idx':zi_idx,'nb_idx':nb_idx}
 
@@ -1942,8 +1942,10 @@ def _smart_matrix(data,split):
     
     return {
         'nb_regressors':X,
+        'nb_regressor_names':list(X.model_spec.column_names),
         'regressand':y,
         'zi_regressors':Z,
+        'zi_regressor_names':list(Z.model_spec.column_names),
         'model_type':model_type,
         'nb_formula':nb_formula,
         'zi_formula':zi_formula,
@@ -2003,7 +2005,11 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
-    
+
+    # Release TF/Keras session memory so it doesn't accumulate across tasks
+    import keras.backend as K
+    K.clear_session()
+
     return result
 
 def standard_fit(client,data,split,disable_mom=False):
@@ -2107,8 +2113,8 @@ class experiment_model:
         Meant to be submitted to a dask cluster.
         """
 
-        nb_regressor_names=list(dm["nb_regressors"].columns)
-        zi_regressor_names=list(dm["zi_regressors"].columns)
+        nb_regressor_names=dm["nb_regressor_names"] if "nb_regressor_names" in dm else list(dm["nb_regressors"].columns)
+        zi_regressor_names=dm["zi_regressor_names"] if "zi_regressor_names" in dm else list(dm["zi_regressors"].columns)
         model["weights"]["x_mu"] = pd.Series(model["weights"]["x_mu"].flatten(),
                                             index=nb_regressor_names)
         model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
