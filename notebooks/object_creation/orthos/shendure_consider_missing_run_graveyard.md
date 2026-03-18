@@ -227,3 +227,62 @@ Upgraded TensorZINB (`tz` conda env) assessed and two compatibility fixes applie
 - Changed `conda activate env_tensorzinb` → `conda activate tz`
 - Dask workers inherit the driver's Python binary; driver must be in `tz` for workers to use the sparse TensorZINB
 
+---
+
+## 2026-03-17 Attempt 7 — failed (2GB TF graph-constant limit)
+
+Root cause: `core.py` calls `tf.compat.v1.disable_eager_execution()` at module import time. In TF1 graph mode, `tf.SparseTensor(numpy_indices, numpy_values, shape)` tries to serialize the indices array as a protobuf graph constant (limit: 2GB). For a 128M-row sparse matrix with ~5 nonzeros/row, the COO indices array alone is ~10GB → `ValueError: Cannot create a tensor proto whose content is larger than 2GB`.
+
+Full error path:
+```
+_tensorzinb_fit → TensorZINB.fit() → _scipy_to_tf_sparse()
+→ tf.SparseTensor(indices=...) → ops.convert_to_tensor(numpy_indices)
+→ _create_graph_constant() → make_tensor_proto()
+→ ValueError: Cannot create a tensor proto whose content is larger than 2GB.
+```
+
+Fixes applied:
+1. **`core.py` — defer `disable_eager_execution()`**: Removed from module level; added at the top of `_estimate_cov_se()` and `_hessian_se_graph()` (the only two functions requiring TF1 graph mode). TensorZINB sparse fits now run in TF2 eager mode; Wald functions enable graph mode lazily when called (after all fitting is done, so no interleaving risk).
+2. **TensorZINB `fit()` — remove `disable_eager_execution()`**: Was being called inside `fit()`, which conflicted with the deferred approach in core.py.
+3. **TensorZINB `fit()` — replace `K.function` LL computation**: `K.function([..., zinb.y], [zinb.llf])` requires graph-mode symbolic tensors; in eager mode `zinb.y`/`zinb.llf` are concrete values from the last training step, not traceable nodes. Replaced with: `preds = model(ll_inputs, training=False); _ = zinb.loss(endog_t, preds); llft = zinb.llf.numpy()`.
+4. **`core.py` `_extract_mu` — scipy sparse API**: `X.sparse.to_coo()` is a pandas sparse accessor; `X` is now `csc_matrix`. Fixed: detect sparse, do `X.tocsr() @ w` directly, then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix(X, columns=design_matrix["nb_regressor_names"])` for `undo_one_hot_encoding`.
+5. **`core.py` `_extract_zi` — scipy sparse API**: `Z.to_numpy()` is a pandas method; `Z` is now `csc_matrix`. Fixed: detect sparse, do `Z @ x_pi` directly, reconstruct pandas sparse DataFrame for label extraction.
+6. **`tz` env — bokeh/distributed `TemplateNotFound`**: `distributed` `performance_report.html` extends `"file.html"` but bokeh 3.x renamed it to `file.html.jinja`. The broken `__exit__` masked the real error (`ValueError`) in the driver logs. Fixed: symlink `file.html → file.html.jinja` in bokeh templates dir.
+
+Note: fixes 2 and 3 above were applied directly to the installed TensorZINB package (`site-packages/tensorzinb/tensorzinb.py`) rather than the source repo — this was a mistake. They have since been reverted to source, and the correct changes will be released as a new version of TensorZINB (see Attempt 8 notes).
+
+---
+
+## 2026-03-18 Attempt 8 — failed (`AttributeError: 'KerasTensor' object has no attribute 'numpy'`)
+
+Root cause: The replacement LL computation introduced in Attempt 7 fix #3 was itself broken. After training, `zinb.loss(endog_t, preds)` was called expecting it to set `zinb.llf` to a concrete eager tensor. But `zinb.pi` and `zinb.log_theta` are `KerasTensor`s — they are set during Keras functional-API model construction (when Keras traces `zinb.loss()` with symbolic inputs to build the computation graph). Calling `zinb.loss()` with concrete eager inputs after training mixes those stored `KerasTensor`s into the computation, so `zinb.llf` remains symbolic and `.numpy()` raises `AttributeError`.
+
+Full error path:
+```
+primordial.save() → experiment_model.save() → flattened_copy()
+→ future.result() → _tensorzinb_fit (worker)
+→ TensorZINB.fit() line 521: llft = zinb.llf.numpy()
+→ AttributeError: 'KerasTensor' object has no attribute 'numpy'
+```
+
+Workers also showed a related error during model construction:
+```
+TypeError: You are passing KerasTensor(...), an intermediate TF-Keras symbolic
+input/output, to a TF API that does not allow registering custom dispatchers,
+such as `tf.cond`, `tf.function`, gradient tapes, or `tf.map_fn`.
+```
+
+Root cause analysis of the full LL chain:
+- Original code: `disable_eager_execution()` + `K.function([..., zinb.y], [zinb.llf])` — works in TF1 graph mode
+- We removed `disable_eager_execution()` (required for sparse SparseTensor inputs to avoid 2GB limit) → `K.function` breaks because `zinb.y`/`zinb.llf` are no longer symbolic graph nodes
+- Replacement used `zinb.loss()` side-effect → breaks because `zinb.log_theta`/`zinb.pi` are KerasTensors from functional API construction
+
+Correct fix (to be released in new TensorZINB version): compute LL entirely in numpy from `weights_dict` after training, without invoking `zinb.loss()` at all. Move `model.get_weights()` before the LL block and mirror the `ZINBLogLik.loss()` formula in numpy using `scipy.special.gammaln` and `np.logaddexp`.
+
+All TensorZINB changes (sparse support + numpy LL) reverted from `site-packages` back to source repo. A new TensorZINB release incorporating all changes will be published and reinstalled into the `tz` env before the next attempt.
+
+Changes committed in this session (all in `scMPRAforge/core.py`):
+1. **Defer `disable_eager_execution()`**: Removed from module-level TF import; added at the top of `_estimate_cov_se()` and `_hessian_se_graph()`. These are the only two callers that require TF1 graph mode (they use `tf.compat.v1.placeholder` / `Session`), and they are only called after all fitting is complete.
+2. **`_extract_mu` — scipy sparse API**: Detect `scipy.sparse.issparse(X)`; if sparse, compute `X.tocsr() @ w` directly then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix()` for `undo_one_hot_encoding`.
+3. **`_extract_zi` — scipy sparse API**: Detect `scipy.sparse.issparse(Z)`; if sparse, compute `Z @ x_pi` directly then reconstruct pandas sparse DataFrame for label extraction.
+

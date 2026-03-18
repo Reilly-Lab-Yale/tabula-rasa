@@ -55,9 +55,11 @@ from sklearn.metrics import precision_recall_curve, average_precision_score, roc
 import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
+# NOTE: disable_eager_execution() is NOT called here — TensorZINB sparse training
+# requires TF2 eager mode. Graph mode is enabled lazily inside the Wald functions
+# (_estimate_cov_se, _hessian_se_graph) which are called only after fitting is done.
 try:
     import tensorflow as tf
-    tf.compat.v1.disable_eager_execution()  # graph mode only
 except Exception as _tf_err:
     tf = None
 
@@ -2644,14 +2646,19 @@ def extract_parameters(client,model,design,split):
         model_type=design_matrix["model_type"]
         reference=design_matrix["reference"]
 
-        #multiply design matrix by weights: we convert to
-        #scipy sparse for performance reasons...
-        
         w = np.asarray(model["weights"]["x_mu"], dtype=np.float32)
-        Xs = X.sparse.to_coo()
-        Xs = Xs.tocsr()#better for subsequent multiplication
-        linear_mu = Xs @ w
-        linear_mu = np.asarray(linear_mu).ravel().astype(np.float32, copy=False)
+
+        import scipy.sparse as sp
+        if sp.issparse(X):
+            # X is a scipy sparse matrix — multiply directly, then rebuild a
+            # pandas sparse DataFrame (using stored names) for undo_one_hot_encoding.
+            linear_mu = np.asarray(X.tocsr() @ w).ravel().astype(np.float32, copy=False)
+            X = pd.DataFrame.sparse.from_spmatrix(
+                X, columns=design_matrix["nb_regressor_names"]
+            )
+        else:
+            Xs = X.sparse.to_coo().tocsr()
+            linear_mu = np.asarray(Xs @ w).ravel().astype(np.float32, copy=False)
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
 
@@ -2682,11 +2689,17 @@ def extract_parameters(client,model,design,split):
     def _extract_zi(model,design_matrix):
         Z=design_matrix["zi_regressors"]
         ## ZI ##
-        # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
+        import scipy.sparse as sp
+        if sp.issparse(Z):
+            linear_zi = np.asarray(Z @ model["weights"]["x_pi"]).squeeze()
+            Z = pd.DataFrame.sparse.from_spmatrix(
+                Z, columns=design_matrix["zi_regressor_names"]
+            )
+        else:
+            linear_zi = Z.to_numpy() @ model["weights"]["x_pi"]
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
-        
-        #extract names 
+
+        #extract names
         replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
         replicate_labeling=replicate_labeling.str.removeprefix("T.")
 
@@ -4337,7 +4350,10 @@ def _estimate_cov_se(
         If True, skip the Hessian and use OPG-only covariance (J^{-1});
         if False, use full sandwich H^{-1} J H^{-1}.
     """
-    
+    # Graph mode required for tf.compat.v1.placeholder / Session.
+    # Called only after all TensorZINB fits complete, so this is safe.
+    tf.compat.v1.disable_eager_execution()
+
     g = tf.Graph()
     
     with g.as_default():
@@ -4480,6 +4496,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
       - evaluates gradients/Hessian in a local Session,
       - adds tiny ridge to stabilize inversion.
     """
+    tf.compat.v1.disable_eager_execution()
     g = tf.Graph()
     with g.as_default():
         P = int(params_np.size)
