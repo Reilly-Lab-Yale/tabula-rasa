@@ -55,9 +55,11 @@ from sklearn.metrics import precision_recall_curve, average_precision_score, roc
 import warnings
 
 # tensorflow import for Wald test Hessian/SE computation
+# NOTE: disable_eager_execution() is NOT called here — TensorZINB sparse training
+# requires TF2 eager mode. Graph mode is enabled lazily inside the Wald functions
+# (_estimate_cov_se, _hessian_se_graph) which are called only after fitting is done.
 try:
     import tensorflow as tf
-    tf.compat.v1.disable_eager_execution()  # graph mode only
 except Exception as _tf_err:
     tf = None
 
@@ -358,11 +360,11 @@ def _matricies_to_order(matricies):
     Helper function. Extracts column index order from matricies for use elsewhere.
     Replaces `Intercept` with `reference`.
     """
-    zi_idx=matricies["zi_regressors"].columns.to_list()
-    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_idx]
+    zi_names=matricies["zi_regressor_names"] if "zi_regressor_names" in matricies else list(matricies["zi_regressors"].columns)
+    zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_names]
 
-    nb_idx=matricies["nb_regressors"].columns.to_list()
-    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_idx]
+    nb_names=matricies["nb_regressor_names"] if "nb_regressor_names" in matricies else list(matricies["nb_regressors"].columns)
+    nb_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in nb_names]
 
     return {'zi_idx':zi_idx,'nb_idx':nb_idx}
 
@@ -1936,15 +1938,16 @@ def _smart_matrix(data,split):
     zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     
-    y, X=Formula(nb_formula).get_model_matrix(data,output='pandas')
-    Z=Formula(zi_formula).get_model_matrix(data,output='pandas')
-
-    X = X.astype(pd.SparseDtype("int", fill_value=0))
+    y = data[["umis_mpra_bc"]]
+    X = Formula(nb_formula.split('~')[1].strip()).get_model_matrix(data, output='sparse')
+    Z = Formula(zi_formula).get_model_matrix(data, output='sparse')
     
     return {
         'nb_regressors':X,
+        'nb_regressor_names':list(X.model_spec.column_names),
         'regressand':y,
         'zi_regressors':Z,
+        'zi_regressor_names':list(Z.model_spec.column_names),
         'model_type':model_type,
         'nb_formula':nb_formula,
         'zi_formula':zi_formula,
@@ -1960,41 +1963,44 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     init_method takes "nb", "ones" or "pass".
     mom (method of moments) only implemented for by_cell_type models at the moment.
     """
+    import scipy.sparse as sp
+    endog = matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze()
+    nb_X = matricies["nb_regressors"]
+    zi_X = matricies["zi_regressors"]
+
+    #removing in anticipation of upgraded sparse-capable tensorzinb
+    #nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
+    #zi_X = zi_X.toarray() if sp.issparse(zi_X) else zi_X.to_numpy()
+
     if init_method=="nb":
-        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                        exog=matricies["nb_regressors"].to_numpy(),
-                        exog_infl=matricies["zi_regressors"].to_numpy())
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
         result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
         if not init_vals:
             raise ValueError("init_vals required for init_method=pass")
 
-        zinbo = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                    exog=matricies["nb_regressors"].to_numpy(),
-                    exog_infl=matricies["zi_regressors"].to_numpy())
-        
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+
         result = zinbo.fit(return_history=True,init_weights=init_vals)
 
         del zinbo
 
     elif init_method=="ones":
-        num_feat_zi = matricies["zi_regressors"].to_numpy().shape[1]
-        num_feat_nb = matricies["nb_regressors"].to_numpy().shape[1]
-        if matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze().ndim == 1:
+        num_feat_zi = zi_X.shape[1]
+        num_feat_nb = nb_X.shape[1]
+        if endog.ndim == 1:
             num_out = 1
         else:
-            num_out = y.shape[1]
-        
+            num_out = endog.shape[1]
+
         ones_init = {}
         ones_init["x_mu"] = np.ones((num_feat_nb, num_out), dtype=np.float32)
         ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
         ones_init["theta"] = np.ones((1, num_out), dtype=np.float32)
-        
-        zinbo_ones = TensorZINB(endog=matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze(),
-                    exog=matricies["nb_regressors"].to_numpy(),
-                    exog_infl=matricies["zi_regressors"].to_numpy())
-        
+
+        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+
         result = zinbo_ones.fit(return_history=True,init_weights=ones_init)
 
         del zinbo_ones
@@ -2003,7 +2009,12 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
-    
+
+    # Release tf_keras session memory so it doesn't accumulate across tasks.
+    # Must use tf_keras (not keras 3.x) to actually clear the TF1 graph session.
+    import tf_keras.backend as K
+    K.clear_session()
+
     return result
 
 def standard_fit(client,data,split,disable_mom=False):
@@ -2107,8 +2118,8 @@ class experiment_model:
         Meant to be submitted to a dask cluster.
         """
 
-        nb_regressor_names=list(dm["nb_regressors"].columns)
-        zi_regressor_names=list(dm["zi_regressors"].columns)
+        nb_regressor_names=dm["nb_regressor_names"] if "nb_regressor_names" in dm else list(dm["nb_regressors"].columns)
+        zi_regressor_names=dm["zi_regressor_names"] if "zi_regressor_names" in dm else list(dm["zi_regressors"].columns)
         model["weights"]["x_mu"] = pd.Series(model["weights"]["x_mu"].flatten(),
                                             index=nb_regressor_names)
         model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
@@ -2635,14 +2646,19 @@ def extract_parameters(client,model,design,split):
         model_type=design_matrix["model_type"]
         reference=design_matrix["reference"]
 
-        #multiply design matrix by weights: we convert to
-        #scipy sparse for performance reasons...
-        
         w = np.asarray(model["weights"]["x_mu"], dtype=np.float32)
-        Xs = X.sparse.to_coo()
-        Xs = Xs.tocsr()#better for subsequent multiplication
-        linear_mu = Xs @ w
-        linear_mu = np.asarray(linear_mu).ravel().astype(np.float32, copy=False)
+
+        import scipy.sparse as sp
+        if sp.issparse(X):
+            # X is a scipy sparse matrix — multiply directly, then rebuild a
+            # pandas sparse DataFrame (using stored names) for undo_one_hot_encoding.
+            linear_mu = np.asarray(X.tocsr() @ w).ravel().astype(np.float32, copy=False)
+            X = pd.DataFrame.sparse.from_spmatrix(
+                X, columns=design_matrix["nb_regressor_names"]
+            )
+        else:
+            Xs = X.sparse.to_coo().tocsr()
+            linear_mu = np.asarray(Xs @ w).ravel().astype(np.float32, copy=False)
         #undo the link function to get predictions for each cell
         mu_predictions=np.exp(linear_mu)
 
@@ -2673,11 +2689,17 @@ def extract_parameters(client,model,design,split):
     def _extract_zi(model,design_matrix):
         Z=design_matrix["zi_regressors"]
         ## ZI ##
-        # multiply design matrix by weights
-        linear_zi=(Z.to_numpy() @ model["weights"]["x_pi"])
+        import scipy.sparse as sp
+        if sp.issparse(Z):
+            linear_zi = np.asarray(Z @ model["weights"]["x_pi"]).squeeze()
+            Z = pd.DataFrame.sparse.from_spmatrix(
+                Z, columns=design_matrix["zi_regressor_names"]
+            )
+        else:
+            linear_zi = Z.to_numpy() @ model["weights"]["x_pi"]
         zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
-        
-        #extract names 
+
+        #extract names
         replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
         replicate_labeling=replicate_labeling.str.removeprefix("T.")
 
@@ -4328,7 +4350,10 @@ def _estimate_cov_se(
         If True, skip the Hessian and use OPG-only covariance (J^{-1});
         if False, use full sandwich H^{-1} J H^{-1}.
     """
-    
+    # Graph mode required for tf.compat.v1.placeholder / Session.
+    # Called only after all TensorZINB fits complete, so this is safe.
+    tf.compat.v1.disable_eager_execution()
+
     g = tf.Graph()
     
     with g.as_default():
@@ -4471,6 +4496,7 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
       - evaluates gradients/Hessian in a local Session,
       - adds tiny ridge to stabilize inversion.
     """
+    tf.compat.v1.disable_eager_execution()
     g = tf.Graph()
     with g.as_default():
         P = int(params_np.size)
