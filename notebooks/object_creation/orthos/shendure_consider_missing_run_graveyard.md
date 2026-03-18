@@ -105,3 +105,184 @@ Fix applied after this run:
 Next configuration to try:
 - `SLURMCluster(cores=1, memory="128G", processes=1)`, `cluster.scale(jobs=16)`
 - Effective layout: 16 single-threaded workers, each with 128 G exclusive to one task at a time
+
+---
+
+## 2026-03-13 Attempt 4
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `36:10:00` walltime
+- Main job id: `1910351`, workers: `1910362`–`1910376` (15 running; `1910377` pending due to `QOSMaxMemoryPerUser`)
+- Started: `2026-03-13 10:26`, failed: `2026-03-13 ~19:58` (~9.5 hours in)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (only 15 launched; 1 blocked by QOS memory limit)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- Fitting ran for ~9.5 hours before failure
+- Workers again accumulated high unmanaged memory (~92 GiB), hit 80–95% thresholds, and were restarted by the Dask nanny (SIGKILL via signal 15)
+- Restarted workers disrupted an in-progress P2P shuffle → cascade of `P2PConsistencyError: No active shuffle ... found`
+- Final error: `MemoryError: Unable to allocate 560 MiB for an array with shape (73424955,) and dtype int64` in `_smart_matrix` → `formulaic` → `_get_columns_for_term`
+- Root cause: `formulaic` allocates a fully dense `int64` matrix before the `.astype(pd.SparseDtype(...))` conversion in `_smart_matrix`; for large cell types (73M rows) this intermediate allocation OOM'd workers already holding ~92 GiB of unmanaged data
+- SIGTERM handler worked: graceful shutdown printed `! Done, shutting down`; performance report written to `shendure_ortho_consider_missing_20260310_dask_performance_report.html`
+
+Fix applied after this run:
+- `_smart_matrix`: replaced `get_model_matrix(..., output='pandas')` + `.astype(SparseDtype)` with native sparse construction via `get_model_matrix(..., output='sparse')` — formulaic builds the CSC matrix directly from category indices with no dense intermediate
+- `y` (regressand) extracted directly as `data[["umis_mpra_bc"]]` (single column, no formula call needed)
+- `_tensorzinb_fit`: densify `nb_regressors` and `zi_regressors` once at top of function via `.toarray()` (scipy sparse API), since TensorZINB requires dense numpy throughout
+
+Next configuration to try:
+- Same worker layout (`cores=1, memory="128G", processes=1`, `scale(jobs=16)`)
+- Sparse design matrix construction should eliminate the dense intermediate OOM in `_smart_matrix`
+
+---
+
+## 2026-03-15 Attempt 5
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `36:10:00` walltime
+- Main job id: `2155413`, workers: `2155415`–`2155429`
+- Started: `2026-03-15 18:02`, failed: `2026-03-16 ~04:51` (~10.8 hours in)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (15 running)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- **Sparse `_smart_matrix` fix worked** — no more OOM during design matrix construction; fitting ran successfully for hours
+- First `_label_tensorzinb_regressors` failure at `18:58` (worker 2155415), then many more across all workers
+- All failures identical: `AttributeError: 'csc_matrix' object has no attribute 'columns'` at `core.py:2110`
+- Root cause: `_label_tensorzinb_regressors` and `_matricies_to_order` accessed `.columns` on the design matrices, which is a pandas DataFrame attribute; the sparse `csc_matrix` returned by formulaic's `output='sparse'` does not have `.columns`
+- 1 worker also died from unrelated cause (`read-csv` task failed because 4 workers died)
+- **No memory warnings, no nanny restarts, no OOM kills** — major improvement over previous runs
+- SIGTERM handler worked; performance report written
+
+Resource usage (note: run failed at labeling stage, so later stages like `extract_params`/`save` materialization did not fully execute — actual peak for a successful run may be higher):
+- All workers requested `120 GiB`; actual MaxRSS ranged `8.0–31.8 GiB` (4–25% utilization)
+- Highest: worker `2155425` at `31.8 GiB` (30.3 GB per jobstats); most workers under `18 GiB`
+- CPU utilization `71–79%` across workers
+- Memory could potentially be trimmed to `64G` (~2x observed max) if a successful run confirms similar usage — but keeping `128G` for now given >4 hr run times and risk of spiky allocations in stages that didn't run
+
+Fix applied after this run:
+- `_smart_matrix` now stores column names as plain lists in the return dict: `nb_regressor_names` and `zi_regressor_names`, extracted from `ModelMatrix.model_spec.column_names` before the formulaic wrapper is stripped by Dask serialization
+- `_label_tensorzinb_regressors` and `_matricies_to_order` updated to read names from the dict keys, with fallback to `.columns` for backwards compatibility
+
+Next configuration to try:
+- Same worker layout
+- Column name fix should resolve the `AttributeError`
+
+---
+
+## 2026-03-16 Attempt 6
+
+Driver job:
+- Main job id: `2246714`, workers: `2246723`–`2246737`
+- Started: `2026-03-16 11:46`, still running at `2026-03-17 09:09` when last `_tensorzinb_fit` failure logged
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="128G", processes=1)`
+- `cluster.scale(jobs=16)` (15 running)
+- Effective layout: `15` single-threaded workers, `~119.21 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- Column name fix worked — no `AttributeError` in `_label_tensorzinb_regressors`
+- Fitting ran for many hours before failure; `_tensorzinb_fit` tasks permanently failed at `04:04`, `05:25`, `05:47`, `07:16`, `08:16`, `09:09` (each after 4 worker deaths)
+- Root cause: TF/Keras heap memory accumulates across tasks and is not released back to the OS between fits; after many tasks, workers reach ~87–90 GiB of unmanaged memory; `nb_X.toarray()` then tries to allocate the dense design matrix on top of that, tipping the worker over the 95% nanny budget → SIGKILL → restart → shuffle/task failure cascade
+- Exact error in `_tensorzinb_fit` at line 1968: `nb_X.toarray()` → `np.zeros(self.shape, ...)` → OOM
+
+Fix applied after this run:
+- Added `K.clear_session()` at the end of `_tensorzinb_fit` (after results extracted, before return) to explicitly release the TF/Keras session memory after each model fit
+- Identified fundamental problem: `consider_missing=True` inflates datasets to 12M–128M rows/cell type; NB design matrix (×211 CRE columns, float64) = 20–216 GB — 7 of 10 cell types exceed the 128 GB worker limit even with a single task; `nb_X.toarray()` in `_tensorzinb_fit` is therefore infeasible for most cell types regardless of session clearing
+
+Next configuration to try:
+- Upgrade TensorZINB to accept sparse matrices natively (eliminate `nb_X.toarray()` altogether)
+- User upgraded TensorZINB in new conda env `tz` (TF 2.20, tf_keras 2.20.1); `.toarray()` calls already commented out in `core.py` in anticipation
+
+---
+
+## 2026-03-17 Pre-run notes / fixes applied
+
+Upgraded TensorZINB (`tz` conda env) assessed and two compatibility fixes applied before Attempt 7:
+
+**TensorZINB upgrade (sparse support):**
+- Added `SparseDense` custom layer: replaces `Dense` when input is sparse; uses `tf.sparse.sparse_dense_matmul` to avoid densification in the Keras graph
+- Sparse input detection flags (`_exog_is_sparse` etc.) in `__init__`; `_matrix_rank` / `_sparse_std` / `_sparse_col_mean` / `_sparse_dot` helpers replace numpy dense equivalents
+- `fit()`: `Input(sparse=True)` for sparse inputs; training via `tf.data.Dataset.from_tensors()` + `model.fit(dataset)`; LL retrieval via `SparseTensorValue` feeds to `K.function`
+- `_poisson_init_each`: skips statsmodels (can't handle sparse); uses intercept-only fallback
+- Migrated from `keras` (TF1-bundled) to `tf_keras` (standalone Keras 2 on TF2); keras 3.x present in env but not used by TensorZINB
+
+**Fix 1 — `K.clear_session()` backend mismatch (`core.py`):**
+- `tz` env has keras 3.13.2 alongside tf_keras 2.20.1; `import keras.backend as K` would call Keras 3's session clear, which does not clear the TF1 graph/session
+- Changed to `import tf_keras.backend as K` so `clear_session()` actually releases TF memory
+
+**Fix 2 — conda env (`wrap_shend_consider_missing.sh`):**
+- Changed `conda activate env_tensorzinb` → `conda activate tz`
+- Dask workers inherit the driver's Python binary; driver must be in `tz` for workers to use the sparse TensorZINB
+
+---
+
+## 2026-03-17 Attempt 7 — failed (2GB TF graph-constant limit)
+
+Root cause: `core.py` calls `tf.compat.v1.disable_eager_execution()` at module import time. In TF1 graph mode, `tf.SparseTensor(numpy_indices, numpy_values, shape)` tries to serialize the indices array as a protobuf graph constant (limit: 2GB). For a 128M-row sparse matrix with ~5 nonzeros/row, the COO indices array alone is ~10GB → `ValueError: Cannot create a tensor proto whose content is larger than 2GB`.
+
+Full error path:
+```
+_tensorzinb_fit → TensorZINB.fit() → _scipy_to_tf_sparse()
+→ tf.SparseTensor(indices=...) → ops.convert_to_tensor(numpy_indices)
+→ _create_graph_constant() → make_tensor_proto()
+→ ValueError: Cannot create a tensor proto whose content is larger than 2GB.
+```
+
+Fixes applied:
+1. **`core.py` — defer `disable_eager_execution()`**: Removed from module level; added at the top of `_estimate_cov_se()` and `_hessian_se_graph()` (the only two functions requiring TF1 graph mode). TensorZINB sparse fits now run in TF2 eager mode; Wald functions enable graph mode lazily when called (after all fitting is done, so no interleaving risk).
+2. **TensorZINB `fit()` — remove `disable_eager_execution()`**: Was being called inside `fit()`, which conflicted with the deferred approach in core.py.
+3. **TensorZINB `fit()` — replace `K.function` LL computation**: `K.function([..., zinb.y], [zinb.llf])` requires graph-mode symbolic tensors; in eager mode `zinb.y`/`zinb.llf` are concrete values from the last training step, not traceable nodes. Replaced with: `preds = model(ll_inputs, training=False); _ = zinb.loss(endog_t, preds); llft = zinb.llf.numpy()`.
+4. **`core.py` `_extract_mu` — scipy sparse API**: `X.sparse.to_coo()` is a pandas sparse accessor; `X` is now `csc_matrix`. Fixed: detect sparse, do `X.tocsr() @ w` directly, then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix(X, columns=design_matrix["nb_regressor_names"])` for `undo_one_hot_encoding`.
+5. **`core.py` `_extract_zi` — scipy sparse API**: `Z.to_numpy()` is a pandas method; `Z` is now `csc_matrix`. Fixed: detect sparse, do `Z @ x_pi` directly, reconstruct pandas sparse DataFrame for label extraction.
+6. **`tz` env — bokeh/distributed `TemplateNotFound`**: `distributed` `performance_report.html` extends `"file.html"` but bokeh 3.x renamed it to `file.html.jinja`. The broken `__exit__` masked the real error (`ValueError`) in the driver logs. Fixed: symlink `file.html → file.html.jinja` in bokeh templates dir.
+
+Note: fixes 2 and 3 above were applied directly to the installed TensorZINB package (`site-packages/tensorzinb/tensorzinb.py`) rather than the source repo — this was a mistake. They have since been reverted to source, and the correct changes will be released as a new version of TensorZINB (see Attempt 8 notes).
+
+---
+
+## 2026-03-18 Attempt 8 — failed (`AttributeError: 'KerasTensor' object has no attribute 'numpy'`)
+
+Root cause: The replacement LL computation introduced in Attempt 7 fix #3 was itself broken. After training, `zinb.loss(endog_t, preds)` was called expecting it to set `zinb.llf` to a concrete eager tensor. But `zinb.pi` and `zinb.log_theta` are `KerasTensor`s — they are set during Keras functional-API model construction (when Keras traces `zinb.loss()` with symbolic inputs to build the computation graph). Calling `zinb.loss()` with concrete eager inputs after training mixes those stored `KerasTensor`s into the computation, so `zinb.llf` remains symbolic and `.numpy()` raises `AttributeError`.
+
+Full error path:
+```
+primordial.save() → experiment_model.save() → flattened_copy()
+→ future.result() → _tensorzinb_fit (worker)
+→ TensorZINB.fit() line 521: llft = zinb.llf.numpy()
+→ AttributeError: 'KerasTensor' object has no attribute 'numpy'
+```
+
+Workers also showed a related error during model construction:
+```
+TypeError: You are passing KerasTensor(...), an intermediate TF-Keras symbolic
+input/output, to a TF API that does not allow registering custom dispatchers,
+such as `tf.cond`, `tf.function`, gradient tapes, or `tf.map_fn`.
+```
+
+Root cause analysis of the full LL chain:
+- Original code: `disable_eager_execution()` + `K.function([..., zinb.y], [zinb.llf])` — works in TF1 graph mode
+- We removed `disable_eager_execution()` (required for sparse SparseTensor inputs to avoid 2GB limit) → `K.function` breaks because `zinb.y`/`zinb.llf` are no longer symbolic graph nodes
+- Replacement used `zinb.loss()` side-effect → breaks because `zinb.log_theta`/`zinb.pi` are KerasTensors from functional API construction
+
+Correct fix (to be released in new TensorZINB version): compute LL entirely in numpy from `weights_dict` after training, without invoking `zinb.loss()` at all. Move `model.get_weights()` before the LL block and mirror the `ZINBLogLik.loss()` formula in numpy using `scipy.special.gammaln` and `np.logaddexp`.
+
+All TensorZINB changes (sparse support + numpy LL) reverted from `site-packages` back to source repo. A new TensorZINB release incorporating all changes will be published and reinstalled into the `tz` env before the next attempt.
+
+Changes committed in this session (all in `scMPRAforge/core.py`):
+1. **Defer `disable_eager_execution()`**: Removed from module-level TF import; added at the top of `_estimate_cov_se()` and `_hessian_se_graph()`. These are the only two callers that require TF1 graph mode (they use `tf.compat.v1.placeholder` / `Session`), and they are only called after all fitting is complete.
+2. **`_extract_mu` — scipy sparse API**: Detect `scipy.sparse.issparse(X)`; if sparse, compute `X.tocsr() @ w` directly then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix()` for `undo_one_hot_encoding`.
+3. **`_extract_zi` — scipy sparse API**: Detect `scipy.sparse.issparse(Z)`; if sparse, compute `Z @ x_pi` directly then reconstruct pandas sparse DataFrame for label extraction.
+

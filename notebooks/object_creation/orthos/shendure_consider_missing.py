@@ -53,7 +53,7 @@ print(client.dashboard_link,flush=True)
 #data_root="/nfs/roberts/project/pi_skr2/shared/tabula_data"
 data_root="/vast/palmer/pi/reilly/tabula_data"
 path=f"{data_root}/shendure"
-name="shendure_ortho_consider_missing_20260310"
+name="shendure_ortho_consider_missing_20260318"
 report_path = Path(__file__).with_name(f"{name}_dask_performance_report.html")
 
 print("! fitting",flush=True)
