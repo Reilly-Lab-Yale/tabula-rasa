@@ -4,7 +4,7 @@
 #SBATCH --partition=priority
 #SBATCH --time=4:10:00
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 module load miniconda
