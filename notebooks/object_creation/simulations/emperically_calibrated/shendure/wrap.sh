@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=shend_pow
-#SBATCH -A prio_reilly
+#SBATCH -A prio_skr2
 #SBATCH --partition=priority
 #SBATCH --time=18:10:00
 #SBATCH --cpus-per-task=2
