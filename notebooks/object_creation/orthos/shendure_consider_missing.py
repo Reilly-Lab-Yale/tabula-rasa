@@ -33,7 +33,7 @@ if not local:
         processes=worker_processes,#dask workers per slurm job
         job_extra_directives=["-p ycga", 
             f"--job-name=simclust_worker",
-            f"--time=72:00:00",
+            f"--time=2-23:40:00",
             f"--output=worker_%j.out"]
     )
 

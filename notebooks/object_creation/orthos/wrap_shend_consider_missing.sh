@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=fit
 #SBATCH --partition=ycga
-#SBATCH --time=72:10:00
+#SBATCH --time=2-23:50:00
 #SBATCH -c 2
 #SBATCH --mem=24G
 #SBATCH --output=slurm-%j.out
