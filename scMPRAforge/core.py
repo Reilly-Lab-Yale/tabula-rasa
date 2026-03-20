@@ -2041,21 +2041,28 @@ def standard_fit(client,data,split,disable_mom=False):
     #    mat_resource={"CRE_DESIGN":1}
 
     def _subset_to_pandas(subset):
+        # Only reached for the non-missing path (pandas slice).
+        # For the use_missing path, DDF is computed by client.compute()
+        # on the driver before this function is called, so subset is
+        # already a pandas DataFrame here.
         if isinstance(subset, dd.DataFrame):
             subset = subset.compute()
         return _prepare_subset_for_modeling(subset)
 
-    subset_inputs = {}
+    subset_futures = {}
     for t in levels:
         if use_missing:
-            subset_inputs[t] = data.get_data(
+            # client.compute(ddf) dispatches DDF partition tasks directly
+            # into the scheduler's task graph — no worker holds a slot
+            # while waiting for sub-tasks, so no re-entrant deadlock.
+            ddf = data.get_data(
                 include_missing=True,
                 context={"kind": "split_level", "split": split, "level": t},
             )
+            pandas_future = client.compute(ddf)
+            subset_futures[t] = client.submit(_prepare_subset_for_modeling, pandas_future)
         else:
-            subset_inputs[t] = raw[raw[split] == t]
-
-    subset_futures = {t: client.submit(_subset_to_pandas, subset_inputs[t]) for t in levels}
+            subset_futures[t] = client.submit(_subset_to_pandas, raw[raw[split] == t])
 
     mats_futures = {
         t: client.submit(
