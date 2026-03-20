@@ -2028,6 +2028,10 @@ def standard_fit(client,data,split,disable_mom=False):
 
     raw = data.get_data(include_missing=False)
     levels = _series_unique_str(raw[split])
+    # Sort largest levels first so that the most resource-intensive models are
+    # submitted to Dask early. This lets failures surface quickly (fail-fast)
+    # rather than after all the small models have already completed.
+    levels = sorted(levels, key=lambda t: -len(raw[raw[split] == t]))
     use_missing = bool(getattr(data, "consider_missing_enabled", False))
 
     mat_resource={}

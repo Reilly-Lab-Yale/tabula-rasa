@@ -286,3 +286,19 @@ Changes committed in this session (all in `scMPRAforge/core.py`):
 2. **`_extract_mu` — scipy sparse API**: Detect `scipy.sparse.issparse(X)`; if sparse, compute `X.tocsr() @ w` directly then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix()` for `undo_one_hot_encoding`.
 3. **`_extract_zi` — scipy sparse API**: Detect `scipy.sparse.issparse(Z)`; if sparse, compute `Z @ x_pi` directly then reconstruct pandas sparse DataFrame for label extraction.
 
+---
+
+## 2026-03-20 Attempt 9 — failed (36-hour wall-limit timeout, no crash)
+
+No errors. The job ran cleanly from 2026-03-18 15:08 to 2026-03-20 03:17 (36 hours) and was cancelled by SLURM at the wall-limit. All 16 workers were still alive at cancellation — no OOM, no Python exception, no TF error.
+
+Worker logs show workers entered `_mom_from_training_data` within minutes of starting (visible FutureWarning about `working_nb["beta"].loc["reference"]`), then no further logged activity until the cancellation message. No model summaries, no loss values, no fitting completion messages appeared in any worker log.
+
+Based on observation before the job was cancelled: by-CRE models completed, but by-cell-type models were still running and taking much longer than expected. With `consider_missing=True`, cell-type model datasets are 12M–128M rows each, making both design matrix construction and TensorZINB fitting substantially slower than by-CRE models.
+
+Contributing factor: this run predated the `standard_fit` sort-by-size change — cell-type models were submitted in arbitrary order rather than largest-first. Large cell types were not necessarily the first to start fitting.
+
+Fixes applied before next attempt:
+1. **`standard_fit` — sort levels by descending size**: Levels are now sorted by row count (descending) before futures are submitted, so the largest (slowest) models start first. Failures surface early (fail-fast), and the scheduler picks up high-priority work sooner.
+2. **TensorZINB — new release installed**: The `tz` env now has the updated TensorZINB with `TensorZINBTrainingModel` (`tf.GradientTape`-based `train_step`), `ZINBLogLik._loss_components()` as a `@staticmethod` called with concrete tensors post-training (fixes the KerasTensor LL bug), `SparseDense`, and `run_eagerly=True` compilation.
+
