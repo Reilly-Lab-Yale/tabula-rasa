@@ -6247,6 +6247,12 @@ class de_novo_simulation:
 
             scd.to_parquet(path)
 
+            # Return free heap pages to the OS. Without this, glibc holds
+            # onto freed pages from the large DataFrames above, causing
+            # unmanaged memory to grow monotonically across tasks.
+            import ctypes
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+
             return True
             
         transcription_tracker=[]
