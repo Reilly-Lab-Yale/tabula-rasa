@@ -1,0 +1,1628 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-03-19T12:08:32.311635
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/simulations/emperically_calibrated/shendure
+  Main jobs : 6164528
+  Workers   : 6164533, 6164534, 6164535, 6164536, 6164537, 6164538, 6164539, 6164540, 6164541, 6164542
+================================================================================
+
+================================================================================
+  Job 6164528  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164528
+   User/Account: mcn26/prio_skr2
+       Job Name: shend_pow
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 2
+     CPU Memory: 32GB (16GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:31 PM
+       Run Time: 00:39:27
+     Time Limit: 18:10:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||||||||||                     52%]
+  CPU memory usage [||||||||||||||||||||||||||||                   57%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n01: 00:41:45/01:18:54 (efficiency=52.9%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n01: 18.1GB/32GB (9.1GB/16GB per core of 2)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 52.9%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/6164528
+
+  * This job only needed 4% of the requested time which was 18:10:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n01": {
+      "cpus": 2,
+      "total_memory": 34359738368,
+      "total_time": 2505.9,
+      "used_memory": 19446525952
+    }
+  },
+  "total_time": 2367
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164528|shend_pow|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u09n01|1|2|32G|2026-03-18T20:31:39|2026-03-18T20:31:42|2026-03-18T21:11:09|00:39:27|18:10:00|41:52.807|37:36.334|04:16.473|01:18:54||||||||||0:0
+6164528.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u09n01|1|2||2026-03-18T20:31:42|2026-03-18T20:31:42|2026-03-18T21:11:09|00:39:27||41:52.806|37:36.334|04:16.472|01:18:54|19544116K|19544116K|19384744K|19384744K|2136.54M|1690.14M|2136.54M|1690.14M|1|0:0
+6164528.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n01|1|2||2026-03-18T20:31:42|2026-03-18T20:31:42|2026-03-18T21:11:09|00:39:27||00:00:00|00:00:00|00:00:00|01:18:54|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164533  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164533
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||                63%]
+  CPU memory usage [||||||||||||||                                 29%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n01: 01:13:47/01:57:06 (efficiency=63.0%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n01: 4.3GB/15GB (1.4GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 63.0%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/6164533
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n01": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 4427.0,
+      "used_memory": 4652027904
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164533|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n01|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:13:46|01:04:40|09:06.003|01:57:06||||||||||0:0
+6164533.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n01|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:13:46|01:04:40|09:06.003|01:57:09|4769568K|4769568K|4399776K|4399776K|4647.09M|4838.20M|4647.09M|4838.20M|1|0:15
+6164533.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n01|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164534  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164534
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||            71%]
+  CPU memory usage [||||||||||||||                                 28%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n01: 01:24:00/01:57:06 (efficiency=71.7%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n01: 4.2GB/15GB (1.4GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n01": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5040.9,
+      "used_memory": 4508360704
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164534|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n01|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:24:00|01:13:28|10:32.007|01:57:06||||||||||0:0
+6164534.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n01|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:24:00|01:13:28|10:32.006|01:57:09|4973456K|4973456K|4361448K|4361448K|5402.79M|5364.59M|5402.79M|5364.59M|1|0:15
+6164534.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n01|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164535  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164535
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||||||||||||||||||||||         77%]
+  CPU memory usage [||||||||||||||||                               32%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n02: 01:30:52/01:57:06 (efficiency=77.6%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n02: 4.8GB/15GB (1.6GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n02": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5452.0,
+      "used_memory": 5180559360
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164535|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n02|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:30:52|01:24:16|06:36.006|01:57:06||||||||||0:0
+6164535.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:30:52|01:24:16|06:36.005|01:57:09|11456188K|11456188K|11014712K|11014712K|5941.88M|6077.86M|5941.88M|6077.86M|1|0:15
+6164535.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164536  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164536
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||                62%]
+  CPU memory usage [|||||||||||||                                  26%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n03: 01:12:44/01:57:06 (efficiency=62.1%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n03: 3.9GB/15GB (1.3GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 62.1%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/6164536
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n03": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 4364.1,
+      "used_memory": 4195905536
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164536|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n03|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:12:45|01:07:02|05:43.006|01:57:06||||||||||0:0
+6164536.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:12:45|01:07:02|05:43.006|01:57:09|8034248K|8034248K|7758636K|7758636K|4834.27M|5031.09M|4834.27M|5031.09M|1|0:15
+6164536.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164537  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164537
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||            70%]
+  CPU memory usage [|||||||||||||                                  26%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n03: 01:22:30/01:57:06 (efficiency=70.5%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n03: 3.9GB/15GB (1.3GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n03": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 4950.1,
+      "used_memory": 4177952768
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164537|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n03|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:22:30|01:16:03|06:27.005|01:57:06||||||||||0:0
+6164537.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:22:30|01:16:03|06:27.004|01:57:09|8812132K|8812132K|8464412K|8464412K|5462.82M|5596.31M|5462.82M|5596.31M|1|0:15
+6164537.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164538  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164538
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||||||||||||||||||||           72%]
+  CPU memory usage [||||||||||||||                                 28%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u09n03: 01:24:18/01:57:06 (efficiency=72.0%)
+
+  CPU memory usage per node - used/allocated
+      a1132u09n03: 4.1GB/15GB (1.4GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u09n03": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5058.8,
+      "used_memory": 4454502400
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164538|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u09n03|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:24:19|01:17:54|06:25.007|01:57:06||||||||||0:0
+6164538.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:24:19|01:17:54|06:25.007|01:57:09|10138696K|10138696K|9830596K|9830596K|5475.84M|5593.77M|5475.84M|5593.77M|1|0:15
+6164538.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|280K|280K|80K|80K|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164539  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164539
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||||          74%]
+  CPU memory usage [|||||||||||||||                                31%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u18n02: 01:27:41/01:57:06 (efficiency=74.9%)
+
+  CPU memory usage per node - used/allocated
+      a1132u18n02: 4.7GB/15GB (1.6GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u18n02": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5261.6,
+      "used_memory": 5044731904
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164539|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u18n02|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:27:42|01:19:54|07:48.006|01:57:06||||||||||0:0
+6164539.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u18n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:27:42|01:19:54|07:48.006|01:57:09|7320624K|7320624K|6972192K|6972192K|5784.23M|5919.33M|5784.23M|5919.33M|1|0:15
+6164539.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u18n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164540  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164540
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||||          74%]
+  CPU memory usage [||||||||||||||||                               32%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u18n02: 01:27:38/01:57:06 (efficiency=74.8%)
+
+  CPU memory usage per node - used/allocated
+      a1132u18n02: 4.8GB/15GB (1.6GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u18n02": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5258.6,
+      "used_memory": 5165932544
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164540|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u18n02|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:27:40|01:21:02|06:38.003|01:57:06||||||||||0:0
+6164540.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u18n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:27:40|01:21:02|06:38.003|01:57:09|10108216K|10108216K|9915180K|9915180K|5852.11M|5851.70M|5852.11M|5851.70M|1|0:15
+6164540.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u18n02|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164541  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164541
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||||||||||||||||||||||         76%]
+  CPU memory usage [|||||||||||||||                                30%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u20n03: 01:29:04/01:57:06 (efficiency=76.1%)
+
+  CPU memory usage per node - used/allocated
+      a1132u20n03: 4.6GB/15GB (1.5GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u20n03": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 5344.0,
+      "used_memory": 4895490048
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164541|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1132u20n03|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:29:04|01:22:48|06:16.004|01:57:06||||||||||0:0
+6164541.batch|batch|CANCELLED||prio_skr2||bouchet|a1132u20n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:29:04|01:22:48|06:16.003|01:57:09|11842748K|11842748K|11579568K|11579568K|6038.01M|6101.98M|6038.01M|6101.98M|1|0:15
+6164541.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u20n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6164542  [WORKER]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6164542
+   User/Account: mcn26/prio_skr2
+       Job Name: simclust_worker
+          State: CANCELLED
+          Nodes: 1
+      CPU Cores: 3
+     CPU Memory: 15GB (5GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Mar 18, 2026 at 8:32 PM
+       Run Time: 00:39:02
+     Time Limit: 06:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||||||||||||||||||             69%]
+  CPU memory usage [||||||||||||||                                 28%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u09n03: 01:21:02/01:57:06 (efficiency=69.2%)
+
+  CPU memory usage per node - used/allocated
+      a1130u09n03: 4.3GB/15GB (1.4GB/5GB per core of 3)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u09n03": {
+      "cpus": 3,
+      "total_memory": 16106127360,
+      "total_time": 4862.8,
+      "used_memory": 4567392256
+    }
+  },
+  "total_time": 2342
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6164542|simclust_worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1130u09n03|1|3|15G|2026-03-18T20:32:00|2026-03-18T20:32:03|2026-03-18T21:11:05|00:39:02|06:00:00|01:21:03|01:15:15|05:48.006|01:57:06||||||||||0:0
+6164542.batch|batch|CANCELLED||prio_skr2||bouchet|a1130u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:06|00:39:03||01:21:03|01:15:15|05:48.005|01:57:09|11174544K|11174544K|10924152K|10924152K|5506.13M|5587.43M|5506.13M|5587.43M|1|0:15
+6164542.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u09n03|1|3||2026-03-18T20:32:03|2026-03-18T20:32:03|2026-03-18T21:11:07|00:39:04||00:00:00|00:00:00|00:00:00|01:57:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u09n03 ───────────────────────────────────────────────────────────────
+NodeName=a1130u09n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=43 CPUEfctv=64 CPUTot=64 CPULoad=34.90
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u09n03 NodeHostName=a1130u09n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=1000448 FreeMem=153619 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-17T10:45:58 SlurmdStartTime=2026-03-11T11:43:05
+   LastBusyTime=2026-03-10T09:19:20 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=43,mem=977G
+   CurrentWatts=1032 AveWatts=600
+   
+
+
+
+── a1132u09n01 ───────────────────────────────────────────────────────────────
+NodeName=a1132u09n01 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=45.57
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u09n01 NodeHostName=a1132u09n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=997568 FreeMem=138499 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T08:41:47 SlurmdStartTime=2026-03-11T11:43:07
+   LastBusyTime=2026-02-26T13:25:27 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=997568M
+   CurrentWatts=824 AveWatts=584
+   
+
+
+
+── a1132u09n02 ───────────────────────────────────────────────────────────────
+NodeName=a1132u09n02 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=32.33
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u09n02 NodeHostName=a1132u09n02 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=974848 FreeMem=137391 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T09:00:54 SlurmdStartTime=2026-03-11T11:43:07
+   LastBusyTime=2026-03-03T14:52:02 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=952G
+   CurrentWatts=864 AveWatts=613
+   
+
+
+
+── a1132u09n03 ───────────────────────────────────────────────────────────────
+NodeName=a1132u09n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=50.18
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u09n03 NodeHostName=a1132u09n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=995328 FreeMem=453370 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-19T02:01:15 SlurmdStartTime=2026-03-11T11:43:07
+   LastBusyTime=2026-02-26T13:25:27 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=972G
+   CurrentWatts=936 AveWatts=592
+   
+
+
+
+── a1132u18n02 ───────────────────────────────────────────────────────────────
+NodeName=a1132u18n02 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=53.17
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u18n02 NodeHostName=a1132u18n02 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=567680 FreeMem=308390 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-26T23:43:46 SlurmdStartTime=2026-03-11T11:43:07
+   LastBusyTime=2026-03-13T21:51:14 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=567680M
+   CurrentWatts=872 AveWatts=596
+   
+
+
+
+── a1132u20n03 ───────────────────────────────────────────────────────────────
+NodeName=a1132u20n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=31.23
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u20n03 NodeHostName=a1132u20n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=1012928 FreeMem=377152 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-17T11:38:57 SlurmdStartTime=2026-03-11T11:43:07
+   LastBusyTime=2026-03-02T13:19:38 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=1012928M
+   CurrentWatts=736 AveWatts=584
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-6164528.err  (5 lines total) ────────────────────────────────────────
+[first 5 lines]
+[NbConvertApp] Converting notebook shendure_power_mwu_all_cell_types.ipynb to notebook
+2026-03-18 20:31:51.346107: I tensorflow/core/util/util.cc:169] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-18 20:31:51.402692: W tensorflow/stream_executor/platform/default/dso_loader.cc:64] Could not load dynamic library 'libcudart.so.11.0'; dlerror: libcudart.so.11.0: cannot open shared object file: No such file or directory
+2026-03-18 20:31:51.402711: I tensorflow/stream_executor/cuda/cudart_stub.cc:29] Ignore above cudart dlerror if you do not have a GPU set up on your machine.
+[NbConvertApp] Writing 464402 bytes to shendure_power_mwu_all_cell_types.ipynb
+
+── slurm-6164528.out  (1 lines total) ────────────────────────────────────────
+[first 1 lines]
+EXITING SHELL
+
+── worker_6164533.out  (550 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:03,568 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:33027'
+2026-03-18 20:32:03,571 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:42593'
+2026-03-18 20:32:03,575 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:35071'
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:34251
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:35931
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:34251
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-7-0
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:35931
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:33061
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          dashboard at:          10.18.22.74:39801
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-7-2
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:33061
+2026-03-18 20:32:04,328 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          dashboard at:          10.18.22.74:45687
+2026-03-18 20:32:04,328 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-7-1
+2026-03-18 20:32:04,328 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:04,328 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          dashboard at:          10.18.22.74:39957
+2026-03-18 20:32:04,328 - distributed.worker - INFO - -------------------------------------------------
+[last 50 lines]
+scMPRAforge: WARNING: 623/30582 cells (2.037%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: WARNING: 612/30544 cells (2.004%) have ≥1 multi-transfection event.
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: INFO: 650/48467 cells (1.341%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48527 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48549 cells (1.401%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 714/48466 cells (1.473%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48424 cells (1.402%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48525 cells (1.424%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 739/48498 cells (1.524%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48476 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 658/48494 cells (1.357%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 628/48539 cells (1.294%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 694/48515 cells (1.430%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 699/48481 cells (1.442%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 719/48480 cells (1.483%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48517 cells (1.439%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 718/48516 cells (1.480%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 695/48447 cells (1.435%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 649/48482 cells (1.339%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 692/48533 cells (1.426%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48492 cells (1.408%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48513 cells (1.381%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 650/48510 cells (1.340%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48495 cells (1.402%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 729/48505 cells (1.503%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48488 cells (1.369%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 621/48504 cells (1.280%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48494 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 663/48506 cells (1.367%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48500 cells (1.344%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 625/48542 cells (1.288%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 697/48462 cells (1.438%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48502 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 718/48488 cells (1.481%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 696/48494 cells (1.435%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48460 cells (1.478%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 657/48512 cells (1.354%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 721/48489 cells (1.487%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 712/48554 cells (1.466%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48492 cells (1.394%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48525 cells (1.438%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 631/48513 cells (1.301%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48550 cells (1.401%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48492 cells (1.371%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 726/48517 cells (1.496%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 617/48466 cells (1.273%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 755/48474 cells (1.558%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164533 ON a1132u09n01 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164534.out  (743 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:03,568 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:36047'
+2026-03-18 20:32:03,572 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:33213'
+2026-03-18 20:32:03,572 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.74:44287'
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:38287
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:38287
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-8-2
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          dashboard at:          10.18.22.74:34799
+2026-03-18 20:32:04,328 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:04,328 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:37005
+2026-03-18 20:32:04,328 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.74:33333
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:37005
+2026-03-18 20:32:04,328 - distributed.worker - INFO -                Memory:                   4.97 GiB
+2026-03-18 20:32:04,328 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-70_0cwak
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-8-1
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.74:33333
+2026-03-18 20:32:04,328 - distributed.worker - INFO -          dashboard at:          10.18.22.74:33209
+2026-03-18 20:32:04,328 - distributed.worker - INFO -           Worker name:           SLURMCluster-8-0
+2026-03-18 20:32:04,328 - distributed.worker - INFO - -------------------------------------------------
+[last 50 lines]
+scMPRAforge: WARNING: Multi-transfections exceed threshold of 2.000%!
+scMPRAforge: INFO: 709/48487 cells (1.462%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 618/48523 cells (1.274%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48475 cells (1.477%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 722/48461 cells (1.490%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48489 cells (1.345%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 717/48483 cells (1.479%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48502 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 633/48499 cells (1.305%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48534 cells (1.455%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48503 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 639/48567 cells (1.316%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48534 cells (1.399%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48567 cells (1.419%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 687/48522 cells (1.416%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 623/48480 cells (1.285%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48520 cells (1.342%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 648/48528 cells (1.335%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48487 cells (1.345%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 719/48522 cells (1.482%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48506 cells (1.394%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 788/48484 cells (1.625%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48513 cells (1.439%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48509 cells (1.363%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48481 cells (1.394%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 690/48514 cells (1.422%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 666/48500 cells (1.373%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 702/48460 cells (1.449%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 654/48477 cells (1.349%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 748/48512 cells (1.542%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 668/48463 cells (1.378%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48469 cells (1.347%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48522 cells (1.399%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48480 cells (1.347%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 727/48518 cells (1.498%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 733/48475 cells (1.512%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48491 cells (1.343%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48516 cells (1.418%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48513 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48521 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48480 cells (1.409%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 728/48493 cells (1.501%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 660/48493 cells (1.361%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48482 cells (1.419%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 659/48529 cells (1.358%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48516 cells (1.391%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 713/48466 cells (1.471%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 752/48485 cells (1.551%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 663/48505 cells (1.367%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164534 ON a1132u09n01 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164535.out  (836 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:04,787 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.75:42545'
+2026-03-18 20:32:04,798 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.75:42319'
+2026-03-18 20:32:04,799 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.75:41195'
+2026-03-18 20:32:06,042 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.75:45885
+2026-03-18 20:32:06,043 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.75:45885
+2026-03-18 20:32:06,043 - distributed.worker - INFO -           Worker name:           SLURMCluster-3-1
+2026-03-18 20:32:06,043 - distributed.worker - INFO -          dashboard at:          10.18.22.75:32997
+2026-03-18 20:32:06,043 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,043 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,043 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,043 - distributed.worker - INFO -                Memory:                   4.97 GiB
+2026-03-18 20:32:06,043 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.75:36953
+2026-03-18 20:32:06,043 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-9nv7h8xz
+2026-03-18 20:32:06,043 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.75:42103
+2026-03-18 20:32:06,043 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,043 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.75:36953
+2026-03-18 20:32:06,043 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.75:42103
+2026-03-18 20:32:06,043 - distributed.worker - INFO -           Worker name:           SLURMCluster-3-2
+2026-03-18 20:32:06,043 - distributed.worker - INFO -           Worker name:           SLURMCluster-3-0
+2026-03-18 20:32:06,043 - distributed.worker - INFO -          dashboard at:          10.18.22.75:43499
+[last 50 lines]
+scMPRAforge: INFO: 651/48469 cells (1.343%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48512 cells (1.363%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 741/48493 cells (1.528%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48519 cells (1.344%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 694/48570 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48506 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48516 cells (1.408%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 729/48484 cells (1.504%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 618/48561 cells (1.273%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 650/48494 cells (1.340%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 707/48499 cells (1.458%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48471 cells (1.395%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48525 cells (1.459%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48484 cells (1.446%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 712/48520 cells (1.467%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 723/48471 cells (1.492%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48476 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48460 cells (1.414%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 671/48492 cells (1.384%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 658/48495 cells (1.357%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 684/48468 cells (1.411%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 710/48497 cells (1.464%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 671/48468 cells (1.384%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 631/48489 cells (1.301%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48491 cells (1.413%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48519 cells (1.476%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 699/48487 cells (1.442%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 728/48532 cells (1.500%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 655/48537 cells (1.349%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 654/48493 cells (1.349%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 666/48511 cells (1.373%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48518 cells (1.399%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48485 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 718/48523 cells (1.480%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48537 cells (1.417%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 639/48511 cells (1.317%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48516 cells (1.455%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48507 cells (1.445%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 596/48453 cells (1.230%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 621/48534 cells (1.280%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 669/48481 cells (1.380%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48501 cells (1.342%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 731/48562 cells (1.505%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 646/48491 cells (1.332%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 687/48539 cells (1.415%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 644/48459 cells (1.329%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48503 cells (1.396%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48525 cells (1.362%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 756/48506 cells (1.559%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164535 ON a1132u09n02 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164536.out  (520 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:05,077 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:39057'
+2026-03-18 20:32:05,085 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:33821'
+2026-03-18 20:32:05,089 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:42545'
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:41191
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:41567
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:41191
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-9-1
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:41299
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:41567
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          dashboard at:          10.18.22.76:39257
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-9-0
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:41299
+2026-03-18 20:32:06,335 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,336 - distributed.worker - INFO -          dashboard at:          10.18.22.76:35635
+2026-03-18 20:32:06,336 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,336 - distributed.worker - INFO -           Worker name:           SLURMCluster-9-2
+2026-03-18 20:32:06,336 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,336 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,336 - distributed.worker - INFO -          dashboard at:          10.18.22.76:43167
+2026-03-18 20:32:06,336 - distributed.worker - INFO - -------------------------------------------------
+[last 50 lines]
+scMPRAforge: INFO: 547/30537 cells (1.791%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 750/48462 cells (1.548%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48481 cells (1.407%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 731/48474 cells (1.508%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 600/48515 cells (1.237%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 719/48556 cells (1.481%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 614/48534 cells (1.265%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 655/48437 cells (1.352%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48493 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48492 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 674/48478 cells (1.390%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 707/48505 cells (1.458%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 662/48460 cells (1.366%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 673/48488 cells (1.388%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 728/48541 cells (1.500%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 686/48495 cells (1.415%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 660/48534 cells (1.360%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 710/48520 cells (1.463%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48447 cells (1.371%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 673/48553 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48491 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 709/48518 cells (1.461%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 624/48531 cells (1.286%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 705/48508 cells (1.453%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 635/48509 cells (1.309%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 696/48449 cells (1.437%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 699/48487 cells (1.442%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 662/48515 cells (1.365%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48500 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 669/48494 cells (1.380%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48465 cells (1.407%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48512 cells (1.418%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 646/48505 cells (1.332%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 719/48508 cells (1.482%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 637/48466 cells (1.314%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48467 cells (1.364%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 703/48522 cells (1.449%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 650/48485 cells (1.341%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48491 cells (1.392%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 687/48502 cells (1.416%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48467 cells (1.403%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 643/48497 cells (1.326%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48527 cells (1.395%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 730/48467 cells (1.506%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 662/48521 cells (1.364%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48462 cells (1.383%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 662/48490 cells (1.365%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48520 cells (1.439%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 658/48538 cells (1.356%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164536 ON a1132u09n03 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164537.out  (765 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:05,077 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:38957'
+2026-03-18 20:32:05,085 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:33915'
+2026-03-18 20:32:05,085 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:38041'
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:46005
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:33259
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:40681
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:46005
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-1-1
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:33259
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:40681
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-1-0
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          dashboard at:          10.18.22.76:45795
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-1-2
+2026-03-18 20:32:06,335 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          dashboard at:          10.18.22.76:43621
+2026-03-18 20:32:06,336 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,336 - distributed.worker - INFO -          dashboard at:          10.18.22.76:46307
+2026-03-18 20:32:06,336 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,336 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,336 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+[last 50 lines]
+scMPRAforge: INFO: 729/48509 cells (1.503%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 601/48502 cells (1.239%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48526 cells (1.381%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 699/48521 cells (1.441%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48487 cells (1.477%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 615/48455 cells (1.269%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48537 cells (1.455%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 697/48522 cells (1.436%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 655/48546 cells (1.349%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 686/48491 cells (1.415%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48472 cells (1.457%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 666/48516 cells (1.373%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 658/48535 cells (1.356%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48525 cells (1.370%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48478 cells (1.477%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 738/48535 cells (1.521%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 673/48524 cells (1.387%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 694/48501 cells (1.431%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 696/48537 cells (1.434%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48512 cells (1.346%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 668/48529 cells (1.376%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48460 cells (1.440%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48496 cells (1.347%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 695/48487 cells (1.433%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 673/48526 cells (1.387%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 647/48482 cells (1.335%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 692/48509 cells (1.427%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 678/48498 cells (1.398%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48516 cells (1.375%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48457 cells (1.395%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 628/48477 cells (1.295%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 614/48515 cells (1.266%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48520 cells (1.342%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 723/48507 cells (1.491%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48476 cells (1.430%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 669/48475 cells (1.380%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 690/48523 cells (1.422%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 739/48480 cells (1.524%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 695/48518 cells (1.432%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 705/48558 cells (1.452%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 638/48486 cells (1.316%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48531 cells (1.418%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48504 cells (1.375%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 702/48491 cells (1.448%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48505 cells (1.344%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 659/48475 cells (1.359%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 741/48518 cells (1.527%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48463 cells (1.372%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 784/48490 cells (1.617%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164537 ON a1132u09n03 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164538.out  (659 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:05,077 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:34739'
+2026-03-18 20:32:05,084 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:42689'
+2026-03-18 20:32:05,088 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.76:44071'
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:40315
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:40949
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:40315
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:40949
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-5-0
+2026-03-18 20:32:06,335 - distributed.worker - INFO -           Worker name:           SLURMCluster-5-2
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          dashboard at:          10.18.22.76:46873
+2026-03-18 20:32:06,335 - distributed.worker - INFO -          dashboard at:          10.18.22.76:43385
+2026-03-18 20:32:06,335 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.76:35275
+2026-03-18 20:32:06,336 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,336 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,336 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,336 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,336 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.76:35275
+2026-03-18 20:32:06,336 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,336 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,336 - distributed.worker - INFO -           Worker name:           SLURMCluster-5-1
+[last 50 lines]
+scMPRAforge: INFO: 660/48478 cells (1.361%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 626/48480 cells (1.291%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 711/48549 cells (1.464%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 660/48454 cells (1.362%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 648/48503 cells (1.336%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 657/48496 cells (1.355%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 630/48509 cells (1.299%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 654/48509 cells (1.348%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48460 cells (1.407%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 754/48511 cells (1.554%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 648/48499 cells (1.336%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 703/48532 cells (1.449%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 694/48446 cells (1.433%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48488 cells (1.456%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48492 cells (1.456%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 613/48543 cells (1.263%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 674/48507 cells (1.389%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 695/48517 cells (1.432%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48474 cells (1.477%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 718/48547 cells (1.479%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48425 cells (1.404%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48543 cells (1.345%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 751/48479 cells (1.549%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48484 cells (1.421%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 619/48503 cells (1.276%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48506 cells (1.363%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48448 cells (1.395%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48485 cells (1.460%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 711/48425 cells (1.468%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48473 cells (1.461%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 751/48483 cells (1.549%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 659/48508 cells (1.359%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 715/48519 cells (1.474%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48525 cells (1.344%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48502 cells (1.445%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 671/48535 cells (1.383%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48490 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48533 cells (1.343%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 633/48500 cells (1.305%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 706/48513 cells (1.455%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48501 cells (1.369%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 764/48480 cells (1.576%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 624/48479 cells (1.287%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 656/48486 cells (1.353%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48516 cells (1.346%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48501 cells (1.375%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48510 cells (1.371%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48527 cells (1.459%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48489 cells (1.421%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164538 ON a1132u09n03 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164539.out  (898 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:04,932 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:33819'
+2026-03-18 20:32:04,938 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:41913'
+2026-03-18 20:32:04,939 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:46267'
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:35743
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:42435
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.83:35743
+2026-03-18 20:32:06,076 - distributed.worker - INFO -           Worker name:           SLURMCluster-6-2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.83:42435
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          dashboard at:          10.18.22.83:45639
+2026-03-18 20:32:06,076 - distributed.worker - INFO -           Worker name:           SLURMCluster-6-1
+2026-03-18 20:32:06,076 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          dashboard at:          10.18.22.83:33853
+2026-03-18 20:32:06,076 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,076 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,076 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,076 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:45269
+2026-03-18 20:32:06,076 - distributed.worker - INFO -                Memory:                   4.97 GiB
+2026-03-18 20:32:06,076 - distributed.worker - INFO -                Memory:                   4.97 GiB
+[last 50 lines]
+scMPRAforge: INFO: 579/48488 cells (1.194%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48475 cells (1.446%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 707/48540 cells (1.457%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48506 cells (1.369%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 721/48522 cells (1.486%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 623/48503 cells (1.284%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48479 cells (1.460%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 669/48475 cells (1.380%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 728/48496 cells (1.501%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 647/48522 cells (1.333%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 627/48552 cells (1.291%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 637/48500 cells (1.313%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 663/48493 cells (1.367%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48492 cells (1.375%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48491 cells (1.396%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 668/48526 cells (1.377%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48497 cells (1.408%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48504 cells (1.394%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48489 cells (1.369%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48486 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48492 cells (1.396%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48493 cells (1.408%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 737/48516 cells (1.519%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48509 cells (1.476%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 649/48481 cells (1.339%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48487 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 712/48499 cells (1.468%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48518 cells (1.408%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 686/48536 cells (1.413%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 631/48497 cells (1.301%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48475 cells (1.401%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 639/48488 cells (1.318%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 748/48511 cells (1.542%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 750/48501 cells (1.546%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 714/48522 cells (1.471%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 668/48499 cells (1.377%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 650/48496 cells (1.340%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48489 cells (1.400%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48535 cells (1.345%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48523 cells (1.346%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 666/48519 cells (1.373%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 681/48555 cells (1.403%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 642/48512 cells (1.323%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48497 cells (1.402%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 727/48497 cells (1.499%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 745/48480 cells (1.537%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 629/48520 cells (1.296%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 697/48453 cells (1.439%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 638/48501 cells (1.315%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164539 ON a1132u18n02 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164540.out  (903 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:04,932 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:41345'
+2026-03-18 20:32:04,938 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:41297'
+2026-03-18 20:32:04,938 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.83:39065'
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:33925
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:35117
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.83:33925
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.83:35117
+2026-03-18 20:32:06,076 - distributed.worker - INFO -           Worker name:           SLURMCluster-4-1
+2026-03-18 20:32:06,076 - distributed.worker - INFO -           Worker name:           SLURMCluster-4-2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          dashboard at:          10.18.22.83:43451
+2026-03-18 20:32:06,076 - distributed.worker - INFO -          dashboard at:          10.18.22.83:45129
+2026-03-18 20:32:06,076 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,076 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,076 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,076 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,076 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -               Threads:                          2
+2026-03-18 20:32:06,076 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.83:35893
+2026-03-18 20:32:06,076 - distributed.worker - INFO -                Memory:                   4.97 GiB
+2026-03-18 20:32:06,076 - distributed.worker - INFO -                Memory:                   4.97 GiB
+[last 50 lines]
+scMPRAforge: INFO: 732/48540 cells (1.508%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 687/48501 cells (1.416%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48510 cells (1.396%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48496 cells (1.406%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 710/48485 cells (1.464%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 693/48488 cells (1.429%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48471 cells (1.364%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 714/48482 cells (1.473%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 690/48507 cells (1.422%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 724/48470 cells (1.494%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 681/48448 cells (1.406%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48497 cells (1.371%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48476 cells (1.440%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48523 cells (1.420%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 758/48541 cells (1.562%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 683/48535 cells (1.407%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48528 cells (1.385%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48490 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 633/48507 cells (1.305%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 691/48503 cells (1.425%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 692/48520 cells (1.426%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 665/48474 cells (1.372%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 622/48464 cells (1.283%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 695/48488 cells (1.433%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48494 cells (1.402%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 646/48526 cells (1.331%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 713/48520 cells (1.469%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 699/48527 cells (1.440%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 723/48454 cells (1.492%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 686/48483 cells (1.415%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 709/48471 cells (1.463%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48494 cells (1.421%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 704/48535 cells (1.450%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 737/48461 cells (1.521%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 703/48506 cells (1.449%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48484 cells (1.392%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48479 cells (1.382%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 627/48522 cells (1.292%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48468 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48489 cells (1.440%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 713/48518 cells (1.470%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48541 cells (1.374%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 654/48517 cells (1.348%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 640/48529 cells (1.319%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 637/48543 cells (1.312%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 728/48472 cells (1.502%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 622/48507 cells (1.282%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 716/48482 cells (1.477%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 650/48486 cells (1.341%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164540 ON a1132u18n02 CANCELLED AT 2026-03-18T21:11:05 ***
+
+── worker_6164541.out  (921 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:05,252 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.88:34903'
+2026-03-18 20:32:05,260 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.88:41049'
+2026-03-18 20:32:05,260 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.88:40013'
+2026-03-18 20:32:06,552 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.88:35287
+2026-03-18 20:32:06,552 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.88:42061
+2026-03-18 20:32:06,552 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.88:46823
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.88:35287
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.88:42061
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.88:46823
+2026-03-18 20:32:06,552 - distributed.worker - INFO -           Worker name:           SLURMCluster-0-0
+2026-03-18 20:32:06,552 - distributed.worker - INFO -           Worker name:           SLURMCluster-0-1
+2026-03-18 20:32:06,552 - distributed.worker - INFO -           Worker name:           SLURMCluster-0-2
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          dashboard at:          10.18.22.88:32921
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          dashboard at:          10.18.22.88:36771
+2026-03-18 20:32:06,552 - distributed.worker - INFO -          dashboard at:          10.18.22.88:41117
+2026-03-18 20:32:06,552 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,552 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,552 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,552 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,552 - distributed.worker - INFO - -------------------------------------------------
+[last 50 lines]
+scMPRAforge: INFO: 677/48538 cells (1.395%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48525 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48509 cells (1.445%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 674/48479 cells (1.390%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 737/48518 cells (1.519%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 647/48555 cells (1.333%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 660/48540 cells (1.360%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 719/48469 cells (1.483%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 666/48543 cells (1.372%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 659/48488 cells (1.359%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48548 cells (1.362%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 689/48503 cells (1.421%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 614/48519 cells (1.265%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 629/48513 cells (1.297%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 708/48539 cells (1.459%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 656/48530 cells (1.352%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48480 cells (1.401%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 718/48481 cells (1.481%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 638/48469 cells (1.316%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 704/48453 cells (1.453%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48438 cells (1.404%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 678/48504 cells (1.398%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 648/48511 cells (1.336%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 641/48499 cells (1.322%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 702/48500 cells (1.447%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48471 cells (1.413%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48493 cells (1.382%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48507 cells (1.385%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 617/48491 cells (1.272%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 744/48471 cells (1.535%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 633/48545 cells (1.304%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48547 cells (1.417%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 658/48530 cells (1.356%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 720/48549 cells (1.483%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 667/48490 cells (1.376%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48529 cells (1.362%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 618/48460 cells (1.275%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 655/48507 cells (1.350%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 692/48487 cells (1.427%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 714/48574 cells (1.470%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 709/48486 cells (1.462%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 677/48476 cells (1.397%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 644/48513 cells (1.327%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 732/48549 cells (1.508%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48484 cells (1.394%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 641/48470 cells (1.322%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164541 ON a1132u20n03 CANCELLED AT 2026-03-18T21:11:05 ***
+2026-03-18 21:11:05,793 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.88:42061. Reason: scheduler-close
+2026-03-18 21:11:05,793 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.88:46823. Reason: scheduler-close
+2026-03-18 21:11:05,793 - distributed.worker - INFO - Stopping worker at tcp://10.18.22.88:35287. Reason: scheduler-close
+
+── worker_6164542.out  (718 lines total) ─────────────────────────────────────
+[first 20 lines]
+2026-03-18 20:32:05,029 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.20:41849'
+2026-03-18 20:32:05,036 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.20:42979'
+2026-03-18 20:32:05,036 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.20:44237'
+2026-03-18 20:32:06,308 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.20:39699
+2026-03-18 20:32:06,308 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.20:40979
+2026-03-18 20:32:06,308 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.20:43529
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.20:39699
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.20:40979
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.20:43529
+2026-03-18 20:32:06,308 - distributed.worker - INFO -           Worker name:           SLURMCluster-2-1
+2026-03-18 20:32:06,308 - distributed.worker - INFO -           Worker name:           SLURMCluster-2-0
+2026-03-18 20:32:06,308 - distributed.worker - INFO -           Worker name:           SLURMCluster-2-2
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          dashboard at:          10.18.22.20:39067
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          dashboard at:          10.18.22.20:42965
+2026-03-18 20:32:06,308 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,308 - distributed.worker - INFO -          dashboard at:          10.18.22.20:36663
+2026-03-18 20:32:06,308 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+2026-03-18 20:32:06,308 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,308 - distributed.worker - INFO - -------------------------------------------------
+2026-03-18 20:32:06,308 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.74:39245
+[last 50 lines]
+scMPRAforge: INFO: 641/48505 cells (1.322%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 686/48469 cells (1.415%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48521 cells (1.401%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48521 cells (1.391%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48500 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 668/48477 cells (1.378%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 653/48491 cells (1.347%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48458 cells (1.343%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48459 cells (1.414%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 652/48507 cells (1.344%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48518 cells (1.362%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 635/48490 cells (1.310%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48519 cells (1.406%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 584/48516 cells (1.204%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 733/48519 cells (1.511%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 672/48497 cells (1.386%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 701/48457 cells (1.447%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48462 cells (1.364%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 679/48503 cells (1.400%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 682/48511 cells (1.406%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 657/48535 cells (1.354%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 674/48504 cells (1.390%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 661/48498 cells (1.363%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 637/48531 cells (1.313%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48499 cells (1.412%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 741/48491 cells (1.528%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 651/48525 cells (1.342%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 717/48511 cells (1.478%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 676/48513 cells (1.393%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 630/48473 cells (1.300%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 688/48481 cells (1.419%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48521 cells (1.391%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 713/48500 cells (1.470%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 634/48486 cells (1.308%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 697/48493 cells (1.437%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 662/48463 cells (1.366%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 674/48535 cells (1.389%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 717/48499 cells (1.478%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 698/48491 cells (1.439%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 680/48497 cells (1.402%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 713/48495 cells (1.470%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 685/48485 cells (1.413%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 675/48518 cells (1.391%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 670/48511 cells (1.381%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 664/48502 cells (1.369%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 654/48525 cells (1.348%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 660/48483 cells (1.361%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 772/48541 cells (1.590%) have ≥1 multi-transfection event.
+scMPRAforge: INFO: 721/48477 cells (1.487%) have ≥1 multi-transfection event.
+slurmstepd: error: *** JOB 6164542 ON a1130u09n03 CANCELLED AT 2026-03-18T21:11:05 ***

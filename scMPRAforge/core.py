@@ -4993,6 +4993,22 @@ def _wald_make_bundle(hypotheses, models_or_counts, **kw):
     return models_or_counts.make_wald_eval_bundle()
 # ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
+def _build_mwu_counts_dict(pdf):
+    """
+    Pure-pandas helper: takes a DataFrame with columns
+    [cell_type, cre_id, umis_mpra_bc] and returns the MWU bundle dict.
+
+    Factored out so it can be called from both the normal Dask path
+    (_mwu_make_bundle) and from inside Dask worker tasks where
+    Dask sub-task submission would deadlock.
+    """
+    pdf = pdf.copy()
+    pdf["cell_type"] = pdf["cell_type"].astype(str)
+    pdf["cre_id"] = pdf["cre_id"].astype(str)
+    pdf["umis_mpra_bc"] = pd.to_numeric(pdf["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
+    grouped = pdf.groupby(["cell_type", "cre_id"])["umis_mpra_bc"].apply(lambda s: s.to_numpy())
+    return {"counts": {key: arr for key, arr in grouped.items()}}
+
 def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
     """
     Build a lookup table of UMI counts keyed by (cell_type, cre_id).
@@ -5019,23 +5035,12 @@ def _mwu_make_bundle(hypotheses, models_or_counts, **kw):
                 context={"kind": "split_level", "split": "cell_type", "level": ct},
                 columns=["cell_type", "cre_id", "umis_mpra_bc"],
             )
-            pdf = _to_pandas_df(sub).copy()
-            pdf["cell_type"] = pdf["cell_type"].astype(str)
-            pdf["cre_id"] = pdf["cre_id"].astype(str)
-            pdf["umis_mpra_bc"] = pd.to_numeric(pdf["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
-            grouped = pdf.groupby(["cell_type", "cre_id"])["umis_mpra_bc"].apply(lambda s: s.to_numpy())
-            counts_dict.update({key: arr for key, arr in grouped.items()})
+            pdf = _to_pandas_df(sub)
+            counts_dict.update(_build_mwu_counts_dict(pdf)["counts"])
     else:
         df = counts_obj.get_data(include_missing=False, columns=["cell_type", "cre_id", "umis_mpra_bc"])
-        df = _to_pandas_df(df).copy()
-        df["cell_type"] = df["cell_type"].astype(str)
-        df["cre_id"] = df["cre_id"].astype(str)
-        df["umis_mpra_bc"] = pd.to_numeric(df["umis_mpra_bc"], errors="coerce").fillna(0).astype(float)
-        grouped = (
-            df.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
-            .apply(lambda s: s.to_numpy())
-        )
-        counts_dict = {key: arr for key, arr in grouped.items()}
+        pdf = _to_pandas_df(df)
+        return _build_mwu_counts_dict(pdf)
 
     return {"counts": counts_dict}
 
@@ -6373,8 +6378,9 @@ class de_novo_simulation:
             working=simulate_from_description(description)
             working=working.rename(columns={'zinb_sample':'umis_mpra_bc'})
             scd=scMPRA_data()
-    
+
             scd.data=working
+            scd.table_type="mpra_umiwise"
             
             scd.set_negative_controls(negative_controls)
             scd.set_reference_cell(reference_cell_type)
@@ -6384,6 +6390,12 @@ class de_novo_simulation:
                 scd.flatten_overtransfection()
 
             scd.to_parquet(path)
+
+            # Return free heap pages to the OS. Without this, glibc holds
+            # onto freed pages from the large DataFrames above, causing
+            # unmanaged memory to grow monotonically across tasks.
+            import ctypes
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
 
             return True
             
@@ -6459,14 +6471,31 @@ class de_novo_simulation:
                         path_scmpradat,
                         path_output,
                         hypothesis_set):
-            #load the data
-            dat = scMPRA_data.from_parquet(path_scmpradat)
-            #test
-            tester = HypothesisTester("mwu")
-            results = tester.run(hypothesis_set, dat)
-            #save
-            results.to_tsv(path_output)
-            
+            # Column-projected pandas read — only loads the 3 columns MWU
+            # needs, directly via pandas. Avoids dd.read_parquet which would
+            # submit Dask sub-tasks from inside a worker task, causing
+            # thread-starvation deadlock.
+            pdf = pd.read_parquet(
+                Path(path_scmpradat) / "data.parquet",
+                columns=["cell_type", "cre_id", "umis_mpra_bc"],
+                engine="pyarrow",
+            )
+            bundle = _build_mwu_counts_dict(pdf)
+            del pdf
+
+            # Run MWU on each hypothesis row (pure python, no Dask)
+            df_h = hypothesis_set.to_dataframe()
+            recs = df_h.to_dict(orient="records")
+            results = [_mwu_row_fn(r, bundle) for r in recs]
+
+            out = pd.concat([df_h.reset_index(drop=True),
+                             pd.DataFrame(results)], axis=1)
+            out["test_type"] = "mwu"
+            out["bh_p"] = _bh_adjust(out["p_value"])
+            if "flattened" in out:
+                out["flattened"] = out["flattened"].astype(bool)
+            ResultSet.from_dataframe(out).to_tsv(path_output)
+
             return True
         
         #submit jobs
