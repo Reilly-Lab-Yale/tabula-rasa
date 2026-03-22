@@ -2420,7 +2420,13 @@ class ortho:
             ret_ortho.by_cell_type_design = None
 
         ## Training data
-        ret_ortho.training_data=simple_load("training_data.pkl")
+        try:
+            ret_ortho.training_data=simple_load("training_data.pkl")
+        except FileNotFoundError:
+            import warnings
+            warnings.warn("training_data.pkl not found — training_data will be None. "
+                          "Pass dat= explicitly to recompute_design_matrices.")
+            ret_ortho.training_data=None
    
         try:
             wp = WaldPrecomp.load(client, full_path/"wald_precomp.pkl")
@@ -2545,9 +2551,13 @@ class ortho:
                     include_missing=True,
                     context={"kind": "split_level", "split": split, "level": model_level},
                 )
+                # umis_mpra_bc comes back as SparseDtype from _optimize_mpra_ddf.
+                # Dask groupby metadata inference cannot handle sparse columns,
+                # so cast to dense int64 lazily (no data pulled to driver).
+                subset["umis_mpra_bc"] = subset["umis_mpra_bc"].astype("int64")
             else:
                 subset = data[data[split] == model_level]
-            
+
             data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
             data_means = _to_pandas(data_means)
             data_means.name="mean(umis_mpra_bc)"
