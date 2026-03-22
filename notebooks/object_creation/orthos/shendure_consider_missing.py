@@ -81,7 +81,7 @@ try:
             primordial.criss_cross(client=client,
                                dat=shendure)
             primordial.extract_params(client)
-            primordial.save(path,name)
+            primordial.save(path,name,client=client)
 finally:
     print("! Done, shutting down",flush=True)
     time.sleep(10)

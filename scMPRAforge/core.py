@@ -2017,6 +2017,90 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
 
     return result
 
+
+# ---------------------------------------------------------------------------
+# Design-matrix shard save / load (worker-side)
+# ---------------------------------------------------------------------------
+
+def _save_design_matrix_shard(dm, filepath):
+    """Run on a Dask worker: pickle one design-matrix dict to disk."""
+    import pickle
+    with open(filepath, "wb") as f:
+        pickle.dump(dm, f)
+
+
+def _load_design_matrix_shard(filepath):
+    """Run on a Dask worker: unpickle one design-matrix dict from disk."""
+    import pickle
+    with open(filepath, "rb") as f:
+        return pickle.load(f)
+
+
+def _save_design_dict(client, design_dict, dir_path):
+    """Save a dict of design-matrix futures one shard per level.
+
+    Each level is serialised independently on the worker that holds it so
+    that the driver never has to pull every matrix into memory at once.
+    """
+    import json
+    dir_path = Path(dir_path)
+    dir_path.mkdir(exist_ok=True)
+    keys = list(design_dict.keys())
+    with open(dir_path / "_keys.json", "w") as f:
+        json.dump(keys, f)
+    futs = [
+        client.submit(_save_design_matrix_shard, design_dict[k], str(dir_path / f"{i}.pkl"))
+        for i, k in enumerate(keys)
+    ]
+    client.gather(futs)
+
+
+def _load_design_dict(client, dir_path):
+    """Load a sharded design dict, wrapping each shard in a future."""
+    import json
+    dir_path = Path(dir_path)
+    with open(dir_path / "_keys.json") as f:
+        keys = json.load(f)
+    return {
+        k: client.submit(_load_design_matrix_shard, str(dir_path / f"{i}.pkl"))
+        for i, k in enumerate(keys)
+    }
+
+
+def _compute_mats_futures(client, data, split):
+    """Re-create design-matrix futures from data without re-fitting models.
+
+    Mirrors the subset-prep + _smart_matrix portion of standard_fit so that
+    design matrices can be regenerated for a partially-saved ortho.
+    """
+    raw = data.get_data(include_missing=False)
+    levels = _series_unique_str(raw[split])
+    levels = sorted(levels, key=lambda t: -len(raw[raw[split] == t]))
+    use_missing = bool(getattr(data, "consider_missing_enabled", False))
+
+    def _subset_to_pandas(subset):
+        if isinstance(subset, dd.DataFrame):
+            subset = subset.compute()
+        return _prepare_subset_for_modeling(subset)
+
+    subset_futures = {}
+    for t in levels:
+        if use_missing:
+            ddf = data.get_data(
+                include_missing=True,
+                context={"kind": "split_level", "split": split, "level": t},
+            )
+            pandas_future = client.compute(ddf)
+            subset_futures[t] = client.submit(_prepare_subset_for_modeling, pandas_future)
+        else:
+            subset_futures[t] = client.submit(_subset_to_pandas, raw[raw[split] == t])
+
+    return {
+        t: client.submit(_smart_matrix, data=subset_futures[t], split=split)
+        for t in levels
+    }
+
+
 def standard_fit(client,data,split,disable_mom=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
@@ -2214,7 +2298,7 @@ class ortho:
 
         self.wald_precomp = None  # WaldPrecomp or None
 
-    def save(self,path,name,strip_training_data=False):
+    def save(self,path,name,client=None,strip_training_data=False):
         """
         Simple pickle save.
 
@@ -2257,14 +2341,22 @@ class ortho:
         else:
             self.by_cell_type_parameters.save(full_path/"by_cell_type_parameters.pkl")
         
-        ## Design matricies
+        ## Design matrices
+        # When a client is provided, save each level as a separate shard on
+        # the worker that holds it — no matrix is ever pulled to the driver.
+        # Without a client, fall back to the old dict_unwrap approach (only
+        # safe for small matrices / testing).
         if self.by_cre_design is None:
             simple_write(self.by_cre_design,"by_cre_design.pkl")
+        elif client is not None:
+            _save_design_dict(client, self.by_cre_design, full_path / "by_cre_design")
         else:
             simple_write(dict_unwrap(self.by_cre_design),"by_cre_design.pkl")
-        
+
         if self.by_cell_type_design is None:
             simple_write(self.by_cell_type_design,"by_cell_type_design.pkl")
+        elif client is not None:
+            _save_design_dict(client, self.by_cell_type_design, full_path / "by_cell_type_design")
         else:
             simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
 
@@ -2307,9 +2399,25 @@ class ortho:
         ret_ortho.by_cre_parameters=parameters.load(client,full_path/"by_cre_parameters.pkl")
         ret_ortho.by_cell_type_parameters=parameters.load(client,full_path/"by_cell_type_parameters.pkl")
 
-        ## Design matricies
-        ret_ortho.by_cell_type_design=dict_wrap(client,simple_load("by_cell_type_design.pkl"))
-        ret_ortho.by_cre_design=dict_wrap(client,simple_load("by_cre_design.pkl"))
+        ## Design matrices — three formats supported:
+        #   1. sharded directory (new format, one shard per level)
+        #   2. monolithic pickle (old format)
+        #   3. missing entirely (partially-saved ortho) → None
+        cre_design_dir = full_path / "by_cre_design"
+        if cre_design_dir.is_dir():
+            ret_ortho.by_cre_design = _load_design_dict(client, cre_design_dir)
+        elif (full_path / "by_cre_design.pkl").exists():
+            ret_ortho.by_cre_design = dict_wrap(client, simple_load("by_cre_design.pkl"))
+        else:
+            ret_ortho.by_cre_design = None
+
+        ct_design_dir = full_path / "by_cell_type_design"
+        if ct_design_dir.is_dir():
+            ret_ortho.by_cell_type_design = _load_design_dict(client, ct_design_dir)
+        elif (full_path / "by_cell_type_design.pkl").exists():
+            ret_ortho.by_cell_type_design = dict_wrap(client, simple_load("by_cell_type_design.pkl"))
+        else:
+            ret_ortho.by_cell_type_design = None
 
         ## Training data
         ret_ortho.training_data=simple_load("training_data.pkl")
@@ -2380,33 +2488,48 @@ class ortho:
                 self.by_cell_type,
                 self.by_cell_type_design,
                 "cell_type")
-        
+
+    def recompute_design_matrices(self, client, dat):
+        """Re-compute design-matrix futures without re-fitting models.
+
+        Use this to patch a partially-saved ortho where by_cre_design or
+        by_cell_type_design is None (e.g. after a driver OOM during save).
+        After calling this, persist the results with save(path, name, client=client).
+        """
+        dat = self._condense_dat(dat)
+        if self.by_cre is not None:
+            self.by_cre_design = _compute_mats_futures(client, dat, "cre_id")
+        if self.by_cell_type is not None:
+            self.by_cell_type_design = _compute_mats_futures(client, dat, "cell_type")
+
     def compute_model_qc(self):
         """
-        Will hang if model is not finished. 
-        returns None, sets self.by_cell_qc, self.by_cre_qc to dictionaries of 
-        QC information comparing nb params of each direction of the ortho 
+        Will hang if model is not finished.
+        returns None, sets self.by_cell_qc, self.by_cre_qc to dictionaries of
+        QC information comparing nb params of each direction of the ortho
         to the data means.
 
         Meant for debugging / manual inspection.
         """
         self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
-            design_matricies=dict_unwrap(self.by_cell_type_design),
+            design_keys=list(self.by_cell_type_design.keys()) if self.by_cell_type_design is not None else None,
             scMPRAdat=self.training_data)
         self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters,
-            design_matricies=dict_unwrap(self.by_cre_design),
+            design_keys=list(self.by_cre_design.keys()) if self.by_cre_design is not None else None,
             scMPRAdat=self.training_data)
     
     @staticmethod
-    def _nb_versus_means(params,design_matricies,scMPRAdat):
+    def _nb_versus_means(params,scMPRAdat,design_keys=None):
         """
-        Takes a model & design matricies corresponding to one direction of an ortho
-        (A set of 'by_cre' or a 'by_cell-type') and the original training data and produces a QC dictionary
+        Takes a model & original training data and produces a QC dictionary
         regressing data means against nb estimates.
         Used for quality control.
+
+        design_keys: optional list of level keys from the design dict, used
+        only for a sanity-check assertion that params and design are aligned.
         """
-        
-        assert sorted(params.keys)==sorted(list(design_matricies.keys())), "mismatched model"
+        if design_keys is not None:
+            assert sorted(params.keys)==sorted(design_keys), "mismatched model"
         split=params.broken_on
         anti=anti_split(split)
 
