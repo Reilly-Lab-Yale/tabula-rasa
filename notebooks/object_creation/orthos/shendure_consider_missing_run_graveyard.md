@@ -286,3 +286,38 @@ Changes committed in this session (all in `scMPRAforge/core.py`):
 2. **`_extract_mu` — scipy sparse API**: Detect `scipy.sparse.issparse(X)`; if sparse, compute `X.tocsr() @ w` directly then reconstruct pandas sparse DataFrame via `pd.DataFrame.sparse.from_spmatrix()` for `undo_one_hot_encoding`.
 3. **`_extract_zi` — scipy sparse API**: Detect `scipy.sparse.issparse(Z)`; if sparse, compute `Z @ x_pi` directly then reconstruct pandas sparse DataFrame for label extraction.
 
+---
+
+## 2026-03-20 Attempt 9 — failed (36-hour wall-limit timeout, no crash)
+
+No errors. The job ran cleanly from 2026-03-18 15:08 to 2026-03-20 03:17 (36 hours) and was cancelled by SLURM at the wall-limit. All 16 workers were still alive at cancellation — no OOM, no Python exception, no TF error.
+
+Worker logs show workers entered `_mom_from_training_data` within minutes of starting (visible FutureWarning about `working_nb["beta"].loc["reference"]`), then no further logged activity until the cancellation message. No model summaries, no loss values, no fitting completion messages appeared in any worker log.
+
+Based on observation before the job was cancelled: by-CRE models completed, but by-cell-type models were still running and taking much longer than expected. With `consider_missing=True`, cell-type model datasets are 12M–128M rows each, making both design matrix construction and TensorZINB fitting substantially slower than by-CRE models.
+
+Contributing factor: this run predated the `standard_fit` sort-by-size change — cell-type models were submitted in arbitrary order rather than largest-first. Large cell types were not necessarily the first to start fitting.
+
+Fixes applied before next attempt:
+1. **`standard_fit` — sort levels by descending size**: Levels are now sorted by row count (descending) before futures are submitted, so the largest (slowest) models start first. Failures surface early (fail-fast), and the scheduler picks up high-priority work sooner.
+2. **TensorZINB — new release installed**: The `tz` env now has the updated TensorZINB with `TensorZINBTrainingModel` (`tf.GradientTape`-based `train_step`), `ZINBLogLik._loss_components()` as a `@staticmethod` called with concrete tensors post-training (fixes the KerasTensor LL bug), `SparseDense`, and `run_eagerly=True` compilation.
+
+---
+
+## 2026-03-20 Attempt 10 — failed (Dask re-entrant deadlock in `_subset_to_pandas`)
+
+Driver job:
+- Main job id: `2559822`, workers: `2559825`–`2559840`
+- Started: `2026-03-20`, killed manually after deadlock confirmed
+
+Root cause: Dask re-entrant deadlock. All 16 workers were executing `_subset_to_pandas` tasks. Inside `_subset_to_pandas`, `ddf.compute()` was called to materialise the Dask DataFrame. `ddf.compute()` attempts to dispatch DDF partition sub-tasks back to the distributed scheduler — but all worker slots were already occupied by the outer `_subset_to_pandas` tasks, so the sub-tasks could never be scheduled. Result: all workers blocked indefinitely waiting for sub-tasks that could never run.
+
+Evidence:
+- Dashboard monitoring showed 138 active `_subset_to_pandas` tasks and 0 task completions over 2+ minutes
+- No model summaries, no loss values, no fitting completion messages in any worker log
+
+Fix applied:
+- In `standard_fit` (`core.py`), replaced the `subset_inputs` dict + `{t: client.submit(_subset_to_pandas, subset_inputs[t])}` comprehension with a per-level loop
+- For `use_missing=True` path: call `client.compute(ddf)` on the driver to dispatch DDF partition tasks directly into the scheduler's task graph, then `client.submit(_prepare_subset_for_modeling, pandas_future)` to prepare the result — no worker holds a slot while waiting for sub-tasks
+- For `use_missing=False` path: unchanged (`client.submit(_subset_to_pandas, raw[raw[split] == t])` — subset is already a pandas slice, no internal compute)
+

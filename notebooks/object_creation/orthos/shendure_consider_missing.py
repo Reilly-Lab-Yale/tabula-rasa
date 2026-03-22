@@ -23,7 +23,7 @@ from dask.distributed import Client, performance_report
 local=False
 if not local:
     worker_cores = 1
-    worker_memory = "128G"
+    worker_memory = "96G"
     worker_processes = 1
     cluster_jobs = 16
 
@@ -33,7 +33,7 @@ if not local:
         processes=worker_processes,#dask workers per slurm job
         job_extra_directives=["-p ycga", 
             f"--job-name=simclust_worker",
-            f"--time=36:00:00",
+            f"--time=2-23:40:00",
             f"--output=worker_%j.out"]
     )
 
@@ -53,7 +53,7 @@ print(client.dashboard_link,flush=True)
 #data_root="/nfs/roberts/project/pi_skr2/shared/tabula_data"
 data_root="/vast/palmer/pi/reilly/tabula_data"
 path=f"{data_root}/shendure"
-name="shendure_ortho_consider_missing_20260318"
+name="shendure_ortho_consider_missing_20260320"
 report_path = Path(__file__).with_name(f"{name}_dask_performance_report.html")
 
 print("! fitting",flush=True)
@@ -81,7 +81,7 @@ try:
             primordial.criss_cross(client=client,
                                dat=shendure)
             primordial.extract_params(client)
-            primordial.save(path,name)
+            primordial.save(path,name,client=client)
 finally:
     print("! Done, shutting down",flush=True)
     time.sleep(10)
