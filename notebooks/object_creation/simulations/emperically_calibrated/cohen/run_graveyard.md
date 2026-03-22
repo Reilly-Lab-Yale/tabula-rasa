@@ -176,3 +176,23 @@ Records of failed/aborted runs and why they died.
 | Key changes | Resume from 90 complete sims; ran only 10 fresh; extend to 14h for headroom. |
 
 **Result:** All 100 sims complete with MWU results. Resume logic worked — 90 picked up from disk, 10 fresh sims run in ~35 min.
+
+**However:** Activity range was wrong — `min_activity = min_mpra_umi` (near zero) squashed the transition zone; plot x-axis 0–1.0 showed only the left side of the curve. All 100 sims discarded and rerun with corrected range.
+
+---
+
+## Run 12 — Job 6299639 (SUCCEEDED)
+
+| Resource | Value |
+|---|---|
+| Main job mem | 128G |
+| Main job CPUs | 1 |
+| Worker mem | 64G / **1 process = 64G per worker** |
+| Worker jobs | 12 |
+| Total workers | 12 |
+| Batch size | 10 |
+| Time limit | 14:00:00 |
+| Elapsed | 05:38:33 |
+| Key changes | Fixed activity range: `min=minP*0.5`, `max=minP*1.6` to capture full S-curve on both sides of FC=1. |
+
+**Result:** All 100 sims complete, MWU done, plot generated. Full run in a single job.
