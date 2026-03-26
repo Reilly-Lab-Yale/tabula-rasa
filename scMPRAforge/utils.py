@@ -142,8 +142,11 @@ def undo_one_hot_encoding(df, reference_label="reference"):
         cols, levels = zip(*cols_levels)
         subdf = df[list(cols)]
 
-        # Sparse-friendly row sum
-        row_sums = subdf.sum(axis=1)
+        #Force to sparse if it isnt already
+        subdf = subdf.astype(pd.SparseDtype("int", fill_value=0))
+        
+        # efficient row sum
+        row_sums = subdf.sparse.to_coo().sum(axis=1)
 
         # Check for multi-hot rows - convert to dense only for validation
         row_sums_check = row_sums.values if hasattr(row_sums, 'sparse') else row_sums
@@ -549,41 +552,7 @@ def _plot_test_bars(
     fig.tight_layout()
     return fig, ax
 
-def one_library_replicate(root,min,max,reps,client,flatten_overtransfection,bound):
-    """
-    Notebook helper function.
-    Creates a de_novo_simulation in root, with a random name.
-    Assumes corresponding libraries. 
-    """
-    #create ground truth dataframe
-    rng = np.random.default_rng()
-    cre_gt=rng.uniform(min,max,size=n_cres-1)
-    cre_gt=np.append(cre_gt,minP)
-    names=[f"synthcre_{i}" for i in range(0,n_cres-1)]+["reference"]
 
-    gt_df=pd.DataFrame({"cre_id":names,"mu":cre_gt})
-    gt_df["cell_type"]="reference"
-
-    # simulate libraries
-    libraries=[scm.simulate_library(CREs=gt_df["cre_id"],
-                 library_model=scm.SHENDURE_BOUNDS.library_model)
-                 for i in range(n_sims)]
-    
-    #initalize the simulated replicate
-    name=uuid.uuid4().hex[:8]
-    
-    sim=scm.de_novo_simulation(location=root,
-                            name=f"sim_{name}",
-                            client=client,
-                            libraries=libraries,
-                            library_mapping="corresponding",
-                            flatten_overtransfection=False,
-                            n_sims=n_sims,
-                            experiment_bounds=bound,
-                            ground_truth=gt_df)
-    sim.gamut()
-    
-    return name, sim
 
 def pow_curve(df,n_bins=100):
     """

@@ -43,9 +43,9 @@ This repository is organzied as follows:
 conda create -n env_tensorzinb python=3.10
 conda activate env_tensorzinb
 echo "numpy <2" >> $CONDA_PREFIX/conda-meta/pinned
-#navigate to tensor zinb
+git clone https://github.com/wanglab-georgetown/tensorzinb.git
+cd tensorzinb; python setup.py install; cd ..
 #install apple silicon deps as below if necessary
-python setup.py install
 ```
 
 For apple silicon, may need
@@ -55,13 +55,11 @@ python -m pip install tensorflow-macos==2.9.2
 python -m pip install tensorflow-metal==0.5.1
 ```
 
-```
-conda install statsmodels 
-```
-
 Additional required packages
 ```
+conda install statsmodels 
 conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueue
+conda install scikit-learn
 ```
 
 may need to install `tensorflow keras` if you didn't above
@@ -104,6 +102,13 @@ Fill in
 
 This section describes the various standard tabular formats used internally.
 
+## `.scmpra` file format
+
+`.scmpra` paths are directories written by `scMPRA_data.to_parquet(...)`.
+They contain:
+- `data.parquet/` (gzip-compressed parquet dataset for `scMPRA_data.data`)
+- `members.json` (serialized object members other than `.data`)
+
 ## MPRA data formatting
 
 Note that most of our code does not *require* that any of the barcode sequences should be actual nucleotide sequences. So you can replace them with, for example, numerical combinatorial barcoding sub-barcode ID strings with no consequence. The exception is barcode-deduplication. 
@@ -126,8 +131,8 @@ UMI = unique molecular identifier
 | cre_id                | str              | CRE id or name                       | T          |
 | cell_type             | str              | cell-type                            | T          |
 | mpra_bc               | str (nucleotide) | MPRA reporter barcode                | T          |
-| mpra_umi              | str (nucleotide) | MPRA umi                             | T          |
-| reads_mpra            | int              | number mpra reads                    | T          |
+| umi                   | str (nucleotide) | MPRA umi                             | T          |
+| reads                 | int              | number mpra reads                    | T          |
 | transfection_bc       | str (nucleotide) | transfection barcode                 | F          |
 | transfection_umi      | str (nucleotide) | transfection reporter umi            | F          |
 | reads_transfection_bc | int              | number transfection reporter reads   | F          |
@@ -136,11 +141,11 @@ UMI = unique molecular identifier
 **Umi-wise**
 | Column name           | Type             | Description                                                      | Mandatory? |
 | --------------------- | ---------------- | ---------------------------------------------------------------- | ---------- |
-| cell_bc               | str (nucleotide) | cell barcode                                                     | ~T          |
+| cell_bc               | str (nucleotide) | cell barcode                                                     | F (~T for empirical data) |
 | rep_id                | str              | replicate id                                                     | T          |
 | cre_id                | str              | CRE id or name                                                   | T          |
 | cell_type             | str              | cell-type                                                        | T          |
-| mpra_bc               | str (nucleotide) | MPRA reporter barcode                                            | T          |
+| mpra_bc               | str (nucleotide) | MPRA reporter barcode                                            | F (recommended) |
 | umis_mpra_bc          | int              | number of MPRA UMIs                                              | T          |
 | reads_mpra_bc         | int              | number of MPRA reads, summed across all UMIs                     | F          |
 | transfection_bc       | str (nucleotide) | transfection barcode                                             | F          |
@@ -151,6 +156,8 @@ UMI = unique molecular identifier
 (Though MPRA barcodes cannot be modeled individually, its undersierable to sum across to remove them : since this would inflate strength estimates of CREs with more MPRA barcodes)
 
 Simulated UMI-wise data doesn't currently require cell barcode. 
+
+`scMPRA_data.from_tsv(...)` enforces the spec strictly: required columns must be present and extra columns are rejected.
 
 Note that DNA is treated as constant for a given CRE : it's never reduced on account of certain MPRA barcodes being present in certain cells.
 This keeps it as a totally exogenous source of information, far from the vicissitudes of single-cell sequencing...
@@ -207,7 +214,5 @@ These tables store made-up ground truth, for the purposes of simulation.
 | abundance   | float               | Relative abundance in DNA library | T          |
 
 Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
-
-
 
 
