@@ -1957,7 +1957,7 @@ def _smart_matrix(data,split):
 
 
 
-def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
+def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False):
     """
     Takes matricies & produces a single tensorzinb model.
     init_method takes "nb", "ones" or "pass".
@@ -1972,9 +1972,11 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
     #nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
     #zi_X = zi_X.toarray() if sp.issparse(zi_X) else zi_X.to_numpy()
 
+    device_type = "GPU" if use_gpu else "CPU"
+
     if init_method=="nb":
         zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
-        result = zinbo.fit(return_history=True,init_method="nb")#reset_keras_session=True)
+        result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
         if not init_vals:
@@ -1982,7 +1984,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
 
         zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
 
-        result = zinbo.fit(return_history=True,init_weights=init_vals)
+        result = zinbo.fit(return_history=True,init_weights=init_vals,device_type=device_type)
 
         del zinbo
 
@@ -2001,7 +2003,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None):
 
         zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
 
-        result = zinbo_ones.fit(return_history=True,init_weights=ones_init)
+        result = zinbo_ones.fit(return_history=True,init_weights=ones_init,device_type=device_type)
 
         del zinbo_ones
     else:
@@ -2101,7 +2103,7 @@ def _compute_mats_futures(client, data, split):
     }
 
 
-def standard_fit(client,data,split,disable_mom=False):
+def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -2175,14 +2177,24 @@ def standard_fit(client,data,split,disable_mom=False):
 
     del subset_futures
 
+    if pre_fit_hook is not None:
+        from dask.distributed import wait
+        wait(list(mats_futures.values()))
+        if init_method == "pass":
+            wait([v for v in init_vals.values() if v is not None])
+        pre_fit_hook()
+
+    use_gpu = "GPU" in fit_resources
+
     tzinb_futures = {
         t: client.submit(
                 _tensorzinb_fit,
                 mats_futures[t],
                 t,
                 init_method=init_method,
-                init_vals=init_vals[t]#,
-                #resources={'FIT': 1}
+                init_vals=init_vals[t],
+                use_gpu=use_gpu,
+                resources=fit_resources
             )
         for t in levels
     }
@@ -2457,21 +2469,28 @@ class ortho:
         
 
         
-    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
                                                         split="cell_type",
-                                                        disable_mom=disable_mom)
+                                                        disable_mom=disable_mom,
+                                                        fit_resources=fit_resources,
+                                                        pre_fit_hook=pre_fit_hook)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
         
     
-    def criss_cross(self,client,dat,disable_mom=False):
+    def criss_cross(self,client,dat,disable_mom=False,gpu=False):
         """
         Makes by_cre and by_cell_type models.
+        gpu=True: cell-type models are submitted with resources={"GPU": 1} so
+        Dask schedules them only on GPU-enabled workers.  CRE models are
+        unaffected.
         """
         self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom)
-        self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom)
+        ct_resources = {"GPU": 1} if gpu else {}
+        self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom,
+                                     fit_resources=ct_resources)
         
         
     
