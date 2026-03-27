@@ -321,3 +321,39 @@ Fix applied:
 - For `use_missing=True` path: call `client.compute(ddf)` on the driver to dispatch DDF partition tasks directly into the scheduler's task graph, then `client.submit(_prepare_subset_for_modeling, pandas_future)` to prepare the result — no worker holds a slot while waiting for sub-tasks
 - For `use_missing=False` path: unchanged (`client.submit(_subset_to_pandas, raw[raw[split] == t])` — subset is already a pandas slice, no internal compute)
 
+---
+
+## 2026-03-20 Attempt 11 — SUCCESS (driver OOM during save; patched)
+
+Driver job:
+- Wrapper: [wrap_shend_consider_missing.sh](/home/mcn26/project/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing.sh)
+- Slurm resources: `2` CPU cores, `24G` RAM, `2-23:50:00` walltime
+- Main job id: `2561074`, workers: `2561081`–`2561096`
+- Started: `2026-03-20 10:05`, fitting completed: `2026-03-22 ~04:46`, driver OOM: `2026-03-22 04:51` (~42.7 hours total)
+
+Dask worker configuration used:
+- `SLURMCluster(cores=1, memory="96G", processes=1)`
+- `cluster.scale(jobs=16)`
+- Effective layout: `16` single-threaded workers, `~89.4 GiB` memory per worker
+
+Observed result:
+- `ortho_filter` removed 4 combinations involving `'reference'`; dropped `641 of 2103` (cell_type, cre_id) combos
+- **All 16 workers completed cleanly** — no OOM kills, no nanny restarts, no Python exceptions, no shuffle failures
+- `by_cre.pkl` saved at `2026-03-21 05:25` (~19 hours in); `by_cell_type.pkl` saved at `2026-03-22 04:46` (~42.7 hours in)
+- Driver OOM'd at `04:51` with exit code `0:125` and MaxRSS `~24 GiB` (hit the 24G driver memory limit) during design matrix serialization in `save()`/`extract_params()`
+- Design matrices were not written by the driver job
+
+Recovery:
+- `patch_design_matrices.py` submitted twice (`2636537`, `2636583`) on `2026-03-22`
+  - First attempt (`10:51–10:53`, COMPLETED, 2 min): wrote most design matrices
+  - Second attempt (`10:57–11:11`, COMPLETED, 14 min): completed remaining
+- All 208 CRE design matrices (`by_cre_design/0.pkl`–`207.pkl`) and all 10 cell-type design matrices (`by_cell_type_design/0.pkl`–`9.pkl`) present and timestamped `2026-03-22 11:08–11:11`
+
+Model verification (2026-03-26):
+- All 5 core pickle files load cleanly: `by_cre.pkl` → `experiment_model`, `by_cell_type.pkl` → `experiment_model`, `by_cre_parameters.pkl` → `parameters`, `by_cell_type_parameters.pkl` → `parameters`, `training_data.pkl` → `scMPRA_data`
+- `by_cre_design/_keys.json`: 208 entries (reference + 207 CREs); `by_cell_type_design/_keys.json`: 10 entries (reference + 9 cell types)
+- **Model is intact and complete**
+
+Model saved at:
+- `/vast/palmer/pi/reilly/tabula_data/shendure/shendure_ortho_consider_missing_20260320/`
+

@@ -1957,11 +1957,12 @@ def _smart_matrix(data,split):
 
 
 
-def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False):
+def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False,nb_only=False):
     """
     Takes matricies & produces a single tensorzinb model.
     init_method takes "nb", "ones" or "pass".
     mom (method of moments) only implemented for by_cell_type models at the moment.
+    nb_only=True fits a plain NB model (no zero-inflation component).
     """
     import scipy.sparse as sp
     endog = matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze()
@@ -1975,21 +1976,20 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
     device_type = "GPU" if use_gpu else "CPU"
 
     if init_method=="nb":
-        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
         result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
         if not init_vals:
             raise ValueError("init_vals required for init_method=pass")
 
-        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
 
         result = zinbo.fit(return_history=True,init_weights=init_vals,device_type=device_type)
 
         del zinbo
 
     elif init_method=="ones":
-        num_feat_zi = zi_X.shape[1]
         num_feat_nb = nb_X.shape[1]
         if endog.ndim == 1:
             num_out = 1
@@ -1998,10 +1998,12 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
 
         ones_init = {}
         ones_init["x_mu"] = np.ones((num_feat_nb, num_out), dtype=np.float32)
-        ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
+        if not nb_only:
+            num_feat_zi = zi_X.shape[1]
+            ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
         ones_init["theta"] = np.ones((1, num_out), dtype=np.float32)
 
-        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X)
+        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
 
         result = zinbo_ones.fit(return_history=True,init_weights=ones_init,device_type=device_type)
 
@@ -2011,6 +2013,11 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
     
     if pd.isnull(result["llf_total"]):
         logger.warning(f"Unconverged model in {name}.")
+
+    # Stamp intent onto the result dict so downstream code can distinguish
+    # NB-only fits from ZINB fits without relying on the absence of x_pi.
+    # Old ZINB models pre-date this field; callers should use .get("nb_only", False).
+    result["nb_only"] = nb_only
 
     # Release tf_keras session memory so it doesn't accumulate across tasks.
     # Must use tf_keras (not keras 3.x) to actually clear the TF1 graph session.
@@ -2103,7 +2110,7 @@ def _compute_mats_futures(client, data, split):
     }
 
 
-def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None):
+def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -2160,10 +2167,13 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
         for t in levels
     }
 
+    if nb_only:
+        disable_mom = True
+
     if split=="cell_type" and not disable_mom:
         init_method="pass"
         init_vals={
-            t:client.submit(_mom_from_training_data, 
+            t:client.submit(_mom_from_training_data,
                 data=subset_futures[t],
                 split="cell_type",
                 subset=t,
@@ -2194,6 +2204,7 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
                 init_method=init_method,
                 init_vals=init_vals[t],
                 use_gpu=use_gpu,
+                nb_only=nb_only,
                 resources=fit_resources
             )
         for t in levels
@@ -2229,8 +2240,11 @@ class experiment_model:
         zi_regressor_names=dm["zi_regressor_names"] if "zi_regressor_names" in dm else list(dm["zi_regressors"].columns)
         model["weights"]["x_mu"] = pd.Series(model["weights"]["x_mu"].flatten(),
                                             index=nb_regressor_names)
-        model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
-                                            index=zi_regressor_names)
+        # NB-only models have no x_pi; skip labeling. Old ZINB models pre-date
+        # the nb_only key so default to False for backwards compatibility.
+        if not model.get("nb_only", False):
+            model["weights"]["x_pi"] = pd.Series(model["weights"]["x_pi"].flatten(),
+                                                index=zi_regressor_names)
         return model
     
     def label_regressors(self,client,design_matricies):
@@ -2459,38 +2473,39 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None,disable_mom=False):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
                                                      split="cre_id",
-                                                     disable_mom=disable_mom)
+                                                     disable_mom=disable_mom,
+                                                     nb_only=nb_only)
         self.by_cre.label_regressors(client,self.by_cre_design)
-        
 
-        
-    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None):
+
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
                                                         split="cell_type",
                                                         disable_mom=disable_mom,
                                                         fit_resources=fit_resources,
-                                                        pre_fit_hook=pre_fit_hook)
+                                                        pre_fit_hook=pre_fit_hook,
+                                                        nb_only=nb_only)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
-        
-    
-    def criss_cross(self,client,dat,disable_mom=False,gpu=False):
+
+
+    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False):
         """
         Makes by_cre and by_cell_type models.
         gpu=True: cell-type models are submitted with resources={"GPU": 1} so
         Dask schedules them only on GPU-enabled workers.  CRE models are
         unaffected.
         """
-        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only)
         ct_resources = {"GPU": 1} if gpu else {}
         self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom,
-                                     fit_resources=ct_resources)
+                                     fit_resources=ct_resources,nb_only=nb_only)
         
         
     
@@ -2850,6 +2865,10 @@ def extract_parameters(client,model,design,split):
         return mu_summary
 
     def _extract_zi(model,design_matrix):
+        # NB-only models have no zero-inflation component; nothing to extract.
+        # Default False so old ZINB models without the key still work.
+        if model.get("nb_only", False):
+            return None
         Z=design_matrix["zi_regressors"]
         ## ZI ##
         import scipy.sparse as sp
@@ -2964,13 +2983,19 @@ def flatten_param_representation(params, split: str):
     dfs=[]
     for key in params.keys:
         nb=params.nb[key].reset_index()
-        zi=params.zi[key].reset_index()
-        cartesian = nb.merge(zi, how='cross')
+        zi_val=params.zi[key]
+        if zi_val is not None:
+            zi=zi_val.reset_index()
+            cartesian = nb.merge(zi, how='cross')
+        else:
+            cartesian = nb.copy()
         cartesian[split] = np.repeat(key, len(cartesian))
         cartesian['theta'] = np.repeat(params.theta[key], len(cartesian))
 
         anti=anti_split(split)
-        index_cols=[split,anti,"rep_id"]
+        index_cols=[split,anti]
+        if "rep_id" in cartesian.columns:
+            index_cols.append("rep_id")
         #index_cols = (
         #    params.nb[key].index.names +
         #    params.zi[key].index.names +
