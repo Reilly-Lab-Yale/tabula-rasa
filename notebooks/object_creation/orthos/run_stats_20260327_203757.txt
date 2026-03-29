@@ -1,0 +1,507 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-03-28T21:26:34.971257
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos
+  Main jobs : 6579104, 6579440, 6583489, 6583490, 6583491, 6583492
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 6579104  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6579104
+   User/Account: mcn26/prio_skr2
+       Job Name: seelig_ct
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 1
+     CPU Memory: 16GB
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri Mar 27, 2026 at 8:38 PM
+       Run Time: 00:02:42
+     Time Limit: 2-00:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|                                               3%]
+  CPU memory usage [|                                               2%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u07n03: 00:00:05/00:02:42 (efficiency=3.3%)
+
+  CPU memory usage per node - used/allocated
+      a1132u07n03: 395.4MB/16GB 
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 3.3%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/6579104
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u07n03": {
+      "cpus": 1,
+      "total_memory": 17179869184,
+      "total_time": 5.3,
+      "used_memory": 414593024
+    }
+  },
+  "total_time": 162
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6579104|seelig_ct|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u07n03|1|1|16G|2026-03-27T20:37:57|2026-03-27T20:38:37|2026-03-27T20:41:19|00:02:42|2-00:00:00|00:07.482|00:06.434|00:01.048|00:02:42||||||||||0:0
+6579104.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u07n03|1|1||2026-03-27T20:38:37|2026-03-27T20:38:37|2026-03-27T20:41:19|00:02:42||00:07.482|00:06.434|00:01.047|00:02:42|1436116K|1436116K|1266736K|1266736K|145.94M|0.23M|145.94M|0.23M|1|0:0
+6579104.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u07n03|1|1||2026-03-27T20:38:37|2026-03-27T20:38:37|2026-03-27T20:41:19|00:02:42||00:00:00|00:00:00|00:00:00|00:02:42|292K|292K|84K|84K|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6579440  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 6579440
+   User/Account: mcn26/prio_skr2
+       Job Name: seelig_ct
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 1
+     CPU Memory: 16GB
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri Mar 27, 2026 at 8:51 PM
+       Run Time: 01:52:58
+     Time Limit: 2-00:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [                                                0%]
+  CPU memory usage [|                                               3%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u07n02: 00:00:44/01:52:58 (efficiency=0.7%)
+
+  CPU memory usage per node - used/allocated
+      a1132u07n02: 426.5MB/16GB 
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 0.7%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/6579440
+
+  * This job only needed 4% of the requested time which was 2-00:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u07n02": {
+      "cpus": 1,
+      "total_memory": 17179869184,
+      "total_time": 44.2,
+      "used_memory": 447197184
+    }
+  },
+  "total_time": 6778
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6579440|seelig_ct|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u07n02|1|1|16G|2026-03-27T20:50:47|2026-03-27T20:51:30|2026-03-27T22:44:28|01:52:58|2-00:00:00|00:44.825|00:35.558|00:09.267|01:52:58||||||||||0:0
+6579440.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u07n02|1|1||2026-03-27T20:51:30|2026-03-27T20:51:30|2026-03-27T22:44:28|01:52:58||00:44.822|00:35.558|00:09.264|01:52:58|1630404K|1630404K|1571584K|1571584K|169.94M|2.83M|169.94M|2.83M|1|0:0
+6579440.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u07n02|1|1||2026-03-27T20:51:30|2026-03-27T20:51:30|2026-03-27T22:44:28|01:52:58||00:00.003|00:00:00|00:00.003|01:52:58|30564K|30732K|9312K|25528K|0.54M|0.02M|0.67M|0.03M|1|0:0
+
+
+================================================================================
+  Job 6583489  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+No data was found for job 6583489. This is probably because it is too old
+or it expired from Jobstats database. If you are not running this command on the
+cluster where the job was run then use the -c option to specify the cluster.
+If the run time was very short then try running "seff 6583489".
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {},
+  "total_time": 39
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6583489|dask-worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1130u07n04|1|1|60G|2026-03-27T22:51:36|2026-03-27T22:54:03|2026-03-27T22:54:42|00:00:39|04:00:00|00:09.007|00:07.002|00:02.005|00:00:39||||||||||0:0
+6583489.batch|batch|CANCELLED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:43|00:00:40||00:09.007|00:07.001|00:02.005|00:00:40|2346340K|2346340K|1723460K|1723460K|732.98M|0.16M|732.98M|0.16M|1|0:15
+6583489.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:44|00:00:41||00:00:00|00:00:00|00:00:00|00:00:41|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6583490  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+No data was found for job 6583490. This is probably because it is too old
+or it expired from Jobstats database. If you are not running this command on the
+cluster where the job was run then use the -c option to specify the cluster.
+If the run time was very short then try running "seff 6583490".
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {},
+  "total_time": 39
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6583490|dask-worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1130u07n04|1|1|60G|2026-03-27T22:51:36|2026-03-27T22:54:03|2026-03-27T22:54:42|00:00:39|04:00:00|00:09.008|00:07.005|00:02.003|00:00:39||||||||||0:0
+6583490.batch|batch|CANCELLED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:43|00:00:40||00:09.008|00:07.004|00:02.003|00:00:40|2412604K|2412604K|1774360K|1774360K|748.41M|0.16M|748.41M|0.16M|1|0:15
+6583490.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:44|00:00:41||00:00:00|00:00:00|00:00:00|00:00:41|292K|292K|80K|80K|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6583491  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+No data was found for job 6583491. This is probably because it is too old
+or it expired from Jobstats database. If you are not running this command on the
+cluster where the job was run then use the -c option to specify the cluster.
+If the run time was very short then try running "seff 6583491".
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {},
+  "total_time": 39
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6583491|dask-worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1130u07n04|1|1|60G|2026-03-27T22:51:36|2026-03-27T22:54:03|2026-03-27T22:54:42|00:00:39|04:00:00|00:10.008|00:07.003|00:03.004|00:00:39||||||||||0:0
+6583491.batch|batch|CANCELLED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:43|00:00:40||00:10.007|00:07.003|00:03.004|00:00:40|9141072K|9141072K|5139136K|5139136K|2385.90M|0.16M|2385.90M|0.16M|1|0:15
+6583491.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:44|00:00:41||00:00:00|00:00:00|00:00:00|00:00:41|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 6583492  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+No data was found for job 6583492. This is probably because it is too old
+or it expired from Jobstats database. If you are not running this command on the
+cluster where the job was run then use the -c option to specify the cluster.
+If the run time was very short then try running "seff 6583492".
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {},
+  "total_time": 39
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+6583492|dask-worker|CANCELLED by 18716|priority|prio_skr2|prio_skr2|bouchet|a1130u07n04|1|1|60G|2026-03-27T22:51:36|2026-03-27T22:54:03|2026-03-27T22:54:42|00:00:39|04:00:00|00:10.008|00:07.004|00:03.003|00:00:39||||||||||0:0
+6583492.batch|batch|CANCELLED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:43|00:00:40||00:10.007|00:07.003|00:03.003|00:00:40|7612728K|7612728K|4391256K|4391256K|2013.04M|0.16M|2013.04M|0.16M|1|0:15
+6583492.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|1||2026-03-27T22:54:03|2026-03-27T22:54:03|2026-03-27T22:54:44|00:00:41||00:00:00|00:00:00|00:00:00|00:00:41|336K|336K|88K|88K|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u07n04 ───────────────────────────────────────────────────────────────
+NodeName=a1130u07n04 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=62.90
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u07n04 NodeHostName=a1130u07n04 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=450560 FreeMem=197334 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-30T12:27:20 SlurmdStartTime=2026-03-27T10:04:35
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=440G
+   CurrentWatts=760 AveWatts=712
+   
+
+
+
+── a1132u07n02 ───────────────────────────────────────────────────────────────
+NodeName=a1132u07n02 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=60 CPUEfctv=64 CPUTot=64 CPULoad=31.01
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u07n02 NodeHostName=a1132u07n02 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=593920 FreeMem=399860 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T09:33:51 SlurmdStartTime=2026-03-27T10:04:37
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=60,mem=580G
+   CurrentWatts=944 AveWatts=742
+   
+
+
+
+── a1132u07n03 ───────────────────────────────────────────────────────────────
+NodeName=a1132u07n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=60 CPUEfctv=64 CPUTot=64 CPULoad=57.41
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u07n03 NodeHostName=a1132u07n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=565248 FreeMem=137693 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T01:53:14 SlurmdStartTime=2026-03-27T10:04:37
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=60,mem=552G
+   CurrentWatts=792 AveWatts=693
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-6579104.err  (5 lines total) ────────────────────────────────────────
+[first 5 lines]
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774658325.445502 2425627 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774658330.735886 2425627 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+
+── slurm-6579104.out  (34 lines total) ───────────────────────────────────────
+[first 20 lines]
+http://10.18.22.72:8787/status
+[+] Scheduler: tcp://10.18.22.72:39263
+[+] Waiting for 4 CPU workers...
+[+] CPU workers connected.
+[+] Partial result found. Loading...
+[31m---------------------------------------------------------------------------[39m
+[31mEOFError[39m                                  Traceback (most recent call last)
+[36mFile [39m[32m/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/fit_seelig_ortho_by_cell_type.py:89[39m
+[32m     87[39m [38;5;28;01mif[39;00m (path / name).is_dir():
+[32m     88[39m     [38;5;28mprint[39m([33m"[39m[33m[+] Partial result found. Loading...[39m[33m"[39m, flush=[38;5;28;01mTrue[39;00m)
+[32m---> [39m[32m89[39m     primordial = [43mscm[49m[43m.[49m[43mortho[49m[43m.[49m[43mload[49m[43m([49m[43mclient[49m[43m,[49m[43m [49m[43mpath[49m[43m,[49m[43m [49m[43mname[49m[43m)[49m
+[32m     90[39m [38;5;28;01melse[39;00m:
+[32m     91[39m     [38;5;28mprint[39m([33m"[39m[33m[+] Creating...[39m[33m"[39m, flush=[38;5;28;01mTrue[39;00m)
+
+[36mFile [39m[32m/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/scMPRAforge/core.py:2459[39m, in [36mortho.load[39m[34m(cls, client, path, name)[39m
+[32m   2457[39m [38;5;66;03m## Experiment models[39;00m
+[32m   2458[39m ret_ortho.by_cre=experiment_model.load(client,full_path/[33m"[39m[33mby_cre.pkl[39m[33m"[39m)
+[32m-> [39m[32m2459[39m ret_ortho.by_cell_type=[43mexperiment_model[49m[43m.[49m[43mload[49m[43m([49m[43mclient[49m[43m,[49m[43mfull_path[49m[43m/[49m[33;43m"[39;49m[33;43mby_cell_type.pkl[39;49m[33;43m"[39;49m[43m)[49m
+[32m   2461[39m [38;5;66;03m## Parameters[39;00m
+[32m   2462[39m ret_ortho.by_cre_parameters=parameters.load(client,full_path/[33m"[39m[33mby_cre_parameters.pkl[39m[33m"[39m)
+[last 14 lines]
+
+[36mFile [39m[32m/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/scMPRAforge/core.py:2338[39m, in [36mexperiment_model.load[39m[34m(client, path)[39m
+[32m   2332[39m [38;5;250m[39m[33;03m"""[39;00m
+[32m   2333[39m [33;03mLoads an experimentmodel from a path[39;00m
+[32m   2334[39m [33;03m& returns it. Requires a client to wrap the individual models[39;00m
+[32m   2335[39m [33;03min futures for use on a dask cluster. [39;00m
+[32m   2336[39m [33;03m"""[39;00m
+[32m   2337[39m [38;5;28;01mwith[39;00m [38;5;28mopen[39m(path,[33m"[39m[33mrb[39m[33m"[39m) [38;5;28;01mas[39;00m f:
+[32m-> [39m[32m2338[39m     ret=[43mpickle[49m[43m.[49m[43mload[49m[43m([49m[43mf[49m[43m)[49m
+[32m   2339[39m     [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m ret [38;5;129;01mis[39;00m [38;5;28;01mNone[39;00m:
+[32m   2340[39m         ret._unflatten_futures(client)
+
+[31mEOFError[39m: Ran out of input
+EXITING SHELL
+
+── slurm-6579440.err  (12 lines total) ───────────────────────────────────────
+[first 12 lines]
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774659098.103439 1875577 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774659102.473834 1875577 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/dask/dataframe/io/csv.py:505: UserWarning: Warning gzip compression does not support breaking apart files
+Please ensure that each individual file can fit in memory and
+use the keyword ``blocksize=None to remove this message``
+Setting ``blocksize=None``
+  warn(
+scMPRAforge: WARNING: ortho_filter removed 1 combinations involving 'reference'
+scMPRAforge: INFO: Dropped 10 of 2687 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+
+── slurm-6579440.out  (12 lines total) ───────────────────────────────────────
+[first 12 lines]
+http://10.18.22.71:8787/status
+[+] Scheduler: tcp://10.18.22.71:45091
+[+] Waiting for 4 CPU workers...
+[+] CPU workers connected.
+[+] Creating...
+[+] Setup complete. Submitting GPU workers...
+[+] Submitted GPU worker: 6579584
+[+] Submitted GPU worker: 6579585
+[+] Waiting for GPU workers to connect...
+[+] All 6 workers connected. Submitting fits.
+[+] Done.
+EXITING SHELL
+
+── slurm-6583489.out  (21 lines total) ───────────────────────────────────────
+[first 20 lines]
+2026-03-27 22:54:04,951 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.17:36307'
+2026-03-27 22:54:06,260 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.17:34453
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.17:34453
+2026-03-27 22:54:06,261 - distributed.worker - INFO -           Worker name:             SLURMCluster-2
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          dashboard at:          10.18.22.17:41791
+2026-03-27 22:54:06,261 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,261 - distributed.worker - INFO -               Threads:                          1
+2026-03-27 22:54:06,261 - distributed.worker - INFO -                Memory:                  59.60 GiB
+2026-03-27 22:54:06,261 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-93j7kl5m
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,279 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-03-27 22:54:06,279 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,279 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,279 - distributed.core - INFO - Starting established connection to tcp://10.18.22.13:42405
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666463.510140  120438 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666466.299660  120438 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-27 22:54:29,290 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.85s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+[last 1 lines]
+slurmstepd: error: *** JOB 6583489 ON a1130u07n04 CANCELLED AT 2026-03-27T22:54:42 ***
+
+── slurm-6583490.out  (21 lines total) ───────────────────────────────────────
+[first 20 lines]
+2026-03-27 22:54:04,950 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.17:37903'
+2026-03-27 22:54:06,260 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.17:32783
+2026-03-27 22:54:06,260 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.17:32783
+2026-03-27 22:54:06,261 - distributed.worker - INFO -           Worker name:             SLURMCluster-3
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          dashboard at:          10.18.22.17:43649
+2026-03-27 22:54:06,261 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,261 - distributed.worker - INFO -               Threads:                          1
+2026-03-27 22:54:06,261 - distributed.worker - INFO -                Memory:                  59.60 GiB
+2026-03-27 22:54:06,261 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-34fp_lpl
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,279 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-03-27 22:54:06,280 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,280 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,280 - distributed.core - INFO - Starting established connection to tcp://10.18.22.13:42405
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666463.510140  120437 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666466.379753  120437 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-27 22:54:29,290 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.85s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+[last 1 lines]
+slurmstepd: error: *** JOB 6583490 ON a1130u07n04 CANCELLED AT 2026-03-27T22:54:42 ***
+
+── slurm-6583491.out  (21 lines total) ───────────────────────────────────────
+[first 20 lines]
+2026-03-27 22:54:04,950 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.17:39041'
+2026-03-27 22:54:06,260 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.17:41121
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.17:41121
+2026-03-27 22:54:06,261 - distributed.worker - INFO -           Worker name:             SLURMCluster-1
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          dashboard at:          10.18.22.17:42277
+2026-03-27 22:54:06,261 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,261 - distributed.worker - INFO -               Threads:                          1
+2026-03-27 22:54:06,261 - distributed.worker - INFO -                Memory:                  59.60 GiB
+2026-03-27 22:54:06,261 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-zxw4twq5
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,279 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-03-27 22:54:06,279 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,279 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,280 - distributed.core - INFO - Starting established connection to tcp://10.18.22.13:42405
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666463.510139  120439 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666466.299664  120439 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-27 22:54:29,290 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.85s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+[last 1 lines]
+slurmstepd: error: *** JOB 6583491 ON a1130u07n04 CANCELLED AT 2026-03-27T22:54:42 ***
+
+── slurm-6583492.out  (21 lines total) ───────────────────────────────────────
+[first 20 lines]
+2026-03-27 22:54:04,950 - distributed.nanny - INFO -         Start Nanny at: 'tcp://10.18.22.17:46325'
+2026-03-27 22:54:06,260 - distributed.worker - INFO -       Start worker at:    tcp://10.18.22.17:40861
+2026-03-27 22:54:06,260 - distributed.worker - INFO -          Listening to:    tcp://10.18.22.17:40861
+2026-03-27 22:54:06,261 - distributed.worker - INFO -           Worker name:             SLURMCluster-0
+2026-03-27 22:54:06,261 - distributed.worker - INFO -          dashboard at:          10.18.22.17:33169
+2026-03-27 22:54:06,261 - distributed.worker - INFO - Waiting to connect to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,261 - distributed.worker - INFO -               Threads:                          1
+2026-03-27 22:54:06,261 - distributed.worker - INFO -                Memory:                  59.60 GiB
+2026-03-27 22:54:06,261 - distributed.worker - INFO -       Local Directory: /tmp/dask-scratch-space/worker-h_iriidp
+2026-03-27 22:54:06,261 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,280 - distributed.worker - INFO - Starting Worker plugin shuffle
+2026-03-27 22:54:06,280 - distributed.worker - INFO -         Registered to:    tcp://10.18.22.13:42405
+2026-03-27 22:54:06,280 - distributed.worker - INFO - -------------------------------------------------
+2026-03-27 22:54:06,280 - distributed.core - INFO - Starting established connection to tcp://10.18.22.13:42405
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666463.510139  120435 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774666466.299661  120435 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-27 22:54:29,286 - distributed.core - INFO - Event loop was unresponsive in Worker for 7.87s.  This is often caused by long-running GIL-holding functions or moving large chunks of data. This can cause timeouts and instability.
+[last 1 lines]
+slurmstepd: error: *** JOB 6583492 ON a1130u07n04 CANCELLED AT 2026-03-27T22:54:42 ***

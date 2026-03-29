@@ -233,7 +233,7 @@ Fix applied:
 
 ---
 
-## 2026-03-26 Attempt 12 — SUCCESS
+## 2026-03-26 Attempt 12 — SUCCESS (superseded)
 
 Driver job: `6512633`; GPU workers: `6512773`, `6512774` (H200); CPU workers: `6512677`–`6512680`
 
@@ -244,3 +244,69 @@ Result:
 - Output saved to `seelig_ortho_20260320_by_cell_type/`
 - Merged with `seelig_ortho_20260320_by_cre/` (job 6469126) into `seelig_ortho_20260320/`
 - Resource usage documented in `seelig_ortho_resource_usage.md`
+
+Superseded by attempt 13: MoM initialization found to be poor for low-count datasets.
+Analysis showed by_cell_type ZI init = 0.63, true ZI ~0.007–0.018; model hit max steps (5000)
+and never early-stopped. by_cre (NB init) converged in ~100 steps to ZI ~0.006–0.007.
+
+---
+
+## 2026-03-27 Attempt 13 — CANCELLED
+
+Driver job: `6578041`; CPU workers: `6578094`–`6578097`; GPU workers: `6578148`, `6578149`
+
+MoM fallback fired correctly (P(X=0|NB)=0.292 for reference, 0.296 for K562 — both > 0.05).
+Both cell types correctly fell back to NB init. However GPU utilization remained 0% throughout.
+
+Root cause:
+- `TensorZINB._nb_init()` internally creates a new TensorZINB with `nb_only=True` and calls
+  `nb_mod.fit(init_method="poi")` without passing `device_type` — always runs on CPU
+- Workers were pegged at ~98% CPU doing the NB-only fit before TF optimizer ever started
+- In attempt 12 (MoM init), `_nb_init()` was never called — weights passed directly via
+  `init_weights`, jumping straight to GPU optimizer. That's why GPU hit 28% immediately.
+
+Fix required:
+- Patch `tensorzinb` package: pass `device_type` through `_nb_init()` to `nb_mod.fit()`
+- Alternatively: in scMPRAforge MoM fallback, pass precomputed MoM NB weights but override
+  ZI to logit(0.01), skipping `_nb_init()` entirely while still getting correct ZI start
+
+Cancelled after ~30 min. Logs swept. `seelig_ortho_20260320_by_cell_type/` not created.
+
+---
+
+## 2026-03-27 Attempt 14 — FAILED (immediate)
+
+Driver job: `6579104`
+
+Observed result:
+- `EOFError: Ran out of input` loading `by_cell_type.pkl`
+
+Root cause:
+- Attempt 13 cancellation left a 0-byte `by_cell_type.pkl` and 4-byte `by_cre.pkl` in a
+  newly-created `seelig_ortho_20260320_by_cell_type/` directory (written at job startup)
+- Attempt 14 found the stale dir and tried to load it
+
+Fix: deleted stale `seelig_ortho_20260320_by_cell_type/`. Resubmitted as attempt 15.
+
+---
+
+## 2026-03-27 Attempt 15 — SUCCESS
+
+Driver job: `6579440`; CPU workers: `6579501`–`6579504`; GPU workers: `6579584`, `6579585` (H200)
+
+- Started: ~20:55, completed: ~22:44 (~1h50m total)
+- GPU utilization: confirmed active (86%/41% at peak), 141 GB VRAM allocated
+- MoM fallback fired correctly: P(X=0|NB)=0.292 (reference), 0.296 (K562) — both fell back to NB init
+- GPU phase completed successfully; workers spent ~45 min in CPU serialization before returning results
+- `by_cell_type.pkl`: 2.7 MB; `by_cell_type_parameters.pkl`: 424 KB
+
+Post-fit:
+- Merged with `seelig_ortho_20260320_by_cre` (job `6469126`, by_cre.pkl=4.0 MB) into `seelig_ortho_20260320/`
+- QC job `6583556` submitted from `seelig_ortho_20260320_qc/wrap_seelig_ortho_qc.sh`
+
+Resource usage: `seelig_ortho_resource_usage.md` § "Attempt 15" (raw stats: `run_stats_20260327_203757.txt`)
+
+Key fix stack for this attempt:
+- tensorzinb-plusplus v0.0.6: `_nb_init()` now passes `device_name` through → NB init runs on GPU
+- scMPRAforge MoM fallback: `_mom_from_training_data()` returns None when median P(X=0|NB) > 0.05
+- `_tensorzinb_fit()`: handles `init_vals is None` by falling back to `init_method="nb"`

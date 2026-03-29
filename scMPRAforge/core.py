@@ -374,14 +374,52 @@ def _mom_from_training_data(data,split,subset,indicies):
     See [[Fixing zinb initialization]] and [[LFC is beta]] for math.
 
     `indicies` are the return of of `_matricies_to_order`
+
+    Returns None when ZI is poorly identified (NB already explains
+    the zeros), signaling the caller to fall back to NB initialization.
     """
-    
+
     anti=anti_split(split)
 
     #clean up raw training data
     raw=data[["rep_id","cell_type","cre_id","umis_mpra_bc"]]
     raw=data[data[split]==subset]
     raw=raw.drop(columns=split)
+
+    # --- ZI identifiability check ---
+    # Compute P(X=0|NB) from *non-zero* observations per CRE.  When the
+    # non-zero expression distribution already produces many zeros under NB,
+    # ZI is not separable from NB and MoM's estimate is unreliable.
+    nz = raw[raw["umis_mpra_bc"] > 0]
+    if len(nz) > 0:
+        nz_stats = (
+            nz.groupby(anti)
+            .agg(mean_nz=('umis_mpra_bc', 'mean'),
+                 var_nz=('umis_mpra_bc', 'var'))
+            .dropna()
+        )
+        if len(nz_stats) > 0:
+            valid = nz_stats["var_nz"] > nz_stats["mean_nz"]
+            pzero = pd.Series(np.nan, index=nz_stats.index)
+            p = nz_stats.loc[valid, "mean_nz"] / nz_stats.loc[valid, "var_nz"]
+            r = nz_stats.loc[valid, "mean_nz"]**2 / (
+                nz_stats.loc[valid, "var_nz"] - nz_stats.loc[valid, "mean_nz"]
+            )
+            pzero[valid] = p ** r
+            pzero[~valid] = np.exp(-nz_stats.loc[~valid, "mean_nz"])
+
+            median_pzero = pzero.median()
+            logger.info(
+                f"MoM for '{subset}': median P(X=0|NB) from non-zero data = "
+                f"{median_pzero:.4f}"
+            )
+            if median_pzero > 0.05:
+                logger.info(
+                    f"MoM for '{subset}': NB naturally explains zeros "
+                    f"(P(X=0|NB)={median_pzero:.3f} > 0.05); ZI poorly "
+                    f"identified, falling back to NB init."
+                )
+                return None
 
     #collapse to summary statistics
     nb_stats = (
@@ -1980,13 +2018,12 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
         result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
-        if not init_vals:
-            raise ValueError("init_vals required for init_method=pass")
-
         zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
-
-        result = zinbo.fit(return_history=True,init_weights=init_vals,device_type=device_type)
-
+        if init_vals is None:
+            # MoM determined ZI is poorly identified; use NB init instead
+            result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)
+        else:
+            result = zinbo.fit(return_history=True,init_weights=init_vals,device_type=device_type)
         del zinbo
 
     elif init_method=="ones":

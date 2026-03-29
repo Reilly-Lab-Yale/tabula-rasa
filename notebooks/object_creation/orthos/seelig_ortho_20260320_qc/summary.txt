@@ -9,8 +9,7 @@
 
 ── Mu range (NB mean estimate) ──────────────────────────────────────
 
-  by_cell_type: min=0.0000  max=0.8760  median=0.0057
-    WARNING: mu <= 0 detected
+  by_cell_type: min=0.0000  max=0.8618  median=0.0056
   by_cre: min=0.0000  max=0.8606  median=0.0056
 
 ── Pearson r (mu vs mean UMI) ───────────────────────────────────────

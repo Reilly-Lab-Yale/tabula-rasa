@@ -179,6 +179,98 @@ H200 allocation).
 
 ---
 
+---
+
+## Attempt 15: by_cell_type Refit (2026-03-27) — NB init via tensorzinb v0.0.6
+
+**Supersedes attempt 12 by_cell_type phase.** Refit required after MoM init was
+found to give zi_init=0.63 (true ZI ~0.007) for Seelig, causing 5000-step runs
+without early-stopping. Fix: MoM fallback in scMPRAforge + `_nb_init()` GPU
+support in tensorzinb-plusplus v0.0.6.
+
+The `by_cre` phase (job 6469126, attempt 12) was not rerun — it used NB init
+throughout and converged correctly.
+
+### Driver job — 6579440
+
+| Field | Value |
+|---|---|
+| Job name | seelig_ct |
+| State | COMPLETED |
+| Partition | priority |
+| Node | a1132u07n02 |
+| CPUs allocated | 1 |
+| Memory requested | 16 GB |
+| Submit | 2026-03-27 20:50:47 |
+| Start | 2026-03-27 20:51:30 |
+| End | 2026-03-27 22:44:28 |
+| Wall time | 1:52:58 |
+| Time limit | 2-00:00:00 |
+| CPU time used | 0:45 |
+| CPU efficiency | 0.7% |
+| Peak RSS | 1.6 GB |
+| Disk read | 170 MB |
+| Disk write | 2.8 MB |
+| Exit code | 0:0 |
+
+### CPU workers — 6579501–6579504 (4 workers, SLURMCluster)
+
+All workers ran 2026-03-27 20:54–22:44 (~1h 50m). Cancelled by driver at
+completion (exit code 0:15 = SIGTERM, expected). Memory requested: 60 GB each.
+
+| Job | Node | CPU efficiency | Peak RSS | Disk read |
+|---|---|---|---|---|
+| 6579501 | a1130u07n03 | 60.1% (1:06:40 / 1:50:21) | 20.8 GB | 216 MB |
+| 6579502 | a1130u09n04 | 1.4% (1:32 / 1:50:21) | 1.0 GB | 505 MB |
+| 6579503 | a1130u09n04 | 1.2% (1:17 / 1:50:21) | 358 MB | 136 MB |
+| 6579504 | a1130u18n02 | 1.2% (1:21 / 1:50:21) | 13.4 GB | 217 MB |
+
+Worker 6579501 did most of the CPU work (consider_missing setup, design matrix
+construction). Workers 6579502/6579503 were largely idle after setup. Worker
+6579504 held ~13 GB of data in memory but did minimal CPU compute.
+
+Compared with attempt 12 CPU workers: very similar pattern (one high-RSS worker,
+others idle), with similar disk reads.
+
+### GPU workers — 6579584, 6579585 (2 workers, H200, just-in-time sbatch)
+
+Both workers submitted at 20:55:57 via `pre_fit_hook`, ran on `priority_gpu`.
+NVIDIA H200 SXM 141 GB VRAM. Cancelled by driver's `finally` block.
+
+| Field | 6579584 | 6579585 |
+|---|---|---|
+| Node | a1122u11n01 (GPU 6) | a1124u11n01 (GPU 4) |
+| Start | 2026-03-27 20:55:57 | 2026-03-27 20:55:57 |
+| End | 2026-03-27 22:44:27 | 2026-03-27 22:44:27 |
+| Wall time | 1:48:29 | 1:48:29 |
+| Time limit | 1-00:00:00 | 1-00:00:00 |
+| CPU efficiency | 58.4% (1:03:32 / 1:48:29) | 37.7% (40:59 / 1:48:29) |
+| Peak CPU RSS | 23.7 GB | 14.3 GB |
+| Memory requested | 64 GB | 64 GB |
+| **GPU utilization** | **14.2%** | **16.3%** |
+| **GPU memory used** | **138.7 GB / 140.4 GB (98.8%)** | **138.7 GB / 140.4 GB (98.8%)** |
+| Disk read | 284 MB | 268 MB |
+
+**GPU utilization note**: 14–16% average (vs 19–28% in attempt 12). Lower
+average is consistent with NB init: GPU runs a fast NB-only fit first, then
+ZINB optimizer converges quickly from a good starting point rather than grinding
+5000 steps from zi=0.63. Near-100% VRAM utilization unchanged — TF claims the
+full H200 at import regardless.
+
+### Attempt 15 totals (by_cell_type only)
+
+| Metric | Value |
+|---|---|
+| Total wall time | 1:52:58 |
+| CPU worker CPU-hours (4 × ~1:50) | ~7.3 CPU-hours |
+| GPU worker CPU-hours (2 × ~1:48) | ~3.6 CPU-hours |
+| GPU-hours consumed | ~3.6 GPU-hours (H200) |
+| Peak CPU memory (worker) | 23.7 GB (GPU worker 6579584) |
+| Peak GPU VRAM | 138.7 GB / 140.4 GB per GPU |
+| Raw stats report | `run_stats_20260327_203757.txt` |
+
+---
+
 ## Combined Resource Summary
 
 | Metric | Phase 1 (by_cre) | Phase 2 (by_cell_type) | Total |
