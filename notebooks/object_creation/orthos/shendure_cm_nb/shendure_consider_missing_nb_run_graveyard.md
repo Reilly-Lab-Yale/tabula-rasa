@@ -8,11 +8,17 @@ Key difference from the ZINB runs: `criss_cross(..., nb_only=True)` is passed th
 call chain to `TensorZINB(..., nb_only=True)`, and method-of-moments initialization is
 automatically disabled (MoM produces `x_pi` which has no meaning in a plain NB model).
 
-Scripts:
-- Driver: [shendure_consider_missing_nb.py](/gpfs/gibbs/project/reilly/mcn26/tabula_rasa/notebooks/object_creation/orthos/shendure_consider_missing_nb.py)
-- Wrapper: [wrap_shend_consider_missing_nb.sh](/gpfs/gibbs/project/reilly/mcn26/tabula_rasa/notebooks/object_creation/orthos/wrap_shend_consider_missing_nb.sh)
+Scripts (Bouchet, split approach):
+- By-CRE: `fit_by_cre.py` + `wrap_by_cre.sh` (CPU, 8 workers × 64GB)
+- By-cell-type: `fit_by_cell_type.py` + `wrap_by_cell_type.sh` (CPU, 16 workers × 96GB)
+- Merge: `merge.py`
 
-Output path: `/vast/palmer/pi/reilly/tabula_data/shendure/shendure_ortho_consider_missing_nb_20260326/`
+Output path: `/nfs/roberts/project/pi_skr2/shared/tabula_data/shendure/shendure_cm_nb_20260329/`
+
+Previous scripts (McCleary, dead cluster — attempts 1–3):
+- Driver: `shendure_consider_missing_nb.py` (used criss_cross, single monolithic run)
+- Wrapper: `wrap_shend_consider_missing_nb.sh`
+- Output: `/vast/palmer/pi/reilly/tabula_data/shendure/shendure_ortho_consider_missing_nb_20260326/`
 
 ---
 
