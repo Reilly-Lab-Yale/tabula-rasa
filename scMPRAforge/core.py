@@ -1463,17 +1463,17 @@ class scMPRA_data:
     
     def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
         """
-        Return True iff the overall percent of cells with >=1 multi-transfection
-        (same mpra_bc observed >1 time in the same cell within a replicate)
-        exceeds `threshold_pct`. Logging is optional. Also flags overtransfection 
+        Return True iff the per-event collision rate (fraction of transfection
+        events that are duplicates of another event in the same cell) exceeds
+        `threshold_pct`. Logging is optional. Also flags overtransfection
         (or lack thereof) in metadata.
 
-        Uses a scale-free metric: (# cells with >=1 dup) / (total # cells) * 100
+        Uses a per-event metric: (total events - unique events) / total events * 100
         """
 
         if not self.metadata.get("synthetic"):
             raise ValueError("Can't directly test if an emperical dataset is overtranfected. Use a Bounds object to extract a transfection model, from which you can predict the degree of overtransfection.")
-        
+
         if "overtransfection_flattened" in self.operations:
             raise ValueError("This dataset has already had its overtransfection flattened & so it can't be computed.")
 
@@ -1482,24 +1482,18 @@ class scMPRA_data:
         triplet_counts = df.groupby(["rep_id", "cell_bc", "mpra_bc"]).size()
         triplet_counts = _to_pandas(triplet_counts)
 
-        # For each cell, did ANY barcode appear more than once?
-        cell_has_dup = (
-            triplet_counts.gt(1)
-                        .groupby(level=["rep_id", "cell_bc"])
-                        .any()
-        )
-
-        n_cells = int(cell_has_dup.size)
-        n_cells_with_dup = int(cell_has_dup.sum())
-        percent = (n_cells_with_dup / n_cells * 100.0) if n_cells else 0.0
+        total_events = int(triplet_counts.sum())
+        unique_events = int(len(triplet_counts))
+        collision_events = total_events - unique_events
+        percent = (collision_events / total_events * 100.0) if total_events else 0.0
 
         if log:
-            msg = (f"{n_cells_with_dup}/{n_cells} cells "
-                f"({percent:.3f}%) have ≥1 multi-transfection event.")
+            msg = (f"{collision_events}/{total_events} transfection events "
+                f"({percent:.3f}%) are collisions (same mpra_bc in same cell).")
             if percent > threshold_pct:
                 logger.warning(msg)
                 logger.warning(
-                    f"Multi-transfections exceed threshold of {threshold_pct:.3f}%!"
+                    f"Collision rate exceeds threshold of {threshold_pct:.3f}%!"
                 )
             else:
                 logger.info(msg)
