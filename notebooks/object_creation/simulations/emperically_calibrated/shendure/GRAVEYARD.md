@@ -75,4 +75,11 @@
 
 ---
 
-## Attempt 5 — (pending)
+## Attempts 5–8 — McCleary reruns (2026-03-25)
+
+Attempt 5 fix (patch `_mwu_helper` to use `pd.read_parquet()` directly) was applied. Subsequent runs on McCleary:
+
+- **Job 2830900** (cal) + **2831643** (power): Calibration ran; power cancelled mid-run.
+- **Job 2835733** (power): Failed — `FileNotFoundError` for `shendure_processed.tsv` (wrong path on McCleary).
+- **Job 2835912** (power): Failed — `FileExistsError` for hypothesis test dir `hs_all_ct` already existing from prior partial run.
+- **Job 2836121** (power): **SUCCEEDED.** Output in `output/` — `power_mwu_all_cell_types.svg`, `power_df.parquet`, `calibration_mwu_all_cell_types.svg`, etc. all written successfully.

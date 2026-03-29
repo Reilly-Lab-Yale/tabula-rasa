@@ -196,3 +196,9 @@ Records of failed/aborted runs and why they died.
 | Key changes | Fixed activity range: `min=minP*0.5`, `max=minP*1.6` to capture full S-curve on both sides of FC=1. |
 
 **Result:** All 100 sims complete, MWU done, plot generated. Full run in a single job.
+
+---
+
+## Run 13 — Jobs 2830901 (cal), 2831644 (power) (SUCCEEDED)
+
+Re-ran calibration and power (same parameters as Run 12). Both completed successfully.

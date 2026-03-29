@@ -29,15 +29,14 @@ Ran for ~6.5 hours. CRE fits completed; failed during cell-type fitting phase wi
 
 ---
 
-## Attempt 3 — IN PROGRESS (2026-03-27, still running as of 2026-03-29)
+## Attempt 3 — CANCELLED (2026-03-27 to 2026-03-30)
 
 **Driver job:** 2909824
-**Workers:** 2909836–2909851 (16 workers)
-**Walltime:** 2d 23h 40m (extended; safe through ~2026-03-31)
+**Workers:** 2909836–2909851 (16 workers, CPU-only)
 
-**DO NOT resubmit — this job is still active.**
+Fitting phase completed cleanly (0 erred tasks, ~7h). `by_cre.pkl` (2MB) saved successfully at ~21:36 Mar 27. Driver then blocked in `by_cell_type.flattened_copy()` waiting on cell-type model futures. Workers were actively computing (6–7 at ~99% CPU with 17–39GB memory each) but far too slow on CPU — after ~3 days total runtime and ~325 monitor checks, `by_cell_type.pkl` was still 0 bytes. Tasks ticked only 3 times (14820→14823) over the entire save phase.
 
-Fitting phase completed cleanly (0 erred tasks). `by_cre.pkl` (2MB) saved successfully at ~21:36 Mar 27. Currently blocked in `by_cell_type.flattened_copy()` — 7 workers still pegged at ~99% CPU on the largest cell-type models. This is legitimate long computation, not a lockup. Awaiting completion.
+**Outcome:** Manually cancelled. CPU-only fitting of the largest cell-type models (consider_missing=True, 12M–128M rows each) is impractically slow. Retrying on GPU cluster.
 
 ---
 
