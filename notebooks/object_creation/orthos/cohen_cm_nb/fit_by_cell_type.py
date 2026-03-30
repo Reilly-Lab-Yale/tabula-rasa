@@ -53,6 +53,7 @@ gpu_script = f"""#!/bin/bash
 
 CUDA_ROOT=/apps/software/2024a/software/CUDA/12.6.0
 export LD_LIBRARY_PATH=${{CUDA_ROOT}}/targets/x86_64-linux/lib:${{CUDA_ROOT}}/extras/CUPTI/lib64:/home/mcn26/.conda/envs/tz/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
 /home/mcn26/.conda/envs/tz/bin/dask-worker {scheduler_addr} --resources GPU=1 --nthreads 1 --memory-limit 60GiB
 """
 
@@ -79,7 +80,7 @@ try:
         primordial = scm.ortho.load(client, path, name)
     else:
         print("[+] Creating...", flush=True)
-        cohen = scm.scMPRA_data.from_parquet(str(path / "retina_single_counting_u6.scmpra"))
+        cohen = scm.scMPRA_data.from_tsv(str(path / "retina_single_counting_u6.tsv"))
         cohen.set_negative_controls(["wt_1", "wt_2"])
         cohen.set_reference_cell("Rod")
         cohen.ortho_filter()

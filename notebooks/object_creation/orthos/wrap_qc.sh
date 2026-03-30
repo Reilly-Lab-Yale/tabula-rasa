@@ -14,6 +14,7 @@
 module reset
 module load miniconda
 conda activate tz
+export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
 
 cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos
 ipython run_qc.py -- --dataset "$1" --ortho "$2"
