@@ -2118,12 +2118,11 @@ def _compute_mats_futures(client, data, split):
     levels = sorted(levels, key=lambda t: -len(raw[raw[split] == t]))
     use_missing = bool(getattr(data, "consider_missing_enabled", False))
 
-    def _subset_to_pandas(subset):
-        if isinstance(subset, dd.DataFrame):
-            subset = subset.compute()
-        return _prepare_subset_for_modeling(subset)
-
     subset_futures = {}
+    if not use_missing:
+        # Compute raw as pandas once on the driver to avoid dask-expr boolean
+        # index serialization bugs when lazy Dask objects are sent to workers.
+        raw_pdf = raw.compute().reset_index(drop=True)
     for t in levels:
         if use_missing:
             ddf = data.get_data(
@@ -2133,7 +2132,8 @@ def _compute_mats_futures(client, data, split):
             pandas_future = client.compute(ddf)
             subset_futures[t] = client.submit(_prepare_subset_for_modeling, pandas_future)
         else:
-            subset_futures[t] = client.submit(_subset_to_pandas, raw[raw[split] == t])
+            _pdf = raw_pdf[raw_pdf[split] == t].reset_index(drop=True)
+            subset_futures[t] = client.submit(_prepare_subset_for_modeling, _pdf)
 
     return {
         t: client.submit(_smart_matrix, data=subset_futures[t], split=split)
@@ -2164,16 +2164,11 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
     #else:
     #    mat_resource={"CRE_DESIGN":1}
 
-    def _subset_to_pandas(subset):
-        # Only reached for the non-missing path (pandas slice).
-        # For the use_missing path, DDF is computed by client.compute()
-        # on the driver before this function is called, so subset is
-        # already a pandas DataFrame here.
-        if isinstance(subset, dd.DataFrame):
-            subset = subset.compute()
-        return _prepare_subset_for_modeling(subset)
-
     subset_futures = {}
+    if not use_missing:
+        # Compute raw as pandas once on the driver to avoid dask-expr boolean
+        # index serialization bugs when lazy Dask objects are sent to workers.
+        raw_pdf = raw.compute().reset_index(drop=True)
     for t in levels:
         if use_missing:
             # client.compute(ddf) dispatches DDF partition tasks directly
@@ -2186,7 +2181,8 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
             pandas_future = client.compute(ddf)
             subset_futures[t] = client.submit(_prepare_subset_for_modeling, pandas_future)
         else:
-            subset_futures[t] = client.submit(_subset_to_pandas, raw[raw[split] == t])
+            _pdf = raw_pdf[raw_pdf[split] == t].reset_index(drop=True)
+            subset_futures[t] = client.submit(_prepare_subset_for_modeling, _pdf)
 
     mats_futures = {
         t: client.submit(
