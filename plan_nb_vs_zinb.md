@@ -12,11 +12,11 @@ Preliminary results suggest AIC/BIC favor NB. ZI estimates are near-zero in most
 
 | Dataset | consider_missing | ZINB | NB | Status |
 |---------|-----------------|------|-----|--------|
-| shendure | No | exists | **need fit** | NB fit: CPU-only, fast (~2h) |
-| shendure | Yes | exists | **need fit** | NB fit: was running on McCleary (dead), redo on Bouchet. GPU for cell-type |
-| cohen | No | exists | **need fit** | NB fit: CPU-only, fast |
-| cohen | Yes | **need fit** | **need fit** | Both new. Tests "ignore reporter" scenario |
-| seelig | Yes (default) | exists | **need fit** | NB fit: GPU for cell-type |
+| shendure | No (obs) | exists | script ready | `shendure_obs_nb/` — not yet submitted |
+| shendure | Yes (cm) | exists | script ready | `shendure_cm_nb/` — not yet submitted (~43h CPU run) |
+| cohen | No (obs) | exists | script ready | `cohen_obs_nb/` — blocked on preprocessing regen (job 6818181) |
+| cohen | Yes (cm) | script ready | script ready | `cohen_cm_zinb/`, `cohen_cm_nb/` — blocked on preprocessing regen + cm script fix |
+| seelig | Yes (cm) | exists | running | `seelig_cm_nb/` — by_cre 6808882, by_ct 6808883 running |
 | seelig | No | skip | skip | Meaningless — raw data has no zeros without consider_missing |
 
 **3 existing orthos** can compute AIC immediately. **7 new fits** needed.

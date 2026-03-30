@@ -55,6 +55,23 @@ notebooks/
 
 All fit scripts follow the pattern: sbatch wrapper (.sh) → ipython script (.py) → Dask cluster → TensorZINB. The wrapper activates `tz` conda env and `cd`s to the script directory (never use `dirname "$0"` in sbatch scripts). Scripts are in `notebooks/object_creation/orthos/`.
 
+## After a successful fit
+
+1. Run `runstats` (`python3 ~/.slurm_run_stats.py`) in the job directory — produces a timestamped `run_stats_*.txt`.
+2. Write `run_summary.md` from it — must include: start/end times, elapsed, node names, CPU model (from `scontrol show node` → `AvailableFeatures`), allocated vs peak RSS, CPU/GPU utilization (max and avg). Keep the raw `run_stats_*.txt` alongside it.
+3. Delete `slurm-*.out`, `slurm-*.err`, `worker_*.out` logs only — do NOT delete `run_stats_*.txt`.
+4. Commit `run_summary.md` + `run_stats_*.txt` with the fit scripts.
+
+## Cohen data and consider_missing
+
+Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The preprocessing notebook (`cohen_retina_denovo_process/12_make_scmpra_object/`) joins MPRA data with U6 data: when U6 detects a CRE in a cell but no MPRA barcodes are observed, it inserts a single row with `mpra_bc="dummy"` and `umis_mpra_bc=0` ("single counting U6 approach" from the original paper). This creates 75,954 zero rows.
+
+**Problem**: `_get_missing_maps()` (called by `consider_missing`) requires unique `(rep_id, mpra_bc) -> cre_id` mapping. The sentinel `"dummy"` maps to all CREs, failing validation with 49,647 ambiguous keys. This makes `consider_missing=True` incompatible with the U6-padded TSV.
+
+**Solution for cohen_cm fits**: load the pre-U6-join MPRA data (`unjoined/read_wise_mpra_retina.tsv`), convert to UMI-wise, and let `consider_missing` handle all zero expansion. This bypasses U6 entirely — which is the point of the "ignore reporter" condition.
+
+**Separate issue — single-counting underestimates zeros**: the current preprocessing adds 1 zero per (cell, CRE) when U6 says the CRE is present but no MPRA signal is observed. Biologically, all barcodes for that CRE produced zero UMIs, so the zero should be expanded to all barcodes. The preprocessing should be updated to perform this barcode-level expansion for the standard (obs) condition.
+
 ## Important implementation notes
 
 - `nb_only=True` parameter propagates through `standard_fit` → `_tensorzinb_fit` → `TensorZINB`. Disables MoM init automatically. Result dict has `nb_only=True` stamp and no `x_pi` weights.
