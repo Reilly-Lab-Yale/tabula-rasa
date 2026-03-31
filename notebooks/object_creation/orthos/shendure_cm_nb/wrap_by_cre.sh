@@ -2,9 +2,9 @@
 #SBATCH -J shend_cm_nb_cre
 #SBATCH -p priority
 #SBATCH -A prio_skr2
-#SBATCH -t 12:00:00
-#SBATCH -c 1
-#SBATCH --mem=16G
+#SBATCH -t 2-23:50:00
+#SBATCH -c 2
+#SBATCH --mem=24G
 #SBATCH -o slurm-%j.out
 #SBATCH -e slurm-%j.err
 

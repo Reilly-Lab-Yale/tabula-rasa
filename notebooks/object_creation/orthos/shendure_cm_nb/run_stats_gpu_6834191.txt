@@ -1,0 +1,27 @@
+================================================================================
+  GPU by_cell_type Run Stats — Job 6834191
+  Generated from sacct (source logs deleted)
+================================================================================
+
+Driver: 6834191 (shend_cm_nb_ct_gpu)
+  Node: a1130u35n04 (Intel Xeon 8562Y+, Emerald Rapids)
+  State: COMPLETED
+  Start: 2026-03-30 13:34:58  End: 2026-03-31 00:43:45
+  Elapsed: 11:08:47
+  Allocated: 2 CPUs, 24 GB RAM
+  Peak RSS: 1.6 GB  |  CPU time: 00:29:55
+
+CPU setup workers (4x, 96 GB each, scancel'd after completion):
+  6834213  a1132u05n04  CANCELLED+  11:06:05  Peak RSS: 42.1 GB
+  6834214  a1132u05n04  CANCELLED+  11:06:05  Peak RSS: 30.3 GB
+  6834215  a1132u07n04  CANCELLED+  11:06:05  Peak RSS: 28.2 GB
+  6834216  a1132u07n04  CANCELLED+  11:06:05  Peak RSS: 41.9 GB
+
+GPU workers (2x H200, 64 GB each, scancel'd after completion):
+  6834307  a1124u11n01  CANCELLED+  11:01:34  Peak RSS: 38.6 GB
+  6834308  a1124u28n01  CANCELLED+  11:01:34  Peak RSS: 41.0 GB
+  GPU node CPU: Intel Xeon 6542Y (Emerald Rapids)
+  GPU: NVIDIA H200 (8x per node, 1 allocated per worker)
+
+All workers show CANCELLED+ because the driver's finally block runs scancel
+after "[+] Done." — this is expected and indicates clean completion.

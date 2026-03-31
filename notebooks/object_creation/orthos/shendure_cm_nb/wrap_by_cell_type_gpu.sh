@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J shend_cm_nb_ct
+#SBATCH -J shend_cm_nb_ct_gpu
 #SBATCH -p priority
 #SBATCH -A prio_skr2
 #SBATCH -t 2-23:50:00
@@ -14,6 +14,6 @@ conda activate tz
 export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
 
 cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/shendure_cm_nb
-ipython fit_by_cell_type.py
+ipython fit_by_cell_type_gpu.py
 
 echo "EXITING SHELL"
