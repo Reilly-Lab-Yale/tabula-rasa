@@ -61,7 +61,7 @@ def gpu_util_check(job_ids, delay=600):
 
 # ── cluster ────────────────────────────────────────────────────────────────────
 cluster = SLURMCluster(
-    cores=1, memory="64G", processes=1,
+    cores=1, memory="128G", processes=1,
     job_extra_directives=[
         "-p priority", "-A prio_skr2",
         "--job-name=cohen_cm_zi_ct_w", "--time=12:00:00",
@@ -91,7 +91,7 @@ gpu_script = f"""#!/bin/bash
 
 CUDA_ROOT=/apps/software/2024a/software/CUDA/12.6.0
 export LD_LIBRARY_PATH=${{CUDA_ROOT}}/targets/x86_64-linux/lib:${{CUDA_ROOT}}/extras/CUPTI/lib64:/home/mcn26/.conda/envs/tz/lib:$LD_LIBRARY_PATH
-export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
+export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen:$PYTHONPATH
 /home/mcn26/.conda/envs/tz/bin/dask-worker {scheduler_addr} --resources GPU=1 --nthreads 1 --memory-limit 60GiB
 """
 
@@ -134,11 +134,21 @@ try:
         primordial = scm.ortho.load(client, path, name)
     else:
         print("[+] Creating...", flush=True)
-        cohen = scm.scMPRA_data.from_tsv(str(path / "retina_single_counting_u6.tsv"))
+        # Load pre-CRE-coarse-expansion data (filtered read-wise → UMI-wise, ~3.2M rows).
+        # Do NOT load retina_single_counting_u6.scmpra here — that object contains the
+        # full CRE-coarse reporter-informed zeros (1.49B rows), which OOMs workers on
+        # even trivial operations like enumerating cell_type levels. CM fits must start
+        # from compact pre-expansion data and let consider_missing handle zero inflation.
+        cohen = scm.scMPRA_data.from_tsv(str(path / "unjoined/read_wise_mpra_retina_filtered.tsv"))
+        cohen.read_wise_to_umi_wise()
         cohen.set_negative_controls(["wt_1", "wt_2"])
         cohen.set_reference_cell("Rod")
         cohen.ortho_filter()
         cohen.set_consider_missing(True)
+        # The memory cap estimator assumes dense string-per-row representation and
+        # doesn't account for sparse encoding of umis_mpra_bc (99.8% zeros).
+        # Bypass it — actual memory usage will be far lower than the estimate.
+        cohen.consider_missing_max_memory_gb = None
 
         primordial = scm.ortho()
         primordial.fit_by_cell_type_models(

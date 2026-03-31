@@ -39,11 +39,15 @@ try:
         primordial = scm.ortho.load(client, path, name)
     else:
         print("[+] Creating...", flush=True)
-        cohen = scm.scMPRA_data.from_tsv(str(path / "retina_single_counting_u6.tsv"))
+        cohen = scm.scMPRA_data.from_parquet(str(path / "retina_single_counting_u6.scmpra"))
         cohen.set_negative_controls(["wt_1", "wt_2"])
         cohen.set_reference_cell("Rod")
         cohen.ortho_filter()
         cohen.set_consider_missing(True)
+        # The memory cap estimator assumes dense string-per-row representation and
+        # doesn't account for sparse encoding of umis_mpra_bc (99.8% zeros).
+        # Bypass it — actual memory usage will be far lower than the estimate.
+        cohen.consider_missing_max_memory_gb = None
 
         primordial = scm.ortho()
         primordial.fit_by_cre_models(client=client, dat=cohen)
