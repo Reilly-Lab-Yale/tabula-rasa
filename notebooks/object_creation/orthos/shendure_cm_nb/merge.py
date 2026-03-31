@@ -10,25 +10,26 @@ from pathlib import Path
 data_root = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data")
 path = data_root / "shendure"
 name_cre = "shendure_cm_nb_20260329_by_cre"
-name_ct  = "shendure_cm_nb_20260329_by_cell_type"
+name_ct  = "shendure_cm_nb_20260329_by_cell_type_gpu"
 name_out = "shendure_cm_nb_20260329"
 
-cluster = LocalCluster(n_workers=2, threads_per_worker=1, memory_limit="30GB")
-client = Client(cluster)
+if __name__ == "__main__":
+    cluster = LocalCluster(n_workers=2, threads_per_worker=1, memory_limit="30GB")
+    client = Client(cluster)
 
-print("[+] Loading by_cre half...", flush=True)
-cre = scm.ortho.load(client, path, name_cre)
+    print("[+] Loading by_cre half...", flush=True)
+    cre = scm.ortho.load(client, path, name_cre)
 
-print("[+] Loading by_cell_type half...", flush=True)
-ct = scm.ortho.load(client, path, name_ct)
+    print("[+] Loading by_cell_type half...", flush=True)
+    ct = scm.ortho.load(client, path, name_ct)
 
-cre.by_cell_type            = ct.by_cell_type
-cre.by_cell_type_design     = ct.by_cell_type_design
-cre.by_cell_type_parameters = ct.by_cell_type_parameters
+    cre.by_cell_type            = ct.by_cell_type
+    cre.by_cell_type_design     = ct.by_cell_type_design
+    cre.by_cell_type_parameters = ct.by_cell_type_parameters
 
-print("[+] Saving merged ortho...", flush=True)
-cre.save(path, name_out, client=client)
-print("[+] Done.", flush=True)
+    print("[+] Saving merged ortho...", flush=True)
+    cre.save(path, name_out, client=client)
+    print("[+] Done.", flush=True)
 
-client.close()
-cluster.close()
+    client.close()
+    cluster.close()

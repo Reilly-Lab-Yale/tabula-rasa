@@ -13,13 +13,15 @@ Preliminary results suggest AIC/BIC favor NB. ZI estimates are near-zero in most
 | Dataset | consider_missing | ZINB | NB | Status |
 |---------|-----------------|------|-----|--------|
 | shendure | No (obs) | exists | script ready | `shendure_obs_nb/` — not yet submitted |
-| shendure | Yes (cm) | exists | script ready | `shendure_cm_nb/` — not yet submitted (~43h CPU run) |
+| shendure | Yes (cm) | exists | **merged** | `shendure_cm_nb_20260329/` — LRT-ready |
 | cohen | No (obs) | exists | script ready | `cohen_obs_nb/` — blocked on preprocessing regen (job 6818181) |
 | cohen | Yes (cm) | script ready | script ready | `cohen_cm_zinb/`, `cohen_cm_nb/` — blocked on preprocessing regen + cm script fix |
-| seelig | Yes (cm) | exists | running | `seelig_cm_nb/` — by_cre 6808882, by_ct 6808883 running |
+| seelig | Yes (cm) | exists | **merged** | `seelig_cm_nb_20260329/` — LRT-ready |
 | seelig | No | skip | skip | Meaningless — raw data has no zeros without consider_missing |
 
-**3 existing orthos** can compute AIC immediately. **7 new fits** needed.
+**3 existing orthos** can compute AIC immediately. **5 new fits** needed.
+
+**Merged orthos** are symlink directories combining by_cre + by_cell_type halves. Do not delete source `_by_cre`/`_by_cell_type` directories.
 
 ## Step 1: Post-hoc AIC/BIC from existing orthos
 
