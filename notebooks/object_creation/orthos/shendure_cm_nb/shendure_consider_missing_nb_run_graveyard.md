@@ -67,16 +67,30 @@ Previous scripts (McCleary, dead cluster — attempts 1–3):
 
 ---
 
-## Attempt 6 — IN PROGRESS (2026-03-30): by_cell_type (CPU benchmark)
+## Attempt 6 — CANCELLED (2026-03-30 to 2026-04-01): by_cell_type (CPU benchmark)
 
 **Driver job:** 6832722 (node a1132u20n03, Intel Xeon 8562Y+ / Emerald Rapids)
-**Workers:** 6832748–6832763 (16 workers × 96GB, CPU-only)
-**Start:** 2026-03-30 12:16:52
-**Elapsed:** 1d+ (still running)
+**Workers:** 6832748–6832763 (16 workers × 96GB, CPU-only, 8 nodes)
+**Start:** 2026-03-30 12:16:52 → **Cancelled:** 2026-04-01 10:42:02
+**Elapsed:** 1-22:25:10 (46h 25m)
 
-**Notes:** CPU benchmark counterpart to Attempt 5 (GPU). Same data, same config, no GPU.
-Running to establish GPU vs CPU speedup factor. Will be completed or cancelled when
-benchmark data is sufficient.
+**Resource usage:**
+- Driver: 1.6 GB peak RSS / 24 GB allocated
+- Workers peak RSS: 1.3–46.7 GB / 96 GB allocated
+- Worker 6832760 failed after 1d10h (46.7 GB peak RSS, likely OOM). Dask rescheduled.
+
+**Progress at cancellation:** 641/946 tasks (67.8%), 3 processing, 265 waiting, 0 erred.
+13 of 15 surviving workers idle — remaining work was sequential within large cell types.
+
+**Outcome:** Manually cancelled. Benchmark data sufficient.
+
+**GPU vs CPU benchmark result:**
+- GPU (2× H200, Attempt 5): 11:09 wall time, 10/10 cell types
+- CPU (16× 96GB, Attempt 6): 46:25 wall time, ~68% complete
+- Estimated CPU total: ~68h (extrapolated)
+- **GPU speedup: ~6×**
+
+Run stats: `run_stats_cpu_6832722.txt`.
 
 ---
 
