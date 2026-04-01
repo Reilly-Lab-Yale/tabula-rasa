@@ -1,0 +1,49 @@
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.112:8787/status
+Loading Shendure data...
+Data loaded and filtered.
+
+Loading saved CM ortho from /nfs/roberts/project/pi_skr2/shared/tabula_data/shendure/shendure_ortho_consider_missing_20260320...
+Saved ortho has 208 CREs
+
+Fitting by_cre with phantom-zero CM path...
+
+Fit complete in 316.8s (5.3min)
+Gathering results...
+Phantom fit has 208 CREs
+
+================================================================================
+COMPARISON: phantom-zero CM vs saved CM ortho (by_cre)
+================================================================================
+Comparing 208 common CREs (saved=208, phantom=208)
+
+LLF %diff:   mean=+0.0168%, std=0.1415%, max |%diff|=1.4823%
+x_mu |%diff|: mean=4.22%, median=1.50%, max=102.97%
+x_pi |%diff|: mean=154.74%, median=25.67%, max=7354.02%
+theta |%diff|: mean=1.10%, median=0.93%, max=9.48%
+
+================================================================================
+BOUNDS-STYLE ZI COMPARISON
+================================================================================
+Loading saved design matrices for ZI extraction...
+
+Per-rep by_cre_zi comparison:
+rep        Saved CM   Phantom CM        %diff
+----------------------------------------------
+2B1        0.256839     0.263065     +2.4241%
+2B2        0.302983     0.303742     +0.2504%
+A1         0.698706     0.698585     -0.0173%
+A2         0.719916     0.722578     +0.3698%
+B1         0.642875     0.644498     +0.2525%
+B2         0.638800     0.639406     +0.0949%
+
+Mean across reps:
+  Saved CM:    0.543353
+  Phantom CM:  0.545312
+  %diff:       +0.3606%
+
+Per-CRE ZI Pearson r: 0.7678
+Per-CRE ZI std: saved=0.0709, phantom=0.0730
+
+Results saved to /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/comparison_results.pkl
+Done.

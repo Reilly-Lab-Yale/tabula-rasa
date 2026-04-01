@@ -1959,13 +1959,12 @@ def _smart_matrix(data,split):
     
     #now, pick the reference level
     if "reference" in data[anti].values:
-        #if there is already a user-specificed reference level, let's just use that. 
         reference="reference"
     else:
-        #Otherwise, use the most frequent level as the reference
-        level_frequency=data[anti].value_counts()
-        level_frequency=level_frequency.sort_values(ascending=False)
-        reference=level_frequency.index[0]
+        raise ValueError(
+            f"No explicit reference level found for '{anti}'. "
+            f"Call set_reference_cell() and set_negative_controls() before fitting."
+        )
 
     zi_formula="C(rep_id)-1"
     nb_formula=f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
@@ -1988,6 +1987,177 @@ def _smart_matrix(data,split):
     }
 
 
+def _build_cm_fit_inputs(pd_maps, split, level):
+    """
+    Build phantom-zero compressed design matrices for a consider_missing
+    split-level, bypassing full Cartesian expansion.
+
+    Groups observations by (anti_level, rep_id) — the unique design-matrix
+    rows — and collapses all zeros in each group into a single weighted
+    phantom observation.  Returns the same dict format as _smart_matrix,
+    plus a 'weights' key for TensorZINB sample_weight.
+    """
+    import scipy.sparse as sp
+
+    anti = anti_split(split)
+    cell_map = pd_maps["cell_map"]
+    mpra_map = pd_maps["mpra_map"]
+    observed = pd_maps["observed"]
+
+    # ── Filter to this level ───────────────────────────────────────────
+    if split == "cell_type":
+        cell_subset = cell_map[cell_map["cell_type"] == level]
+        mpra_subset = mpra_map
+    else:
+        cell_subset = cell_map
+        mpra_subset = mpra_map[mpra_map["cre_id"] == level]
+
+    # ── Compute group totals: n_total per (anti_val, rep_id) ───────────
+    if split == "cre_id":
+        # anti = cell_type; groups are (cell_type, rep_id)
+        cells_per_group = (cell_subset.groupby(["rep_id", "cell_type"])
+                           .size().reset_index(name="n_cells"))
+        barcodes_per_rep = (mpra_subset.groupby("rep_id")
+                            .size().reset_index(name="n_barcodes"))
+        group_totals = cells_per_group.merge(barcodes_per_rep, on="rep_id")
+        anti_col = "cell_type"
+    else:
+        # anti = cre_id; groups are (cre_id, rep_id)
+        barcodes_per_group = (mpra_subset.groupby(["rep_id", "cre_id"])
+                              .size().reset_index(name="n_barcodes"))
+        cells_per_rep = (cell_subset.groupby("rep_id")
+                         .size().reset_index(name="n_cells"))
+        group_totals = barcodes_per_group.merge(cells_per_rep, on="rep_id")
+        anti_col = "cre_id"
+    group_totals["n_total"] = group_totals["n_cells"] * group_totals["n_barcodes"]
+
+    # ── Require explicit reference level ──────────────────────────────
+    freq = group_totals.groupby(anti_col)["n_total"].sum()
+    if "reference" not in freq.index:
+        raise ValueError(
+            f"No explicit reference level found for '{anti}'. "
+            f"Call set_reference_cell() and set_negative_controls() before fitting."
+        )
+    reference = "reference"
+
+    anti_levels = sorted(freq.index)
+    treatment_levels = sorted([l for l in anti_levels if l != reference])
+    rep_levels = sorted(set(cell_subset["rep_id"]) & set(mpra_subset["rep_id"]))
+
+    n_nb_cols = 1 + len(treatment_levels)
+    n_zi_cols = len(rep_levels)
+
+    anti_to_nb_col = {reference: 0}
+    for i, lev in enumerate(treatment_levels):
+        anti_to_nb_col[lev] = i + 1
+    rep_to_zi_col = {rep: i for i, rep in enumerate(rep_levels)}
+
+    # ── Get relevant nonzero observations ──────────────────────────────
+    obs_with_cell = observed.merge(
+        cell_subset[["rep_id", "cell_bc", "cell_type"]],
+        on=["rep_id", "cell_bc"], how="inner")
+    obs_relevant = obs_with_cell.merge(
+        mpra_subset[["rep_id", "mpra_bc", "cre_id"]],
+        on=["rep_id", "mpra_bc"], how="inner")
+    nz = obs_relevant[obs_relevant["umis_mpra_bc"] > 0]
+
+    # ── Count nonzero per group ────────────────────────────────────────
+    if len(nz) > 0:
+        nz_counts = (nz.groupby(["rep_id", anti_col])
+                     .size().reset_index(name="n_nonzero"))
+        group_totals = group_totals.merge(
+            nz_counts, on=["rep_id", anti_col], how="left")
+    else:
+        group_totals["n_nonzero"] = 0
+    group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
+    group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
+
+    # ── Build compressed arrays ────────────────────────────────────────
+    # Nonzero observations: individual rows, weight=1
+    if len(nz) > 0:
+        comp_y_nz = nz["umis_mpra_bc"].values.astype(np.int64)
+        comp_w_nz = np.ones(len(nz), dtype=np.float64)
+        nb_cols_nz = nz[anti_col].map(anti_to_nb_col).values.astype(np.int32)
+        zi_cols_nz = nz["rep_id"].map(rep_to_zi_col).values.astype(np.int32)
+    else:
+        comp_y_nz = np.array([], dtype=np.int64)
+        comp_w_nz = np.array([], dtype=np.float64)
+        nb_cols_nz = np.array([], dtype=np.int32)
+        zi_cols_nz = np.array([], dtype=np.int32)
+
+    # Phantom zeros: one per group with n_zeros > 0
+    phantom = group_totals[group_totals["n_zeros"] > 0]
+    comp_y_ph = np.zeros(len(phantom), dtype=np.int64)
+    comp_w_ph = phantom["n_zeros"].values.astype(np.float64)
+    nb_cols_ph = phantom[anti_col].map(anti_to_nb_col).values.astype(np.int32)
+    zi_cols_ph = phantom["rep_id"].map(rep_to_zi_col).values.astype(np.int32)
+
+    comp_y = np.concatenate([comp_y_nz, comp_y_ph])
+    comp_w = np.concatenate([comp_w_nz, comp_w_ph])
+    all_nb = np.concatenate([nb_cols_nz, nb_cols_ph])
+    all_zi = np.concatenate([zi_cols_nz, zi_cols_ph])
+    n_c = len(comp_y)
+
+    expected_n = int(group_totals["n_total"].sum())
+    assert abs(comp_w.sum() - expected_n) < 0.5, \
+        f"Weight sum {comp_w.sum()} != expected {expected_n}"
+
+    # ── Sparse NB matrix (intercept + treatment contrast) ──────────────
+    nb_row = list(range(n_c))
+    nb_col = [0] * n_c
+    nb_dat = [1.0] * n_c
+    tmask = all_nb > 0
+    for r in np.where(tmask)[0]:
+        nb_row.append(int(r))
+        nb_col.append(int(all_nb[r]))
+        nb_dat.append(1.0)
+    comp_nb = sp.csr_matrix((nb_dat, (nb_row, nb_col)),
+                            shape=(n_c, n_nb_cols))
+
+    # ── Sparse ZI matrix (one-hot rep, no intercept) ───────────────────
+    comp_zi = sp.csr_matrix(
+        ([1.0] * n_c,
+         (list(range(n_c)), [int(c) for c in all_zi])),
+        shape=(n_c, n_zi_cols))
+
+    # ── Column names matching formulaic conventions ────────────────────
+    nb_formula = f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    zi_formula = "C(rep_id)-1"
+
+    nb_names = ["Intercept"]
+    for lev in treatment_levels:
+        nb_names.append(
+            f"C({anti}, contr.treatment(base='{reference}'))[T.{lev}]")
+    zi_names = [f"C(rep_id)[{rep}]" for rep in rep_levels]
+
+    model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
+
+    return {
+        'nb_regressors': comp_nb,
+        'nb_regressor_names': nb_names,
+        'regressand': pd.DataFrame({"umis_mpra_bc": comp_y}),
+        'zi_regressors': comp_zi,
+        'zi_regressor_names': zi_names,
+        'model_type': model_type,
+        'nb_formula': nb_formula,
+        'zi_formula': zi_formula,
+        'reference': reference,
+        'split': split,
+        'weights': comp_w,
+    }
+
+
+def _mom_from_cm_maps(pd_maps, split, level, indicies):
+    """
+    MoM initialization from consider_missing maps (without expansion).
+    Not yet implemented — returns None to trigger NB init fallback.
+    """
+    logger.warning(
+        f"MoM init from CM maps not yet implemented for '{level}'; "
+        f"falling back to NB init."
+    )
+    return None
+
 
 def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False,nb_only=False):
     """
@@ -2000,6 +2170,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
     endog = matricies["regressand"]["umis_mpra_bc"].to_numpy().squeeze()
     nb_X = matricies["nb_regressors"]
     zi_X = matricies["zi_regressors"]
+    sample_weight = matricies.get("weights", None)
 
     #removing in anticipation of upgraded sparse-capable tensorzinb
     #nb_X = nb_X.toarray() if sp.issparse(nb_X) else nb_X.to_numpy()
@@ -2008,11 +2179,11 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
     device_type = "GPU" if use_gpu else "CPU"
 
     if init_method=="nb":
-        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only, sample_weight=sample_weight)
         result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)#reset_keras_session=True)
         del zinbo
     elif init_method=="pass":
-        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
+        zinbo = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only, sample_weight=sample_weight)
         if init_vals is None:
             # MoM determined ZI is poorly identified; use NB init instead
             result = zinbo.fit(return_history=True,init_method="nb",device_type=device_type)
@@ -2034,7 +2205,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
             ones_init["x_pi"] = np.ones((num_feat_zi, num_out), dtype=np.float32)
         ones_init["theta"] = np.ones((1, num_out), dtype=np.float32)
 
-        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only)
+        zinbo_ones = TensorZINB(endog=endog, exog=nb_X, exog_infl=zi_X, nb_only=nb_only, sample_weight=sample_weight)
 
         result = zinbo_ones.fit(return_history=True,init_weights=ones_init,device_type=device_type)
 
@@ -2164,55 +2335,78 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
     #else:
     #    mat_resource={"CRE_DESIGN":1}
 
-    subset_futures = {}
-    if not use_missing:
-        # Compute raw as pandas once on the driver to avoid dask-expr boolean
-        # index serialization bugs when lazy Dask objects are sent to workers.
-        raw_pdf = raw.compute().reset_index(drop=True)
-    for t in levels:
-        if use_missing:
-            # client.compute(ddf) dispatches DDF partition tasks directly
-            # into the scheduler's task graph — no worker holds a slot
-            # while waiting for sub-tasks, so no re-entrant deadlock.
-            ddf = data.get_data(
-                include_missing=True,
-                context={"kind": "split_level", "split": split, "level": t},
-            )
-            pandas_future = client.compute(ddf)
-            subset_futures[t] = client.submit(_prepare_subset_for_modeling, pandas_future)
-        else:
-            _pdf = raw_pdf[raw_pdf[split] == t].reset_index(drop=True)
-            subset_futures[t] = client.submit(_prepare_subset_for_modeling, _pdf)
-
-    mats_futures = {
-        t: client.submit(
-            _smart_matrix,
-            data=subset_futures[t],
-            split=split,
-            resources=mat_resource
-        )
-        for t in levels
-    }
-
     if nb_only:
         disable_mom = True
 
-    if split=="cell_type" and not disable_mom:
-        init_method="pass"
-        init_vals={
-            t:client.submit(_mom_from_training_data,
-                data=subset_futures[t],
-                split="cell_type",
-                subset=t,
-                indicies=client.submit(_matricies_to_order, matricies=mats_futures[t])
-                )
+    if use_missing:
+        # ── Phantom-zero compressed CM path ────────────────────────────
+        # Gather maps to driver as pandas (observed is ~3M rows / ~300 MB).
+        maps = data._get_missing_maps()
+        pd_maps = {}
+        for k in ["cell_map", "mpra_map", "observed"]:
+            v = maps[k]
+            pd_maps[k] = v.compute() if hasattr(v, 'compute') else v
+
+        mats_futures = {
+            t: client.submit(
+                _build_cm_fit_inputs,
+                pd_maps, split, t,
+                resources=mat_resource
+            )
             for t in levels
         }
-    else:
-        init_method="nb"
-        init_vals={t:None for t in levels}
 
-    del subset_futures
+        if split == "cell_type" and not disable_mom:
+            init_method = "pass"
+            init_vals = {
+                t: client.submit(
+                    _mom_from_cm_maps,
+                    pd_maps, split, t,
+                    indicies=client.submit(_matricies_to_order,
+                                           matricies=mats_futures[t])
+                )
+                for t in levels
+            }
+        else:
+            init_method = "nb"
+            init_vals = {t: None for t in levels}
+    else:
+        # ── Non-CM path: full expansion via formulaic ──────────────────
+        # Compute raw as pandas once on the driver to avoid dask-expr boolean
+        # index serialization bugs when lazy Dask objects are sent to workers.
+        raw_pdf = raw.compute().reset_index(drop=True)
+        subset_futures = {}
+        for t in levels:
+            _pdf = raw_pdf[raw_pdf[split] == t].reset_index(drop=True)
+            subset_futures[t] = client.submit(_prepare_subset_for_modeling, _pdf)
+
+        mats_futures = {
+            t: client.submit(
+                _smart_matrix,
+                data=subset_futures[t],
+                split=split,
+                resources=mat_resource
+            )
+            for t in levels
+        }
+
+        if split == "cell_type" and not disable_mom:
+            init_method = "pass"
+            init_vals = {
+                t: client.submit(_mom_from_training_data,
+                    data=subset_futures[t],
+                    split="cell_type",
+                    subset=t,
+                    indicies=client.submit(_matricies_to_order,
+                                           matricies=mats_futures[t])
+                )
+                for t in levels
+            }
+        else:
+            init_method = "nb"
+            init_vals = {t: None for t in levels}
+
+        del subset_futures
 
     if pre_fit_hook is not None:
         from dask.distributed import wait
