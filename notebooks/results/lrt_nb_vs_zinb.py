@@ -14,6 +14,8 @@ Available pairs:
   - shendure obs: ZINB shendure_ortho_20260306                   vs NB shendure_obs_nb_20260329
   - shendure cm:  ZINB shendure_ortho_consider_missing_20260320  vs NB shendure_cm_nb_20260329
   - seelig cm:    ZINB seelig_ortho_20260320                     vs NB seelig_cm_nb_20260329
+  - cohen obs:    ZINB cohen_obs_zinb_phantom_20260401            vs NB cohen_obs_nb_phantom_20260401
+  - cohen cm:     ZINB cohen_cm_zinb_phantom_20260401             vs NB cohen_cm_nb_phantom_20260401
 """
 import pickle
 import numpy as np
@@ -35,6 +37,14 @@ pairs = {
     "seelig_cm": {
         "zinb": data_root / "seelig" / "seelig_ortho_20260320",
         "nb":   data_root / "seelig" / "seelig_cm_nb_20260329",
+    },
+    "cohen_obs": {
+        "zinb": data_root / "cohen" / "cohen_obs_zinb_phantom_20260401",
+        "nb":   data_root / "cohen" / "cohen_obs_nb_phantom_20260401",
+    },
+    "cohen_cm": {
+        "zinb": data_root / "cohen" / "cohen_cm_zinb_phantom_20260401",
+        "nb":   data_root / "cohen" / "cohen_cm_nb_phantom_20260401",
     },
 }
 
