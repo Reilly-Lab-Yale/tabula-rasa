@@ -1,0 +1,186 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775057513.069809    4236 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775057518.659265    4236 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-01 11:32:04,362 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0554fcc129922f32d9d2ce4ee6ca727c initialized by task ('shuffle-transfer-0554fcc129922f32d9d2ce4ee6ca727c', 1) executed on worker inproc://10.18.22.76/4236/4
+2026-04-01 11:32:04,427 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0554fcc129922f32d9d2ce4ee6ca727c deactivated due to stimulus 'task-finished-1775057524.427204'
+scMPRAforge: WARNING: ortho_filter removed 4 combinations involving 'reference'
+scMPRAforge: INFO: Dropped 641 of 2103 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+2026-04-01 11:32:33,518 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 92b9a71c0af34fdcd26bb19f991fa894 initialized by task ('shuffle-transfer-92b9a71c0af34fdcd26bb19f991fa894', 1) executed on worker inproc://10.18.22.76/4236/4
+2026-04-01 11:32:33,542 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 92b9a71c0af34fdcd26bb19f991fa894 deactivated due to stimulus 'task-finished-1775057553.5424564'
+2026-04-01 11:32:35,455 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle f609bd8986bab59e3e060454b9726560 initialized by task ('shuffle-transfer-f609bd8986bab59e3e060454b9726560', 1) executed on worker inproc://10.18.22.76/4236/4
+2026-04-01 11:32:35,492 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle f609bd8986bab59e3e060454b9726560 deactivated due to stimulus 'task-finished-1775057555.4924192'
+2026-04-01 11:32:37,403 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 700ca9faf13e9864028748e1a7e8920c initialized by task ('shuffle-transfer-700ca9faf13e9864028748e1a7e8920c', 1) executed on worker inproc://10.18.22.76/4236/4
+2026-04-01 11:32:37,409 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 320357abd645d70932396380a9098bcb initialized by task ('shuffle-transfer-320357abd645d70932396380a9098bcb', 1) executed on worker inproc://10.18.22.76/4236/4
+2026-04-01 11:32:37,741 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 320357abd645d70932396380a9098bcb deactivated due to stimulus 'task-finished-1775057557.738345'
+2026-04-01 11:32:37,833 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 700ca9faf13e9864028748e1a7e8920c deactivated due to stimulus 'task-finished-1775057557.8321404'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'NeuroectodermBrain'; falling back to NB init.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'SurfaceEctoderm'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'EpiblastPrimitiveStreak'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'ExEndodermVisceral'; falling back to NB init.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 61.36 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'NeuroectodermRostral'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'Cardiomyocytes'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'Haematoendothelial'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'reference'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'Mesoderm'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'ExEndodermParietal'; falling back to NB init.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/shendure_cm_phantom_test/test_by_cell_type.py:118: RuntimeWarning: invalid value encountered in divide
+  mu_pct = np.mean(np.abs((p_mu - s_mu) / denom) * 100)
+2026-04-01 11:45:05,116 - distributed.worker.memory - WARNING - Unmanaged memory use is high. This may indicate a memory leak or the memory may not be released to the OS; see https://distributed.dask.org/en/latest/worker-memory.html#memory-not-released-back-to-the-os for more information. -- Unmanaged memory: 40.03 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:49:33,099 - distributed.worker.memory - WARNING - gc.collect() took 1.575s. This is usually a sign that some tasks handle too many Python objects at the same time. Rechunking the work into smaller tasks might help.
+2026-04-01 11:49:33,105 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:49:45,807 - distributed.worker.memory - WARNING - Worker is at 62% memory usage. Resuming worker. Process memory: 35.18 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:50:05,140 - distributed.worker.memory - WARNING - Unmanaged memory use is high. This may indicate a memory leak or the memory may not be released to the OS; see https://distributed.dask.org/en/latest/worker-memory.html#memory-not-released-back-to-the-os for more information. -- Unmanaged memory: 39.68 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:50:40,998 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:50:52,813 - distributed.worker.memory - WARNING - Worker is at 63% memory usage. Resuming worker. Process memory: 35.50 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:51:46,656 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:52:01,656 - distributed.worker.memory - WARNING - Worker is at 64% memory usage. Resuming worker. Process memory: 35.79 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:52:55,756 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:53:10,571 - distributed.worker.memory - WARNING - Worker is at 64% memory usage. Resuming worker. Process memory: 36.05 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:55:05,234 - distributed.worker.memory - WARNING - Unmanaged memory use is high. This may indicate a memory leak or the memory may not be released to the OS; see https://distributed.dask.org/en/latest/worker-memory.html#memory-not-released-back-to-the-os for more information. -- Unmanaged memory: 40.67 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:55:06,434 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:55:07,253 - distributed.worker.memory - WARNING - Worker is at 71% memory usage. Resuming worker. Process memory: 39.90 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:55:56,952 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.71 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:56:16,050 - distributed.worker.memory - WARNING - Worker is at 65% memory usage. Resuming worker. Process memory: 36.53 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:56:18,533 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.73 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:56:19,657 - distributed.worker.memory - WARNING - Worker is at 71% memory usage. Resuming worker. Process memory: 40.15 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:57:09,651 - distributed.worker.memory - WARNING - Worker is at 80% memory usage. Pausing worker.  Process memory: 44.72 GiB -- Worker memory limit: 55.88 GiB
+2026-04-01 11:57:28,663 - distributed.worker.memory - WARNING - Worker is at 65% memory usage. Resuming worker. Process memory: 36.79 GiB -- Worker memory limit: 55.88 GiB

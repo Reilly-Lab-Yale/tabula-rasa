@@ -55,6 +55,36 @@ notebooks/
 
 All fit scripts follow the pattern: sbatch wrapper (.sh) → ipython script (.py) → Dask cluster → TensorZINB. The wrapper activates `tz` conda env and `cd`s to the script directory (never use `dirname "$0"` in sbatch scripts). Scripts are in `notebooks/object_creation/orthos/`.
 
+## After a successful fit
+
+1. Run `runstats` (`python3 ~/.slurm_run_stats.py`) in the job directory — produces a timestamped `run_stats_*.txt`.
+2. Write `run_summary.md` from it — must include: start/end times, elapsed, node names, CPU model (from `scontrol show node` → `AvailableFeatures`), allocated vs peak RSS, CPU/GPU utilization (max and avg). Keep the raw `run_stats_*.txt` alongside it.
+3. Delete `slurm-*.out`, `slurm-*.err`, `worker_*.out` logs only — do NOT delete `run_stats_*.txt`.
+4. Commit `run_summary.md` + `run_stats_*.txt` with the fit scripts.
+
+## Cohen data and consider_missing
+
+Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The original preprocessing inserted a single `mpra_bc="dummy"` zero row per (cell, CRE) when U6 detected transfection but no MPRA signal — this broke `consider_missing` because `"dummy"` mapped to all CREs, failing the `(rep_id, mpra_bc) -> cre_id` uniqueness check.
+
+**Regenerated preprocessing** (`regen_scmpra_object.py`, March 2026) fixes both issues:
+1. Filters 49,646 ambiguous rBC pairs (sequencing artifacts)
+2. Performs CRE-coarse reporter-informed expansion: expands U6-only (cell, CRE) detections to all barcodes of that CRE (replacing a single dummy row with real barcode-level zeros)
+
+The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes `_get_missing_maps()` validation. It contains the full CRE-coarse reporter-informed zeros, which are a strict subset of what `consider_missing` would produce.
+
+**Memory cap note**: `_inflate_missing_split_level` estimates ~8,750 GB for Cohen CM cell-type slices, but this assumes dense string-per-row representation. The actual data is 99.8% sparse zeros. Cohen CM fits must set `consider_missing_max_memory_gb = None` to bypass the cap. The estimator should eventually be updated to account for sparse encoding.
+
+## Terminology: zero expansion modes
+
+| Term | Verb form | Meaning |
+|------|-----------|---------|
+| **reporter-informed zeros** | reporter-informed expansion | Any zeros derived from a transfection reporter signal — the reporter confirms the CRE was present in the cell, so unobserved MPRA signal is a true zero not a missing observation. Encompasses all reporter-based zero imputation. |
+| **CRE-coarse reporter-informed zeros** | CRE-coarse reporter-informed expansion | The specific case where the transfection reporter operates at CRE level (not barcode level), requiring imputation across all barcodes of that CRE. Because the reporter cannot distinguish which barcodes were present, every unobserved barcode of a detected CRE is imputed as zero. Cohen U6 is the canonical example. Produces many more zeros than a barcode-level reporter would (where only the specific unobserved barcode gets a zero). |
+| **consider_missing zeros** | consider_missing expansion | Full Cartesian-product expansion: every (cell × barcode) combination in a replicate, regardless of reporter signal. Appropriate when there is no reporter (Seelig). |
+
+**Relationship**: CRE-coarse reporter-informed zeros ⊂ reporter-informed zeros ⊂ consider_missing zeros.
+The obs condition uses only reporter-informed zeros (or none); CM uses all possible zeros.
+
 ## Important implementation notes
 
 - `nb_only=True` parameter propagates through `standard_fit` → `_tensorzinb_fit` → `TensorZINB`. Disables MoM init automatically. Result dict has `nb_only=True` stamp and no `x_pi` weights.

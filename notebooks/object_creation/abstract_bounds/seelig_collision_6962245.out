@@ -1,0 +1,4 @@
+Reading TSV...
+  760452 rows, columns: ['cell_bc', 'rep_id', 'cre_id', 'cell_type', 'mpra_bc', 'umis_mpra_bc']
+  Total unique mpra_bcs: 6648
+scMPRAforge: INFO: Computed a total of 62816.39973791235 estimated collision events, out of a total of 823268.3997379123, or 7.630123998189407%
