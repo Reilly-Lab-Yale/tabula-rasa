@@ -1233,6 +1233,36 @@ class scMPRA_data:
         if peak_overhead_factor is not None:
             self.consider_missing_peak_overhead_factor = float(peak_overhead_factor)
 
+    def set_coarse_reporter(self, reporter):
+        """
+        Attach a coarse (CRE-level) transfection reporter table.
+
+        The reporter table has one row per positive (cell, CRE) detection.
+        Required columns: rep_id, cell_bc, cre_id.
+        Used with phantom_compress=True to compute reporter-informed zeros
+        at fit time without materializing the expanded dataset.
+
+        Parameters
+        ----------
+        reporter : str, Path, or pandas DataFrame
+            Path to a TSV/CSV file, or a pre-loaded DataFrame.
+        """
+        if isinstance(reporter, (str, Path)):
+            reporter = pd.read_csv(str(reporter), sep='\t')
+        required = {"rep_id", "cell_bc", "cre_id"}
+        missing = required - set(reporter.columns)
+        if missing:
+            raise ValueError(f"Coarse reporter table missing columns: {sorted(missing)}")
+        # Deduplicate to one row per (rep, cell, CRE) detection
+        reporter = reporter[list(required)].drop_duplicates().reset_index(drop=True)
+        for col in required:
+            reporter[col] = reporter[col].astype(str)
+        self._coarse_reporter = reporter
+        logger.info(
+            f"Coarse reporter attached: {len(self._coarse_reporter):,} "
+            f"unique (rep, cell, CRE) detections."
+        )
+
     def _empty_missing_ddf(self) -> dd.DataFrame:
         meta = pd.DataFrame({
             "cell_bc": pd.Series([], dtype="string[pyarrow]"),
@@ -2159,6 +2189,204 @@ def _mom_from_cm_maps(pd_maps, split, level, indicies):
     return None
 
 
+def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels):
+    """
+    Compute total observation counts (nonzero + reporter-informed zeros) per
+    (split_level, anti_level, rep_id) group from a coarse reporter table.
+
+    Cells with nonzero MPRA obs but no reporter detection (-U6 +MPRA, i.e.
+    orphan cells) are treated as confirmed transfections (false-negative
+    reporter) and included in n_total alongside reporter-confirmed cells.
+
+    nz_pdf must include a cell_bc column.
+
+    Returns a DataFrame with columns [split, anti, rep_id, n_total] suitable
+    for _build_obs_phantom_inputs.
+    """
+    anti = anti_split(split)
+
+    # Barcodes per (rep, CRE)
+    bc_per_cre = (mpra_map.groupby(["rep_id", "cre_id"])
+                  .size().reset_index(name="n_barcodes"))
+
+    # Observed barcodes per (rep, cell, CRE) from nonzero data
+    # First, recover cre_id for each nonzero obs via mpra_map
+    # nz_pdf has [split, anti, rep_id, umis_mpra_bc] but NOT mpra_bc/cre_id
+    # We need to count nonzero obs per (rep, cell, CRE). But nz_pdf doesn't
+    # have cell_bc either -- it has cell_type and cre_id depending on split.
+    #
+    # Actually, for the reporter path we need to count per (cell_bc, cre_id).
+    # Let's re-derive this from the raw nonzero data which we already have.
+    # nz_pdf has anti column (cell_type or cre_id) and split column.
+    # For by_cre: nz_pdf has cre_id (=split) and cell_type (=anti)
+    # For by_cell_type: nz_pdf has cell_type (=split) and cre_id (=anti)
+    # But we need cell_bc to join with reporter. So we need to go back to
+    # the raw data for the cell_bc-level counts.
+
+    # Count nonzero obs per (rep, cell_bc, cre_id) from the reporter detections
+    # We join reporter with cell_map to get cell_type, then count how many
+    # nonzero obs exist per detection.
+
+    # Identify orphan cells: -U6 +MPRA. Treated as confirmed transfections.
+    cre_col = split if split == "cre_id" else anti
+    nz_pairs = (nz_pdf[["rep_id", "cell_bc", cre_col]]
+                .rename(columns={cre_col: "cre_id"})
+                .drop_duplicates())
+    reporter_keys = reporter[["rep_id", "cell_bc", "cre_id"]].drop_duplicates()
+    reporter_keys = reporter_keys.copy()
+    reporter_keys["_flag"] = True
+    orphan_cells = (nz_pairs
+                    .merge(reporter_keys, on=["rep_id", "cell_bc", "cre_id"], how="left")
+                    .loc[lambda x: x["_flag"].isna(), ["rep_id", "cell_bc", "cre_id"]])
+    all_cells = pd.concat(
+        [reporter_keys[["rep_id", "cell_bc", "cre_id"]], orphan_cells],
+        ignore_index=True)
+
+    # Add cell_type and expected barcodes per (cell, CRE)
+    all_cells = all_cells.merge(
+        cell_map[["rep_id", "cell_bc", "cell_type"]],
+        on=["rep_id", "cell_bc"], how="inner")
+    all_cells = all_cells.merge(bc_per_cre, on=["rep_id", "cre_id"], how="inner")
+
+    all_cells["_split"] = all_cells["cre_id"] if split == "cre_id" else all_cells["cell_type"]
+    all_cells["_anti"] = all_cells["cell_type"] if split == "cre_id" else all_cells["cre_id"]
+
+    total = (all_cells
+             .groupby(["_split", "_anti", "rep_id"])["n_barcodes"]
+             .sum()
+             .reset_index(name="n_total"))
+    total = total.rename(columns={"_split": split, "_anti": anti})
+
+    # Filter to requested levels
+    total = total[total[split].isin(levels)]
+
+    return total[[split, anti, "rep_id", "n_total"]]
+
+
+def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
+    """
+    Build phantom-zero compressed design matrices from observed data
+    (e.g. reporter-informed zeros baked into the dataset).
+
+    Like _build_cm_fit_inputs but group totals come from actual observation
+    counts in the data, NOT from a Cartesian product of maps.
+
+    nz_pdf: pandas DataFrame of nonzero observations for this level.
+            Columns must include: anti_col, rep_id, umis_mpra_bc
+    total_counts: pandas DataFrame with columns [anti_col, rep_id, n_total]
+                  giving total observation count per (anti, rep) group.
+    """
+    import scipy.sparse as sp
+
+    anti = anti_split(split)
+
+    # ── Require explicit reference level ──────────────────────────────
+    anti_levels = sorted(total_counts[anti].unique())
+    if "reference" not in anti_levels:
+        raise ValueError(
+            f"No explicit reference level found for '{anti}'. "
+            f"Call set_reference_cell() and set_negative_controls() before fitting."
+        )
+    reference = "reference"
+
+    treatment_levels = sorted([l for l in anti_levels if l != reference])
+    rep_levels = sorted(total_counts["rep_id"].unique())
+
+    n_nb_cols = 1 + len(treatment_levels)
+    n_zi_cols = len(rep_levels)
+
+    anti_to_nb_col = {reference: 0}
+    for i, lev in enumerate(treatment_levels):
+        anti_to_nb_col[lev] = i + 1
+    rep_to_zi_col = {rep: i for i, rep in enumerate(rep_levels)}
+
+    # ── Group totals from actual data ──────────────────────────────────
+    group_totals = total_counts[[anti, "rep_id", "n_total"]].copy()
+
+    if len(nz_pdf) > 0:
+        nz_counts = (nz_pdf.groupby(["rep_id", anti])
+                     .size().reset_index(name="n_nonzero"))
+        group_totals = group_totals.merge(
+            nz_counts, on=["rep_id", anti], how="left")
+    else:
+        group_totals["n_nonzero"] = 0
+    group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
+    group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
+
+    # ── Build compressed arrays ────────────────────────────────────────
+    anti_col = anti
+    if len(nz_pdf) > 0:
+        comp_y_nz = nz_pdf["umis_mpra_bc"].values.astype(np.int64)
+        comp_w_nz = np.ones(len(nz_pdf), dtype=np.float64)
+        nb_cols_nz = nz_pdf[anti_col].map(anti_to_nb_col).values.astype(np.int32)
+        zi_cols_nz = nz_pdf["rep_id"].map(rep_to_zi_col).values.astype(np.int32)
+    else:
+        comp_y_nz = np.array([], dtype=np.int64)
+        comp_w_nz = np.array([], dtype=np.float64)
+        nb_cols_nz = np.array([], dtype=np.int32)
+        zi_cols_nz = np.array([], dtype=np.int32)
+
+    phantom = group_totals[group_totals["n_zeros"] > 0]
+    comp_y_ph = np.zeros(len(phantom), dtype=np.int64)
+    comp_w_ph = phantom["n_zeros"].values.astype(np.float64)
+    nb_cols_ph = phantom[anti_col].map(anti_to_nb_col).values.astype(np.int32)
+    zi_cols_ph = phantom["rep_id"].map(rep_to_zi_col).values.astype(np.int32)
+
+    comp_y = np.concatenate([comp_y_nz, comp_y_ph])
+    comp_w = np.concatenate([comp_w_nz, comp_w_ph])
+    all_nb = np.concatenate([nb_cols_nz, nb_cols_ph])
+    all_zi = np.concatenate([zi_cols_nz, zi_cols_ph])
+    n_c = len(comp_y)
+
+    expected_n = int(group_totals["n_total"].sum())
+    assert abs(comp_w.sum() - expected_n) < 0.5, \
+        f"Weight sum {comp_w.sum()} != expected {expected_n}"
+
+    # ── Sparse NB matrix (intercept + treatment contrast) ──────────────
+    nb_row = list(range(n_c))
+    nb_col = [0] * n_c
+    nb_dat = [1.0] * n_c
+    tmask = all_nb > 0
+    for r in np.where(tmask)[0]:
+        nb_row.append(int(r))
+        nb_col.append(int(all_nb[r]))
+        nb_dat.append(1.0)
+    comp_nb = sp.csr_matrix((nb_dat, (nb_row, nb_col)),
+                            shape=(n_c, n_nb_cols))
+
+    # ── Sparse ZI matrix (one-hot rep, no intercept) ───────────────────
+    comp_zi = sp.csr_matrix(
+        ([1.0] * n_c,
+         (list(range(n_c)), [int(c) for c in all_zi])),
+        shape=(n_c, n_zi_cols))
+
+    # ── Column names matching formulaic conventions ────────────────────
+    nb_formula = f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
+    zi_formula = "C(rep_id)-1"
+
+    nb_names = ["Intercept"]
+    for lev in treatment_levels:
+        nb_names.append(
+            f"C({anti}, contr.treatment(base='{reference}'))[T.{lev}]")
+    zi_names = [f"C(rep_id)[{rep}]" for rep in rep_levels]
+
+    model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
+
+    return {
+        'nb_regressors': comp_nb,
+        'nb_regressor_names': nb_names,
+        'regressand': pd.DataFrame({"umis_mpra_bc": comp_y}),
+        'zi_regressors': comp_zi,
+        'zi_regressor_names': zi_names,
+        'model_type': model_type,
+        'nb_formula': nb_formula,
+        'zi_formula': zi_formula,
+        'reference': reference,
+        'split': split,
+        'weights': comp_w,
+    }
+
+
 def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False,nb_only=False):
     """
     Takes matricies & produces a single tensorzinb model.
@@ -2232,6 +2460,13 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
 # ---------------------------------------------------------------------------
 # Design-matrix shard save / load (worker-side)
 # ---------------------------------------------------------------------------
+
+def _strip_design_to_recipe(dm):
+    """Strip full matrices from a design dict, keeping only recipe metadata."""
+    _RECIPE_KEYS = {'nb_regressor_names', 'zi_regressor_names', 'model_type',
+                    'nb_formula', 'zi_formula', 'reference', 'split'}
+    return {k: v for k, v in dm.items() if k in _RECIPE_KEYS}
+
 
 def _save_design_matrix_shard(dm, filepath):
     """Run on a Dask worker: pickle one design-matrix dict to disk."""
@@ -2312,21 +2547,23 @@ def _compute_mats_futures(client, data, split):
     }
 
 
-def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False):
+def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
+
+    phantom_compress=True enables phantom-zero compression of existing
+    observed zeros (e.g. reporter-informed zeros baked into the dataset).
+    This avoids materializing the full dataset on the driver.
     """
 
     if not isinstance(data, scMPRA_data):
         raise TypeError("standard_fit expects an scMPRA_data object.")
 
     raw = data.get_data(include_missing=False)
-    levels = _series_unique_str(raw[split])
-    # Sort largest levels first so that the most resource-intensive models are
-    # submitted to Dask early. This lets failures surface quickly (fail-fast)
-    # rather than after all the small models have already completed.
-    levels = sorted(levels, key=lambda t: -len(raw[raw[split] == t]))
+    # Efficient level discovery: single groupby instead of per-level len()
+    level_sizes = raw.groupby(split).size().compute()
+    levels = [str(l) for l in level_sizes.sort_values(ascending=False).index]
     use_missing = bool(getattr(data, "consider_missing_enabled", False))
 
     mat_resource={}
@@ -2370,6 +2607,67 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
         else:
             init_method = "nb"
             init_vals = {t: None for t in levels}
+
+    elif phantom_compress:
+        # ── Reporter-informed obs phantom path ─────────────────────────
+        # Requires a coarse reporter table attached to the data object.
+        # Computes reporter-informed zero counts per design-matrix group
+        # from the reporter table + mpra_map, without expanding the data.
+        reporter = getattr(data, '_coarse_reporter', None)
+        if reporter is None:
+            raise ValueError(
+                "phantom_compress=True requires a coarse reporter table. "
+                "Call set_coarse_reporter() before fitting."
+            )
+
+        anti = anti_split(split)
+
+        # Small Dask ops on the nonzero-only main data (~3M rows)
+        nz_cols = [split, anti, "rep_id", "umis_mpra_bc", "cell_bc"]
+        nz_pdf = raw[raw["umis_mpra_bc"] > 0][nz_cols].compute()
+        for col in [split, anti, "rep_id"]:
+            nz_pdf[col] = nz_pdf[col].astype(str)
+
+        # Maps for barcode counting (small)
+        cell_map = (raw[["rep_id", "cell_bc", "cell_type"]]
+                    .drop_duplicates().compute())
+        mpra_map = (raw[["rep_id", "mpra_bc", "cre_id"]]
+                    .drop_duplicates().compute())
+        for df in [cell_map, mpra_map]:
+            for col in df.columns:
+                if col != "umis_mpra_bc":
+                    df[col] = df[col].astype(str)
+
+        # Compute reporter-informed zero counts per (anti, rep) group
+        total_counts = _reporter_zero_counts(
+            nz_pdf, reporter, mpra_map, cell_map, split, levels)
+
+        mats_futures = {
+            t: client.submit(
+                _build_obs_phantom_inputs,
+                nz_pdf[nz_pdf[split] == t].reset_index(drop=True),
+                total_counts[total_counts[split] == t].reset_index(drop=True),
+                split, t,
+                resources=mat_resource
+            )
+            for t in levels
+        }
+
+        if split == "cell_type" and not disable_mom:
+            init_method = "pass"
+            init_vals = {
+                t: client.submit(
+                    _mom_from_cm_maps,
+                    None, split, t,
+                    indicies=client.submit(_matricies_to_order,
+                                           matricies=mats_futures[t])
+                )
+                for t in levels
+            }
+        else:
+            init_method = "nb"
+            init_vals = {t: None for t in levels}
+
     else:
         # ── Non-CM path: full expansion via formulaic ──────────────────
         # Compute raw as pandas once on the driver to avoid dask-expr boolean
@@ -2588,24 +2886,26 @@ class ortho:
         else:
             self.by_cell_type_parameters.save(full_path/"by_cell_type_parameters.pkl")
         
-        ## Design matrices
-        # When a client is provided, save each level as a separate shard on
-        # the worker that holds it — no matrix is ever pulled to the driver.
-        # Without a client, fall back to the old dict_unwrap approach (only
-        # safe for small matrices / testing).
-        if self.by_cre_design is None:
-            simple_write(self.by_cre_design,"by_cre_design.pkl")
-        elif client is not None:
-            _save_design_dict(client, self.by_cre_design, full_path / "by_cre_design")
-        else:
-            simple_write(dict_unwrap(self.by_cre_design),"by_cre_design.pkl")
+        ## Design recipes (metadata only — matrices are not saved)
+        # Strip full matrices from design dicts, keeping only column names,
+        # formulas, reference level, etc.  Full matrices can be reconstructed
+        # on demand from the training data + recipe metadata.
+        def _save_recipe(design_dict, dir_name):
+            if design_dict is None:
+                simple_write(None, f"{dir_name}.pkl")
+            elif client is not None:
+                recipe = {
+                    k: client.submit(_strip_design_to_recipe, design_dict[k])
+                    for k in design_dict
+                }
+                _save_design_dict(client, recipe, full_path / dir_name)
+            else:
+                raw = dict_unwrap(design_dict)
+                stripped = {k: _strip_design_to_recipe(v) for k, v in raw.items()}
+                simple_write(stripped, f"{dir_name}.pkl")
 
-        if self.by_cell_type_design is None:
-            simple_write(self.by_cell_type_design,"by_cell_type_design.pkl")
-        elif client is not None:
-            _save_design_dict(client, self.by_cell_type_design, full_path / "by_cell_type_design")
-        else:
-            simple_write(dict_unwrap(self.by_cell_type_design),"by_cell_type_design.pkl")
+        _save_recipe(self.by_cre_design, "by_cre_design")
+        _save_recipe(self.by_cell_type_design, "by_cell_type_design")
 
         if getattr(self, "wald_precomp", None) is None:
             with open(full_path/"wald_precomp.pkl","wb") as f:
@@ -2694,17 +2994,18 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False,phantom_compress=False):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
                                                      split="cre_id",
                                                      disable_mom=disable_mom,
-                                                     nb_only=nb_only)
+                                                     nb_only=nb_only,
+                                                     phantom_compress=phantom_compress)
         self.by_cre.label_regressors(client,self.by_cre_design)
 
 
-    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
@@ -2712,21 +3013,22 @@ class ortho:
                                                         disable_mom=disable_mom,
                                                         fit_resources=fit_resources,
                                                         pre_fit_hook=pre_fit_hook,
-                                                        nb_only=nb_only)
+                                                        nb_only=nb_only,
+                                                        phantom_compress=phantom_compress)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
 
 
-    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False):
+    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False):
         """
         Makes by_cre and by_cell_type models.
         gpu=True: cell-type models are submitted with resources={"GPU": 1} so
         Dask schedules them only on GPU-enabled workers.  CRE models are
         unaffected.
         """
-        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only,phantom_compress=phantom_compress)
         ct_resources = {"GPU": 1} if gpu else {}
         self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom,
-                                     fit_resources=ct_resources,nb_only=nb_only)
+                                     fit_resources=ct_resources,nb_only=nb_only,phantom_compress=phantom_compress)
         
         
     
@@ -2858,6 +3160,11 @@ class ortho:
         every by-cell-type model and every by-CRE model in this ortho.
         Stores results in self.wald_precomp (as Futures); persists with save().
 
+        UNDER CONSTRUCTION: Wald precomputation does not yet support phantom-zero
+        compressed design matrices or the recipe save format. It requires the
+        full per-observation design matrices, which are no longer saved to disk.
+        A weight-aware Wald implementation is planned (Phase 2).
+
         Parameters
         ----------
         client : dask.distributed.Client
@@ -2866,6 +3173,13 @@ class ortho:
             - "sandwich": use H^{-1} J H^{-1} covariance (default).
             - "opg":      use OPG-only covariance J^{-1}.
         """
+        raise NotImplementedError(
+            "UNDER CONSTRUCTION: precompute_wald does not yet support "
+            "phantom-zero compressed design matrices or the recipe save "
+            "format. A weight-aware Wald implementation is planned (Phase 2). "
+            "Roll back to commit 3562c5a if you need Wald on pre-phantom orthos."
+        )
+
         if self.training_data is None:
             raise RuntimeError(
                 "precompute_wald requires self.training_data to subset matrices."
@@ -3039,79 +3353,54 @@ class parameters:
 
 def extract_parameters(client,model,design,split):
     
-    def _extract_mu(split,model,design_matrix):
-        #unpack information from the design matrix.
-        X=design_matrix["nb_regressors"]
-        model_type=design_matrix["model_type"]
-        reference=design_matrix["reference"]
+    def _extract_mu(split, model, design_matrix):
+        # Compute per-level mu directly from coefficients and column names.
+        # No full design matrix needed -- predictions are constant within
+        # treatment-contrast groups, so X @ x_mu reduces to indexing.
+        x_mu = np.asarray(model["weights"]["x_mu"], dtype=np.float32).ravel()
+        nb_names = (design_matrix["nb_regressor_names"]
+                    if "nb_regressor_names" in design_matrix
+                    else list(design_matrix["nb_regressors"].columns))
+        model_type = design_matrix["model_type"]
+        reference = design_matrix["reference"]
+        level_type = anti_split(split)
 
-        w = np.asarray(model["weights"]["x_mu"], dtype=np.float32)
+        if model_type == "simulation_only":
+            mu = float(np.exp(x_mu[0]))
+            return pd.DataFrame({"mu": [mu]},
+                                index=pd.Index([reference], name=level_type))
 
-        import scipy.sparse as sp
-        if sp.issparse(X):
-            # X is a scipy sparse matrix — multiply directly, then rebuild a
-            # pandas sparse DataFrame (using stored names) for undo_one_hot_encoding.
-            linear_mu = np.asarray(X.tocsr() @ w).ravel().astype(np.float32, copy=False)
-            X = pd.DataFrame.sparse.from_spmatrix(
-                X, columns=design_matrix["nb_regressor_names"]
-            )
-        else:
-            Xs = X.sparse.to_coo().tocsr()
-            linear_mu = np.asarray(Xs @ w).ravel().astype(np.float32, copy=False)
-        #undo the link function to get predictions for each cell
-        mu_predictions=np.exp(linear_mu)
+        results = {}
+        for i, name in enumerate(nb_names):
+            if name == "Intercept":
+                results[reference] = float(np.exp(x_mu[0]))
+            else:
+                level = _extract_square(name)
+                results[level] = float(np.exp(x_mu[0] + x_mu[i]))
 
-        #now we have one mu value for each measurement, and we want to average 
-        #to get one value for each level...
-        
-        #Get the level names for each row in the design matrix
-        #e.g. the cell type for each measurement for a by-cre model,
-        #the cre name for each measurement for a by-cell-type model...
-        level_type=anti_split(split)
+        mu_df = pd.DataFrame({"mu": results.values()},
+                              index=pd.Index(results.keys(), name=level_type))
+        return mu_df
 
-        if model_type=="contrastable":
-            #multiple levels. 
-            row_labeling=undo_one_hot_encoding(X)
-            row_labeling=row_labeling[f"{level_type}, contr.treatment(base='{reference}')"]
-            row_labeling=row_labeling.str.removeprefix("T.")
-        elif model_type=="simulation_only":
-            #only one level
-            row_labeling=pd.Series(np.repeat(reference,len(mu_predictions)))
-        #Merge those level names onto the predictions for each row
-        mu_predictions_df=pd.DataFrame({level_type:row_labeling,'mu':mu_predictions.squeeze()})
-
-        #aggregate predictions to one per level name
-        mu_summary=mu_predictions_df.groupby(level_type).agg("mean")
-
-        return mu_summary
-
-    def _extract_zi(model,design_matrix):
-        # NB-only models have no zero-inflation component; nothing to extract.
-        # Default False so old ZINB models without the key still work.
+    def _extract_zi(model, design_matrix):
+        # Compute per-rep ZI directly from coefficients and column names.
+        # No full design matrix needed -- ZI predictions depend only on
+        # the rep indicator, so Z @ x_pi reduces to indexing.
         if model.get("nb_only", False):
             return None
-        Z=design_matrix["zi_regressors"]
-        ## ZI ##
-        import scipy.sparse as sp
-        if sp.issparse(Z):
-            linear_zi = np.asarray(Z @ model["weights"]["x_pi"]).squeeze()
-            Z = pd.DataFrame.sparse.from_spmatrix(
-                Z, columns=design_matrix["zi_regressor_names"]
-            )
-        else:
-            linear_zi = Z.to_numpy() @ model["weights"]["x_pi"]
-        zi_predictions=linear_zi=1/(1+np.exp(-linear_zi))
+        x_pi = np.asarray(model["weights"]["x_pi"]).ravel()
+        zi_names = (design_matrix["zi_regressor_names"]
+                    if "zi_regressor_names" in design_matrix
+                    else list(design_matrix["zi_regressors"].columns))
 
-        #extract names
-        replicate_labeling=undo_one_hot_encoding(Z)["rep_id"]
-        replicate_labeling=replicate_labeling.str.removeprefix("T.")
+        results = {}
+        for i, name in enumerate(zi_names):
+            rep = _extract_square(name)
+            results[rep] = float(1.0 / (1.0 + np.exp(-x_pi[i])))
 
-        #apply names to ZI
-        zi_predictions_df=pd.DataFrame({'rep_id':replicate_labeling,'zi':zi_predictions.squeeze()})
-        #aggregate
-        zi_summary=zi_predictions_df.groupby("rep_id").agg("mean")
-
-        return zi_summary
+        zi_df = pd.DataFrame({"zi": results.values()},
+                              index=pd.Index(results.keys(), name="rep_id"))
+        return zi_df
     
     def _extract_theta(model):
         theta=np.exp(model['weights']['theta'].squeeze())
