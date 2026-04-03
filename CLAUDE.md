@@ -85,6 +85,25 @@ The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes 
 **Relationship**: CRE-coarse reporter-informed zeros ⊂ reporter-informed zeros ⊂ consider_missing zeros.
 The obs condition uses only reporter-informed zeros (or none); CM uses all possible zeros.
 
+## Reporter-informed zero logic (Cohen U6 orphan handling)
+
+When computing phantom zero weights via `_reporter_zero_counts`, there is an
+ambiguous case: cells where MPRA signal is observed but U6 (transfection
+reporter) is not detected (-U6 +MPRA, "orphan" observations).
+
+Two failure modes: (A) spurious MPRA (index hopping / ambient RNA, U6 absence
+is correct), or (B) false-negative U6 (CRE genuinely transfected, U6
+undersequenced). Empirical evidence from Cohen data strongly favors (B): 64.5%
+of U6-confirmed (cell, CRE) pairs have zero MPRA obs (even confirmed
+transfections are frequently missed), and U6 is undersequenced.
+
+The compromise: treat orphan cells as confirmed transfections.
+`_reporter_zero_counts` augments the reporter-confirmed set with orphan cells
+before computing phantom zero weights. This is conservative -- if (A) dominated,
+the correct treatment would be to drop orphan obs entirely. Under this treatment
+the phantom zero weight for a group cannot go negative (n_total >= n_nonzero by
+construction).
+
 ## Important implementation notes
 
 - `nb_only=True` parameter propagates through `standard_fit` → `_tensorzinb_fit` → `TensorZINB`. Disables MoM init automatically. Result dict has `nb_only=True` stamp and no `x_pi` weights.
@@ -95,6 +114,10 @@ The obs condition uses only reporter-informed zeros (or none); CM uses all possi
 
 ## Data locations
 
-- Empirical data: `/nfs/roberts/project/pi_skr2/shared/tabula_data/{shendure,cohen,seelig}/`
-- Ortho objects: same directories, named `*_ortho_*`
+- **Primary (clean)**: `/nfs/roberts/project/pi_skr2/shared/tabula_data_new/{shendure,cohen,seelig}/`
+  Preprocessing outputs + phantom-zero orthos only. See `README.md` there for
+  full provenance tracing each file back to GEO downloads.
+- **Legacy**: `/nfs/roberts/project/pi_skr2/shared/tabula_data/` -- old orthos,
+  simulations, intermediate files. Do not use for new fits.
 - Simulations: `/nfs/roberts/project/pi_skr2/shared/tabula_data/simulated/`
+  (will migrate to tabula_data_new when re-run)

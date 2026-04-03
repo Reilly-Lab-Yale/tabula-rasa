@@ -7403,7 +7403,7 @@ def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_c
                             client=client,
                             libraries=libraries,
                             library_mapping="corresponding",
-                            flatten_overtransfection=False,
+                            flatten_overtransfection=True,
                             n_sims=n_sims,
                             experiment_bounds=bound,
                             ground_truth=gt_df)
