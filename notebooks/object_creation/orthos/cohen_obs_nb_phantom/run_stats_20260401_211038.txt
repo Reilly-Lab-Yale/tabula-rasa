@@ -1,0 +1,216 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-01T21:52:13.778474
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/cohen_obs_nb_phantom
+  Main jobs : 7000645
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7000645  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7000645
+   User/Account: mcn26/prio_skr2
+       Job Name: cohen_obs_nb
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 64GB (16GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Apr 1, 2026 at 9:10 PM
+       Run Time: 00:33:25
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||                    55%]
+  CPU memory usage [||                                              5%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u22n03: 01:13:48/02:13:40 (efficiency=55.2%)
+
+  CPU memory usage per node - used/allocated
+      a1132u22n03: 3.1GB/64GB (796.2MB/16GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 55.2%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/7000645
+
+  * This job only needed 5% of the requested time which was 12:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u22n03": {
+      "cpus": 4,
+      "total_memory": 68719476736,
+      "total_time": 4428.1,
+      "used_memory": 3339681792
+    }
+  },
+  "total_time": 2005
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7000645|cohen_obs_nb|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u22n03|1|4|64G|2026-04-01T21:10:38|2026-04-01T21:10:40|2026-04-01T21:44:05|00:33:25|12:00:00|01:14:15|01:12:22|01:52.312|02:13:40||||||||||0:0
+7000645.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u22n03|1|4||2026-04-01T21:10:40|2026-04-01T21:10:40|2026-04-01T21:44:05|00:33:25||01:14:15|01:12:22|01:52.312|02:13:40|5254836K|5254836K|4903112K|4903112K|3355.00M|366.03M|3355.00M|366.03M|1|0:0
+7000645.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u22n03|1|4||2026-04-01T21:10:40|2026-04-01T21:10:40|2026-04-01T21:44:05|00:33:25||00:00:00|00:00:00|00:00:00|02:13:40|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1132u22n03 ───────────────────────────────────────────────────────────────
+NodeName=a1132u22n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=157.75
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u22n03 NodeHostName=a1132u22n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=633024 FreeMem=226054 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T01:55:57 SlurmdStartTime=2026-03-31T12:20:04
+   LastBusyTime=2026-03-28T12:02:52 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=633024M
+   CurrentWatts=800 AveWatts=635
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7000645.err  (64 lines total) ───────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775092248.338012 4167373 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775092253.988632 4167373 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-01 21:11:00,113 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 466731f8a767e23ff8c84d6c80d6312e initialized by task ('shuffle-transfer-466731f8a767e23ff8c84d6c80d6312e', 5) executed on worker inproc://10.18.22.92/4167373/4
+2026-04-01 21:11:02,118 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 466731f8a767e23ff8c84d6c80d6312e deactivated due to stimulus 'task-finished-1775092262.1160614'
+scMPRAforge: INFO: Dropped 4 of 456 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+scMPRAforge: INFO: Coarse reporter attached: 159,191 unique (rep, cell, CRE) detections.
+2026-04-01 21:11:19,453 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3124190a3853ef08a3e8dd0d503e6541 initialized by task ('shuffle-transfer-3124190a3853ef08a3e8dd0d503e6541', 6) executed on worker inproc://10.18.22.92/4167373/4
+2026-04-01 21:11:19,614 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3124190a3853ef08a3e8dd0d503e6541 deactivated due to stimulus 'task-finished-1775092279.6131737'
+2026-04-01 21:11:23,609 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4a2d201c672326c483e72ee6c935075b initialized by task ('shuffle-transfer-4a2d201c672326c483e72ee6c935075b', 6) executed on worker inproc://10.18.22.92/4167373/4
+2026-04-01 21:11:24,854 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4a2d201c672326c483e72ee6c935075b deactivated due to stimulus 'task-finished-1775092284.8538492'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 23.17 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 19.41 MiB.
+This may cause some slowdown.
+[last 44 lines]
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 14.68 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 13.72 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 12.87 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 9.98 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+2026-04-01 21:28:08,659 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3124190a3853ef08a3e8dd0d503e6541 initialized by task ('shuffle-transfer-3124190a3853ef08a3e8dd0d503e6541', 0) executed on worker inproc://10.18.22.92/4167373/4
+2026-04-01 21:28:08,843 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3124190a3853ef08a3e8dd0d503e6541 deactivated due to stimulus 'task-finished-1775093288.8415442'
+2026-04-01 21:28:13,003 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4a2d201c672326c483e72ee6c935075b initialized by task ('shuffle-transfer-4a2d201c672326c483e72ee6c935075b', 5) executed on worker inproc://10.18.22.92/4167373/4
+2026-04-01 21:28:14,435 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4a2d201c672326c483e72ee6c935075b deactivated due to stimulus 'task-finished-1775093294.433391'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 257.60 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 16.78 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+
+── slurm-7000645.out  (30 lines total) ───────────────────────────────────────
+[first 20 lines]
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.92:8787/status
+Loading Cohen data (TSV, nonzero only)...
+Data loaded and filtered.
+
+Fitting by_cre (obs phantom NB)...
+by_cre done in 24.1s
+
+Fitting by_cell_type (obs phantom NB)...
+by_cell_type done in 1004.3s
+
+Total fit time: 1033.0s (17.2min)
+Extracting parameters...
+Saving to /nfs/roberts/project/pi_skr2/shared/tabula_data/cohen/cohen_obs_nb_phantom_20260401...
+Saved.
+
+Total wall time: 1033.0s (17.2min)
+
+sacct:
+JobID|State|Elapsed|MaxRSS|AveRSS|AllocCPUS|ReqMem
+[last 10 lines]
+7000645|RUNNING|00:33:22|||4|64G
+7000645.batch|RUNNING|00:33:22|||4|
+7000645.extern|RUNNING|00:33:22|||4|
+
+  NodeName=a1132u22n03
+  CPUTot=64
+  RealMemory=1014783
+  AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+
+Done.
