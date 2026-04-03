@@ -11,9 +11,9 @@
 module reset
 module load miniconda
 conda activate tz
-export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
+export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen:$PYTHONPATH
 
-cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/cohen_cm_zinb
+cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen/notebooks/object_creation/orthos/cohen_cm_zinb
 ipython fit_by_cell_type.py
 
 echo "EXITING SHELL"

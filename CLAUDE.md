@@ -64,13 +64,26 @@ All fit scripts follow the pattern: sbatch wrapper (.sh) → ipython script (.py
 
 ## Cohen data and consider_missing
 
-Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The preprocessing notebook (`cohen_retina_denovo_process/12_make_scmpra_object/`) joins MPRA data with U6 data: when U6 detects a CRE in a cell but no MPRA barcodes are observed, it inserts a single row with `mpra_bc="dummy"` and `umis_mpra_bc=0` ("single counting U6 approach" from the original paper). This creates 75,954 zero rows.
+Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The original preprocessing inserted a single `mpra_bc="dummy"` zero row per (cell, CRE) when U6 detected transfection but no MPRA signal — this broke `consider_missing` because `"dummy"` mapped to all CREs, failing the `(rep_id, mpra_bc) -> cre_id` uniqueness check.
 
-**Problem**: `_get_missing_maps()` (called by `consider_missing`) requires unique `(rep_id, mpra_bc) -> cre_id` mapping. The sentinel `"dummy"` maps to all CREs, failing validation with 49,647 ambiguous keys. This makes `consider_missing=True` incompatible with the U6-padded TSV.
+**Regenerated preprocessing** (`regen_scmpra_object.py`, March 2026) fixes both issues:
+1. Filters 49,646 ambiguous rBC pairs (sequencing artifacts)
+2. Performs CRE-coarse reporter-informed expansion: expands U6-only (cell, CRE) detections to all barcodes of that CRE (replacing a single dummy row with real barcode-level zeros)
 
-**Solution for cohen_cm fits**: load the pre-U6-join MPRA data (`unjoined/read_wise_mpra_retina.tsv`), convert to UMI-wise, and let `consider_missing` handle all zero expansion. This bypasses U6 entirely — which is the point of the "ignore reporter" condition.
+The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes `_get_missing_maps()` validation. It contains the full CRE-coarse reporter-informed zeros, which are a strict subset of what `consider_missing` would produce.
 
-**Separate issue — single-counting underestimates zeros**: the current preprocessing adds 1 zero per (cell, CRE) when U6 says the CRE is present but no MPRA signal is observed. Biologically, all barcodes for that CRE produced zero UMIs, so the zero should be expanded to all barcodes. The preprocessing should be updated to perform this barcode-level expansion for the standard (obs) condition.
+**Memory cap note**: `_inflate_missing_split_level` estimates ~8,750 GB for Cohen CM cell-type slices, but this assumes dense string-per-row representation. The actual data is 99.8% sparse zeros. Cohen CM fits must set `consider_missing_max_memory_gb = None` to bypass the cap. The estimator should eventually be updated to account for sparse encoding.
+
+## Terminology: zero expansion modes
+
+| Term | Verb form | Meaning |
+|------|-----------|---------|
+| **reporter-informed zeros** | reporter-informed expansion | Any zeros derived from a transfection reporter signal — the reporter confirms the CRE was present in the cell, so unobserved MPRA signal is a true zero not a missing observation. Encompasses all reporter-based zero imputation. |
+| **CRE-coarse reporter-informed zeros** | CRE-coarse reporter-informed expansion | The specific case where the transfection reporter operates at CRE level (not barcode level), requiring imputation across all barcodes of that CRE. Because the reporter cannot distinguish which barcodes were present, every unobserved barcode of a detected CRE is imputed as zero. Cohen U6 is the canonical example. Produces many more zeros than a barcode-level reporter would (where only the specific unobserved barcode gets a zero). |
+| **consider_missing zeros** | consider_missing expansion | Full Cartesian-product expansion: every (cell × barcode) combination in a replicate, regardless of reporter signal. Appropriate when there is no reporter (Seelig). |
+
+**Relationship**: CRE-coarse reporter-informed zeros ⊂ reporter-informed zeros ⊂ consider_missing zeros.
+The obs condition uses only reporter-informed zeros (or none); CM uses all possible zeros.
 
 ## Important implementation notes
 
