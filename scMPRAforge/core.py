@@ -1991,9 +1991,18 @@ def _smart_matrix(data,split):
     if "reference" in data[anti].values:
         reference="reference"
     else:
-        raise ValueError(
-            f"No explicit reference level found for '{anti}'. "
-            f"Call set_reference_cell() and set_negative_controls() before fitting."
+        # No explicit reference in this subset -- fall back to most frequent
+        # level. Contrasts from this model use a NON-STANDARD reference and
+        # are NOT directly comparable to models that use the canonical
+        # reference. Safe for simulation / parameter extraction, but
+        # hypothesis-test results should be treated with caution.
+        level_frequency = data[anti].value_counts().sort_values(ascending=False)
+        reference = level_frequency.index[0]
+        model_type = "nonstandard_reference"
+        logger.warning(
+            f"No explicit reference level for '{anti}' in this subset. "
+            f"Falling back to most frequent level '{reference}'. "
+            f"Contrasts are NOT comparable to models with the canonical reference."
         )
 
     zi_formula="C(rep_id)-1"
@@ -2061,14 +2070,19 @@ def _build_cm_fit_inputs(pd_maps, split, level):
         anti_col = "cre_id"
     group_totals["n_total"] = group_totals["n_cells"] * group_totals["n_barcodes"]
 
-    # ── Require explicit reference level ──────────────────────────────
+    # ── Pick reference level ─────────────────────────────────────────
     freq = group_totals.groupby(anti_col)["n_total"].sum()
-    if "reference" not in freq.index:
-        raise ValueError(
-            f"No explicit reference level found for '{anti}'. "
-            f"Call set_reference_cell() and set_negative_controls() before fitting."
+    model_type = None  # set below
+    if "reference" in freq.index:
+        reference = "reference"
+    else:
+        reference = freq.sort_values(ascending=False).index[0]
+        model_type = "nonstandard_reference"
+        logger.warning(
+            f"No explicit reference level for '{anti}' in this subset. "
+            f"Falling back to most frequent level '{reference}'. "
+            f"Contrasts are NOT comparable to models with the canonical reference."
         )
-    reference = "reference"
 
     anti_levels = sorted(freq.index)
     treatment_levels = sorted([l for l in anti_levels if l != reference])
@@ -2160,7 +2174,8 @@ def _build_cm_fit_inputs(pd_maps, split, level):
             f"C({anti}, contr.treatment(base='{reference}'))[T.{lev}]")
     zi_names = [f"C(rep_id)[{rep}]" for rep in rep_levels]
 
-    model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
+    if model_type is None:
+        model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
 
     return {
         'nb_regressors': comp_nb,
@@ -2280,14 +2295,20 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
 
     anti = anti_split(split)
 
-    # ── Require explicit reference level ──────────────────────────────
+    # ── Pick reference level ─────────────────────────────────────────
     anti_levels = sorted(total_counts[anti].unique())
-    if "reference" not in anti_levels:
-        raise ValueError(
-            f"No explicit reference level found for '{anti}'. "
-            f"Call set_reference_cell() and set_negative_controls() before fitting."
+    model_type = None  # set below
+    if "reference" in anti_levels:
+        reference = "reference"
+    else:
+        freq = total_counts.groupby(anti)[["n_total"]].sum()
+        reference = freq["n_total"].sort_values(ascending=False).index[0]
+        model_type = "nonstandard_reference"
+        logger.warning(
+            f"No explicit reference level for '{anti}' in this subset. "
+            f"Falling back to most frequent level '{reference}'. "
+            f"Contrasts are NOT comparable to models with the canonical reference."
         )
-    reference = "reference"
 
     treatment_levels = sorted([l for l in anti_levels if l != reference])
     rep_levels = sorted(total_counts["rep_id"].unique())
@@ -2370,7 +2391,8 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
             f"C({anti}, contr.treatment(base='{reference}'))[T.{lev}]")
     zi_names = [f"C(rep_id)[{rep}]" for rep in rep_levels]
 
-    model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
+    if model_type is None:
+        model_type = "contrastable" if len(anti_levels) > 1 else "simulation_only"
 
     return {
         'nb_regressors': comp_nb,
@@ -3267,7 +3289,10 @@ class ortho:
         else:
             for ct, entry in wp.by_cell_type.items():
                 model = _to_plain(self.by_cell_type.model[ct])
-                by_ct[str(ct)] = _pack_model_block(model, entry)
+                design = _to_plain(self.by_cell_type_design[ct])
+                blk = _pack_model_block(model, entry)
+                blk["model_type"] = design.get("model_type", "contrastable")
+                by_ct[str(ct)] = blk
 
         by_cr = {}
         if wp.by_cre is None:
@@ -3275,7 +3300,10 @@ class ortho:
         else:
             for cr, entry in wp.by_cre.items():
                 model = _to_plain(self.by_cre.model[cr])
-                by_cr[str(cr)] = _pack_model_block(model, entry)
+                design = _to_plain(self.by_cre_design[cr])
+                blk = _pack_model_block(model, entry)
+                blk["model_type"] = design.get("model_type", "contrastable")
+                by_cr[str(cr)] = blk
 
         return {"by_cell_type": by_ct, "by_cre": by_cr}
 
@@ -5393,6 +5421,15 @@ def _wald_by_celltype_row(row: dict, bundle: dict):
             "wald_debug": "no precomp block for cell_type",
         }
 
+    if blk.get("model_type") == "nonstandard_reference":
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "nonstandard_reference -- contrasts not comparable",
+        }
+
     debug_base = blk.get("debug_msg", "ok")
 
     if cre == "reference":
@@ -5462,6 +5499,15 @@ def _wald_by_cre_row(row: dict, bundle: dict):
             "fold_change": np.nan,
             "flattened": False,
             "wald_debug": "no precomp block for cre",
+        }
+
+    if blk.get("model_type") == "nonstandard_reference":
+        return {
+            "test_statistic": np.nan,
+            "p_value": np.nan,
+            "fold_change": np.nan,
+            "flattened": False,
+            "wald_debug": "nonstandard_reference -- contrasts not comparable",
         }
 
     debug_base = blk.get("debug_msg", "ok")
