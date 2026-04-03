@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
 [project]
-name = "mephist"
+name = "zimtum"
 version = "0.0.1"
-description = "scMPRA Estimation and Probabilistic Hypothesis Inference and Simulation Testing"
+description = "Zero-Inflated scMPRA Testing and Uncertainty Modeling"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
