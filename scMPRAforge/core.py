@@ -751,6 +751,7 @@ class simple_count:
     performance. 
     """
     def __init__(self,data=None):
+        self.fixed_count = None
         if not data is None:
             self.from_data(data)
 
@@ -780,9 +781,20 @@ class simple_count:
         self.alpha_nb = nb.params[-1]              # dispersion (NB2 alpha)
 
         if not nb.converged:
-            logger.error("Negative binomial model of transfection failed to converge.")
-            raise(RuntimeError)
-        
+            if self.alpha_nb < 1e-6:
+                mode = int(np.median(data))
+                logger.warning(
+                    "NB fit failed to converge (alpha ~ 0). "
+                    "Data has near-zero overdispersion; "
+                    f"setting fixed_count={mode} (median)."
+                )
+                self.mu_nb = self.mu_pois
+                self.alpha_nb = 1e-6
+                self.fixed_count = mode
+            else:
+                logger.error("Negative binomial model failed to converge.")
+                raise RuntimeError("NB fit did not converge")
+
         self.update_alt_nb_param()
         self.original_fit=True
 
@@ -793,9 +805,10 @@ class simple_count:
     def draw_nb(self,size, rng = np.random.default_rng()):
         """
         returns a 1d numpy vector of draws from the nb
-        model of the object. 
+        model of the object.
         """
-        #return rng.negative_binomial(n=self.r, p=self.p, size=size)
+        if getattr(self, 'fixed_count', None) is not None:
+            return np.full(size, int(self.fixed_count), dtype=int)
         return scipy.stats.nbinom.rvs(self.r,self.p,size=size,random_state=rng)
     
     def plot(self, max_bins: int = 25, binwidth: int | None = None):
@@ -1057,53 +1070,70 @@ class Bounds:
         
         ret=cls()
 
+        # Helper: resolve a future and coerce to a plain scalar/DataFrame.
+        # _extract_mu returns DataFrame, _extract_theta returns numpy scalar
+        # or 0-d array.  Normalize here so downstream code can assume types.
+        def _resolve_scalar(future):
+            v = future.result()
+            return float(np.nanmax(np.asarray(v).ravel()))  # scalar
+
+        def _resolve_df(future):
+            return future.result()  # DataFrame
+
         #get the min & max nb parameters across all models
         mins=[]
         maxes=[]
-        
+
         #for each model class
         for var in ["by_cell_type_parameters","by_cre_parameters"]:
             ## nb min & max ##
             for key in getattr(inp,var).nb:
-                current=getattr(inp,var).nb[key].result()
-                maxes.append(float(current.max()))
-                mins.append(float(current.min()))
-            
+                current=_resolve_df(getattr(inp,var).nb[key])
+                vals = current["mu"].values
+                maxes.append(float(np.nanmax(vals)))
+                mins.append(float(np.nanmin(vals)))
+
             thetas=[]
             for key in getattr(inp,var).theta:
-                current=getattr(inp,var).theta[key].result()
-                thetas.append(current)
-            
+                thetas.append(_resolve_scalar(getattr(inp,var).theta[key]))
+
             ## reference ##
             if var=="by_cell_type_parameters":
                 reference_mus=[]
                 for key in getattr(inp,var).nb:
-                    df=getattr(inp,var).nb[key].result()
-                    assert len(df.loc["reference"])==1; "Multi reference"
-                    reference_mus.append(df.loc["reference"]["mu"])
+                    df=_resolve_df(getattr(inp,var).nb[key])
+                    ref_rows = df.loc[df.index.get_level_values(0) == "reference", "mu"]
+                    assert len(ref_rows) == 1, "Multi reference"
+                    reference_mus.append(float(ref_rows.iloc[0]))
                 ret.by_cell_type_reference_activity=np.mean(reference_mus)
             elif var=="by_cre_parameters":
-                ret.by_cre_reference_activity=np.mean(getattr(inp,var).nb["reference"].result()["mu"].to_list())
-            
+                ref_df = _resolve_df(getattr(inp,var).nb["reference"])
+                ret.by_cre_reference_activity=np.mean(ref_df["mu"].to_list())
+
             ## theta means ##
             #we could munge the strings & use setattr but i think this is more readable
             if var=="by_cell_type_parameters":
                 ret.by_cell_type_theta=np.mean(thetas)
             elif var=="by_cre_parameters":
                 ret.by_cre_theta=np.mean(thetas)
-            
-            
+
+
             ## zero inflation ##
             zis=[]
             for key in getattr(inp,var).zi:
-                current=getattr(inp,var).zi[key].result()
+                current=_resolve_df(getattr(inp,var).zi[key])
+                if current is None:
+                    continue
                 current=current.rename({'zi':key},axis=1)
                 zis.append(current)
-            zis=pd.concat(zis,axis=1)
+            if zis:
+                zis=pd.concat(zis,axis=1)
+            else:
+                zis=pd.DataFrame()
             if var=="by_cell_type_parameters":
-                ret.by_cell_type_zi=zis.mean(axis=1)#.mean()
+                ret.by_cell_type_zi=zis.mean(axis=1) if len(zis) else None
             elif var=="by_cre_parameters":
-                ret.by_cre_zi=zis.mean(axis=1)#.mean()
+                ret.by_cre_zi=zis.mean(axis=1) if len(zis) else None
 
         
         #min & max nb and add to the return object
@@ -1137,7 +1167,7 @@ class Bounds:
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
             ret.theta=ret.by_cre_theta
-            ret.reference_activity=by_cre_reference_activity
+            ret.reference_activity=ret.by_cre_reference_activity
         else:
             assert False, "Unrecognized direction."
 
@@ -1160,8 +1190,21 @@ class Bounds:
 from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
-SHENDURE_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_bounds.tgz")
-COHEN_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_bounds.tgz")
+SHENDURE_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_zinb_phantom.tgz")
+SHENDURE_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_nb_phantom.tgz")
+SHENDURE_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_cm_zinb_phantom.tgz")
+SHENDURE_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_cm_nb_phantom.tgz")
+SHENDURE_BOUNDS=SHENDURE_OBS_NB_BOUNDS
+
+COHEN_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obs_zinb_phantom.tgz")
+COHEN_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obs_nb_phantom.tgz")
+COHEN_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_zinb_phantom.tgz")
+COHEN_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_nb_phantom.tgz")
+COHEN_BOUNDS=COHEN_OBS_ZINB_BOUNDS
+
+SEELIG_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_zinb_phantom.tgz")
+SEELIG_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_nb_phantom.tgz")
+SEELIG_BOUNDS=SEELIG_CM_NB_BOUNDS
 
 class scMPRA_data:
     """
@@ -3120,26 +3163,53 @@ class ortho:
 
         use_missing = bool(getattr(scMPRAdat, "consider_missing_enabled", False))
         data = scMPRAdat.get_data(include_missing=False)
+        # Ensure dense dtype for groupby -- sparse breaks Dask metadata inference
+        if hasattr(data["umis_mpra_bc"].dtype, 'fill_value'):
+            data["umis_mpra_bc"] = data["umis_mpra_bc"].astype("int64")
+
+        # For CM orthos, precompute denominator info so we can estimate
+        # CM means without materializing the full Cartesian expansion.
+        if use_missing:
+            # n_cells per (split_level, rep_id)
+            cells_per_split_rep = _to_pandas(
+                data.groupby([split, "rep_id"])["cell_bc"].nunique()
+            )
+            # n_barcodes per (anti_level, rep_id)
+            bcs_per_anti_rep = _to_pandas(
+                data.groupby([anti, "rep_id"])["mpra_bc"].nunique()
+            )
 
         QC={}
         for model_level in params.keys:
-            #model level are the levels of the split
-            #e.g. a by-cell-type model will have cell-type values for model_level
-            if use_missing:
-                subset = scMPRAdat.get_data(
-                    include_missing=True,
-                    context={"kind": "split_level", "split": split, "level": model_level},
-                )
-                # umis_mpra_bc comes back as SparseDtype from _optimize_mpra_ddf.
-                # Dask groupby metadata inference cannot handle sparse columns,
-                # so cast to dense int64 lazily (no data pulled to driver).
-                subset["umis_mpra_bc"] = subset["umis_mpra_bc"].astype("int64")
-            else:
-                subset = data[data[split] == model_level]
+            subset = data[data[split] == model_level]
 
-            data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
-            data_means = _to_pandas(data_means)
-            data_means.name="mean(umis_mpra_bc)"
+            if use_missing:
+                # CM mean = obs_sum / total_possible_rows
+                # total_possible per (anti_level, rep) = n_cells * n_barcodes
+                obs_sum = _to_pandas(subset.groupby([anti, "rep_id"])["umis_mpra_bc"].sum())
+                obs_sum.name = "obs_sum"
+
+                # Build total_possible per (anti_level, rep)
+                reps = cells_per_split_rep.loc[model_level] if model_level in cells_per_split_rep.index.get_level_values(0) else pd.Series(dtype="int64")
+                totals = {}
+                for anti_level in obs_sum.index.get_level_values(0).unique():
+                    for rep in obs_sum.loc[anti_level].index:
+                        n_cells = int(reps.get(rep, 0))
+                        n_bcs = int(bcs_per_anti_rep.loc[(anti_level, rep)]) if (anti_level, rep) in bcs_per_anti_rep.index else 0
+                        totals[(anti_level, rep)] = n_cells * n_bcs
+
+                total_possible = pd.Series(totals, name="total_possible")
+                total_possible.index = pd.MultiIndex.from_tuples(total_possible.index, names=[anti, "rep_id"])
+
+                # CM mean per anti_level = sum(obs_sum across reps) / sum(total_possible across reps)
+                combined = pd.DataFrame({"obs_sum": obs_sum, "total_possible": total_possible}).fillna(0)
+                by_anti = combined.groupby(level=0).sum()
+                data_means = (by_anti["obs_sum"] / by_anti["total_possible"].replace(0, np.nan))
+                data_means.name = "mean(umis_mpra_bc)"
+            else:
+                data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
+                data_means = _to_pandas(data_means)
+                data_means.name = "mean(umis_mpra_bc)"
 
             mu_estimates=params.nb[model_level].result()
 

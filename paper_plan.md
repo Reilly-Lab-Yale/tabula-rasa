@@ -21,16 +21,22 @@ Restricting to the condition each dataset would actually use in practice
 | Cohen     | obs             | 54%                | 82.5%            | 2.87%              |
 | Shendure  | obs             | 6.7%               | 25%              | 12.3%              |
 
-### Conclusions
+### Conclusions and canonical model choices
 
 - **Seelig (CM)**: NB is the right model. Zero models significant, zero AIC
   wins, mu parameters identical to 4 decimal places.
+  **Canonical: `SEELIG_BOUNDS` = CM NB** (`seelig_cm_nb_phantom`)
 
 - **Cohen (obs)**: ZINB is warranted. Majority significant under Bonferroni,
-  mu stable (~3% shift).
+  mu stable (~3% shift). By-cell-type: 100% LRT significant, 100% AIC.
+  **Canonical: `COHEN_BOUNDS` = obs ZINB** (`cohen_obs_zinb_phantom_20260401`)
 
-- **Shendure (obs)**: NB is probably sufficient. Only 7% survive Bonferroni,
-  BIC agrees (3% prefer ZINB), 12% mu shift.
+- **Shendure (obs)**: NB is sufficient. Only 7% survive Bonferroni,
+  BIC agrees (3% prefer ZINB by_cre, 0% by_cell_type).
+  **Canonical: `SHENDURE_BOUNDS` = obs NB** (`shendure_obs_nb_phantom`)
+
+These canonical choices are set as default aliases in `scMPRAforge.core` and
+will be used to parameterize all downstream simulations.
 
 ### Collision rates
 
@@ -54,12 +60,15 @@ Cell-type specificity hypotheses : "the same CRE is expressed differently in two
 
 Remember to collect runtime statistics for all tasks with nontrivial compute.
 
-- [ ] Consolidate md files & revise figure plan to match analysis goals (this task)
-- [ ] Map analysis flow, make sure everything is organized
-- [ ] Create new data directory
-- [ ] Organize pre-processing
-- [ ] Re-fit models with phantom zeroes (all datasets, obs + cm)
-- [ ] Re-extract bounds (requires from_ortho bug fix first -- see below)
+- [x] Consolidate md files & revise figure plan to match analysis goals (this task)
+- [x] Map analysis flow, make sure everything is organized
+- [x] Create new data directory
+- [x] Organize pre-processing
+- [x] Re-fit models with phantom zeroes (all datasets, obs + cm)
+- [x] Delete non-phantom fit code and orthos (superseded by phantom versions)
+- [x] Regen LRT figures (NB vs ZINB comparison) with properly phantomed models
+- [x] Pick 1x canonical model (NB or ZINB) per dataset from phantomed LRT results
+- [x] Re-extract bounds (from_ortho bug fixed, all 10 presets extracted)
 - [ ] Fix Wald for phantom and Wald for NB
 - [x] Delete pre-phantom run_stats/run_summary files (obsolete after phantom refit)
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
@@ -71,26 +80,13 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
 
 ## Known bugs blocking progress
 
-### Bounds.from_ortho() fails on seelig_ortho_20260320
+### ~~Bounds.from_ortho() fails on seelig_ortho_20260320~~ FIXED
 
-```
-TypeError: float() argument must be a string or a real number, not 'Series'
-```
-
-In `Bounds.from_ortho()`, `current.max()` returns a Series (one max per column)
-when `current` is a DataFrame, but `float()` expects a scalar. The NB parameter
-storage format changed; earlier orthos store 1-D structures, seelig stores 2-D
-DataFrames.
-
-**Impact**: Cannot extract bounds from seelig ortho (or any new ortho with the
-updated format). Existing shendure/cohen presets unaffected.
-
-**Workaround used**: Collision rate computed directly from raw TSV
-(`seelig_collision_rate.py`).
-
-**Fix**: In `Bounds.from_ortho()` min/max loop, replace `float(current.max())`
-with something robust to both 1-D and 2-D, e.g.
-`float(np.nanmax(current.values))`. But confirm parameter storage format first.
+Fixed in this session. Multiple issues in `from_ortho()`:
+`float(current.max())` on DataFrame, missing `ret.` prefix, None ZI for NB-only.
+All resolved with `_resolve_scalar`/`_resolve_df` helpers. Also fixed
+`simple_count` NB convergence failure on near-constant data (seelig library:
+95% of CREs have exactly 5 barcodes) -- falls back to `fixed_count` mode.
 
 ---
 
@@ -177,8 +173,7 @@ refer to it that way in directories and code.
 - s1b: collision rate barchart
   - Done: `estimated_percent_conflict.ipynb`, SVG generated
 - s1c: bounds plots (transfection + library models from extracted bounds)
-  - Plotting routines exist but BLOCKED on `from_ortho` bug fix
-  - Need to re-extract bounds for all datasets post-phantom
+  - Done: all 10 presets extracted, SVGs in `abstract_bounds/output/{cohen,shendure,seelig}/`
 
 ### Fig 2: statistical tests & re-analysis of existing datasets
 

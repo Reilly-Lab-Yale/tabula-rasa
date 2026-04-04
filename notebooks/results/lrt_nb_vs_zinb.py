@@ -10,12 +10,14 @@ This is the conservative test — the true null distribution is a 50:50 mixture
 of χ²(0) and χ²(q), so χ²(q) p-values are upper bounds.  If significant even
 under the conservative test, ZI is definitively needed.
 
+All pairs use phantom-zero compressed orthos from tabula_data_new.
+
 Available pairs:
-  - shendure obs: ZINB shendure_ortho_20260306                   vs NB shendure_obs_nb_20260329
-  - shendure cm:  ZINB shendure_ortho_consider_missing_20260320  vs NB shendure_cm_nb_20260329
-  - seelig cm:    ZINB seelig_ortho_20260320                     vs NB seelig_cm_nb_20260329
-  - cohen obs:    ZINB cohen_obs_zinb_phantom_20260401            vs NB cohen_obs_nb_phantom_20260401
-  - cohen cm:     ZINB cohen_cm_zinb_phantom_20260401             vs NB cohen_cm_nb_phantom_20260401
+  - shendure obs: ZINB shendure_obs_zinb_phantom  vs NB shendure_obs_nb_phantom
+  - shendure cm:  ZINB shendure_cm_zinb_phantom   vs NB shendure_cm_nb_phantom
+  - cohen obs:    ZINB cohen_obs_zinb_phantom_20260401  vs NB cohen_obs_nb_phantom_20260401
+  - cohen cm:     ZINB cohen_cm_zinb_phantom_20260401   vs NB cohen_cm_nb_phantom_20260401
+  - seelig cm:    ZINB seelig_cm_zinb_phantom     vs NB seelig_cm_nb_phantom
 """
 import pickle
 import numpy as np
@@ -23,20 +25,16 @@ import pandas as pd
 from scipy import stats
 from pathlib import Path
 
-data_root = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data")
+data_root = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 
 pairs = {
     "shendure_obs": {
-        "zinb": data_root / "shendure" / "shendure_ortho_20260306",
-        "nb":   data_root / "shendure" / "shendure_obs_nb_20260329",
+        "zinb": data_root / "shendure" / "shendure_obs_zinb_phantom",
+        "nb":   data_root / "shendure" / "shendure_obs_nb_phantom",
     },
     "shendure_cm": {
-        "zinb": data_root / "shendure" / "shendure_ortho_consider_missing_20260320",
-        "nb":   data_root / "shendure" / "shendure_cm_nb_20260329",
-    },
-    "seelig_cm": {
-        "zinb": data_root / "seelig" / "seelig_ortho_20260320",
-        "nb":   data_root / "seelig" / "seelig_cm_nb_20260329",
+        "zinb": data_root / "shendure" / "shendure_cm_zinb_phantom",
+        "nb":   data_root / "shendure" / "shendure_cm_nb_phantom",
     },
     "cohen_obs": {
         "zinb": data_root / "cohen" / "cohen_obs_zinb_phantom_20260401",
@@ -45,6 +43,10 @@ pairs = {
     "cohen_cm": {
         "zinb": data_root / "cohen" / "cohen_cm_zinb_phantom_20260401",
         "nb":   data_root / "cohen" / "cohen_cm_nb_phantom_20260401",
+    },
+    "seelig_cm": {
+        "zinb": data_root / "seelig" / "seelig_cm_zinb_phantom",
+        "nb":   data_root / "seelig" / "seelig_cm_nb_phantom",
     },
 }
 
