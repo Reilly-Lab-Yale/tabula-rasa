@@ -1,6 +1,6 @@
+#!/usr/bin/env python
 """
-Cohen obs NB fit -- reporter-informed zeros via coarse reporter table, NB-only.
-Counterpart to cohen_obs_zinb_phantom for NB vs ZINB comparison.
+Shendure CM ZINB fit -- full consider_missing, phantom compressed.
 """
 import sys, time, os, subprocess
 sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
@@ -8,8 +8,9 @@ sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
 from pathlib import Path
 
 SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/cohen")
-OUT_DIR = DATA_DIR / "cohen_obs_nb_phantom_20260401"
+DATA_DIR = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/shendure")
+OUT_ROOT = DATA_DIR
+OUT_NAME = "shendure_cm_zinb_phantom"
 SLURM_JOB_ID = os.environ.get("SLURM_JOB_ID", "unknown")
 
 
@@ -19,16 +20,16 @@ def main():
 
     print("Setting up Dask local cluster...", flush=True)
     cluster = LocalCluster(n_workers=1, threads_per_worker=2,
-                           processes=False, memory_limit="60GB")
+                           processes=False, memory_limit="200GB")
     client = Client(cluster)
     print(f"Dashboard: {client.dashboard_link}", flush=True)
 
-    print("Loading Cohen data (TSV, nonzero only)...", flush=True)
-    cohen = scm.scMPRA_data.from_tsv(str(DATA_DIR / "retina_single_counting_u6.tsv"))
-    cohen.set_negative_controls(["wt_1", "wt_2"])
-    cohen.set_reference_cell("Rod")
-    cohen.ortho_filter()
-    cohen.set_coarse_reporter(str(DATA_DIR / "unjoined" / "u6.tsv"))
+    print("Loading shendure data...", flush=True)
+    shendure = scm.scMPRA_data.from_tsv(str(DATA_DIR / "shendure_processed.tsv"))
+    shendure.set_negative_controls(["minP", "noP"])
+    shendure.set_reference_cell("Pluripotent")
+    shendure.ortho_filter()
+    shendure.set_consider_missing(True)
     print("Data loaded and filtered.", flush=True)
 
     ortho_obj = scm.ortho()
@@ -36,14 +37,14 @@ def main():
     report_path = str(SCRIPT_DIR / "dask_performance_report.html")
     t0 = time.time()
     with performance_report(filename=report_path):
-        print("\nFitting by_cre (obs phantom NB)...", flush=True)
+        print("\nFitting by_cre (CM phantom)...", flush=True)
         t_cre = time.time()
-        ortho_obj.fit_by_cre_models(client=client, dat=cohen, phantom_compress=True, nb_only=True)
+        ortho_obj.fit_by_cre_models(client=client, dat=shendure)
         print(f"by_cre done in {time.time()-t_cre:.1f}s", flush=True)
 
-        print("\nFitting by_cell_type (obs phantom NB)...", flush=True)
+        print("\nFitting by_cell_type (CM phantom)...", flush=True)
         t_ct = time.time()
-        ortho_obj.fit_by_cell_type_models(client=client, dat=cohen, phantom_compress=True, nb_only=True)
+        ortho_obj.fit_by_cell_type_models(client=client, dat=shendure)
         print(f"by_cell_type done in {time.time()-t_ct:.1f}s", flush=True)
 
     total_time = time.time() - t0
@@ -52,8 +53,8 @@ def main():
     print("Extracting parameters...", flush=True)
     ortho_obj.extract_params(client)
 
-    print(f"Saving to {OUT_DIR}...", flush=True)
-    ortho_obj.save(str(DATA_DIR), "cohen_obs_nb_phantom_20260401", client=client)
+    print(f"Saving to {OUT_ROOT / OUT_NAME}...", flush=True)
+    ortho_obj.save(str(OUT_ROOT), OUT_NAME, client=client)
     print("Saved.", flush=True)
 
     client.close()

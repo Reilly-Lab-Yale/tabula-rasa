@@ -1,0 +1,115 @@
+========================================================================
+  cohen_obs_nb_phantom_20260401 -- Model QC Summary
+  Model type: NB-only
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 4/4 converged
+  by_cre: 114/114 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0001  max=0.0149  median=0.0008
+  by_cre: min=0.0000  max=0.2750  median=0.0008
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: mean r=nan  min=nan  max=nan  n(r<0.8)=3
+    Low-r levels (r < 0.8):
+      r=-0.039  Bipolar
+      r=0.016  reference
+      r=0.222  Interneuron
+  by_cre: mean r=nan  min=nan  max=nan  n(r<0.8)=90
+    Low-r levels (r < 0.8):
+      r=-0.922  swap_crx2_to_gggcttag_reverse
+      r=-0.922  tail_conserve1_169_to_174
+      r=-0.891  ebox_gcagctgg_to_gcagctgc
+      r=-0.826  tail_conserve3_200_to_205
+      r=-0.824  combo_Q50_crx5_crx4
+      r=-0.798  ebox_gcagctgg_to_gcagcagg
+      r=-0.793  ebox_gcagctgg_to_gaagctgg
+      r=-0.692  swap_crx4_to_ctaatccc_forward
+      r=-0.670  combo_Q50_crx5_crx1
+      r=-0.643  swap_crx1_to_gggcttag_reverse
+      r=-0.593  tail_conserve3_210_to_215
+      r=-0.579  combo_Mute_crx1
+      r=-0.563  swap_crx5_to_cttatccc_forward
+      r=-0.521  ebox_gcagctgg_to_gcagctag
+      r=-0.511  ebox_gcagctgg_to_gcatctgg
+      r=-0.511  tail_conserve5_468_to_473
+      r=-0.437  combo_Q50_crx5
+      r=-0.436  swap_crx5_to_ctaatccc_forward
+      r=-0.414  tail_conserve5_473_to_478
+      r=-0.406  tail_conserve6_488_to_493
+      r=-0.399  ebox_gcagctgg_to_gctgctgg
+      r=-0.388  tail_conserve3_250_to_255
+      r=-0.350  combo_Q50_crx4_crx3
+      r=-0.345  eboxDouble_gcagctgg_to_gcaaatgg
+      r=-0.320  tail_conserve1_159_to_164
+      r=-0.306  ebox_gcagctgg_to_gcagcttg
+      r=-0.298  swap_crx3_to_ctaatccc_forward
+      r=-0.268  swap_crx1_to_gggattag_reverse
+      r=-0.250  tail_conserve5_453_to_458
+      r=-0.240  combo_Mute_crx5_crx4
+      r=-0.177  reference
+      r=-0.136  swap_crx4_to_cttatccc_forward
+      r=-0.132  combo_Mute_crx2_crx1
+      r=-0.116  tail_conserve6_483_to_488
+      r=-0.099  swap_crx4_to_ctaagccc_forward
+      r=-0.097  combo_Q50_crx2_crx1
+      r=-0.070  tail_conserve3_205_to_210
+      r=-0.066  tail_conserve3_240_to_245
+      r=0.024  combo_Q50_crx2
+      r=0.038  tail_conserve5_463_to_468
+      r=0.043  eboxDouble_gcagctgg_to_gcacgtgg
+      r=0.078  ebox_gcagctgg_to_ggagctgg
+      r=0.096  combo_Q50_crx1
+      r=0.120  combo_Q50_crx3_crx1
+      r=0.121  tail_conserve6_493_to_498
+      r=0.126  tail_conserve4_433_to_438
+      r=0.129  swap_crx3_to_ctaagccc_forward
+      r=0.141  combo_Mute_crx3_crx2
+      r=0.142  tail_conserve3_230_to_235
+      r=0.148  eboxDouble_gcagctgg_to_gcaagtgg
+      r=0.158  tail_conserve5_443_to_448
+      r=0.215  tail_conserve5_448_to_453
+      r=0.266  combo_Mute_crx5_crx1
+      r=0.271  tail_conserve3_245_to_250
+      r=0.276  combo_Q50_crx5_crx2
+      r=0.276  ebox_gcagctgg_to_gcagatgg
+      r=0.279  ebox_gcagctgg_to_gcagctgt
+      r=0.292  combo_Mute_crx5_crx2
+      r=0.297  combo_Mute_crx2
+      r=0.317  eboxDouble_gcagctgg_to_gcatgtgg
+      r=0.351  combo_Q50_crx5_crx3
+      r=0.356  swap_crx5_to_ctaagccc_forward
+      r=0.392  ebox_gcagctgg_to_gcagctcg
+      r=0.416  tail_conserve2_178_to_183
+      r=0.416  tail_conserve6_503_to_508
+      r=0.423  ebox_gcagctgg_to_gcagccgg
+      r=0.424  tail_conserve2_193_to_198
+      r=0.430  ebox_gcagctgg_to_gccgctgg
+      r=0.436  tail_conserve1_164_to_169
+      r=0.441  tail_conserve4_423_to_428
+      r=0.471  ebox_gcagctgg_to_gtagctgg
+      r=0.509  eboxDouble_gcagctgg_to_gcaattgg
+      r=0.554  swap_crx2_to_gggataag_reverse
+      r=0.557  swap_crx2_to_gggattag_reverse
+      r=0.593  combo_Q50_crx3
+      r=0.597  tail_conserve2_188_to_193
+      r=0.600  ebox_gcagctgg_to_gcaactgg
+      r=0.600  tail_conserve3_220_to_225
+      r=0.610  tail_conserve3_215_to_220
+      r=0.616  swap_crx3_to_cttatccc_forward
+      r=0.619  combo_Mute_crx5_crx3
+      r=0.688  tail_conserve5_458_to_463
+      r=0.699  eboxDouble_gcagctgg_to_gcatatgg
+      r=0.703  tail_conserve2_183_to_188
+      r=0.722  ebox_gcagctgg_to_acagctgg
+      r=0.725  tail_conserve2_173_to_178
+      r=0.726  ebox_gcagctgg_to_gcggctgg
+      r=0.749  ebox_gcagctgg_to_gcagttgg
+      r=0.755  combo_Q50_crx4_crx1
+      r=0.795  combo_Mute_crx5
+

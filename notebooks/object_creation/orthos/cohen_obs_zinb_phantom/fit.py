@@ -5,12 +5,12 @@ Loads the nonzero-only TSV + U6 reporter table. At fit time, reporter-informed
 zeros are phantom-compressed into weighted observations per design-matrix group.
 """
 import sys, time, os, subprocess
-sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-cohen-regen')
+sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
 
 from pathlib import Path
 
 SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data/cohen")
+DATA_DIR = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/cohen")
 OUT_DIR = DATA_DIR / "cohen_obs_zinb_phantom_20260401"
 SLURM_JOB_ID = os.environ.get("SLURM_JOB_ID", "unknown")
 

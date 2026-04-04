@@ -4,7 +4,7 @@
 #SBATCH -A prio_skr2
 #SBATCH -t 4:00:00
 #SBATCH -c 1
-#SBATCH --mem=24G
+#SBATCH --mem=64G
 #SBATCH -o slurm-qc-%j.out
 #SBATCH -e slurm-qc-%j.err
 

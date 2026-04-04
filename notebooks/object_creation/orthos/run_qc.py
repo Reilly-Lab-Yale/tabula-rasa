@@ -3,9 +3,9 @@
 Generic ortho QC script.
 
 Usage:
-    ipython run_qc.py -- --dataset shendure --ortho shendure_obs_nb_20260329
-    ipython run_qc.py -- --dataset cohen --ortho cohen_cm_zinb_20260329
-    ipython run_qc.py -- --dataset seelig --ortho seelig_cm_nb_20260329
+    ipython run_qc.py -- --dataset shendure --ortho shendure_obs_nb_phantom
+    ipython run_qc.py -- --dataset cohen --ortho cohen_cm_zinb_phantom_20260401
+    ipython run_qc.py -- --dataset seelig --ortho seelig_cm_nb_phantom
 
 Detects NB-only models automatically (skips ZI plots).
 Generates:  qc/{ortho_name}/plots/*.svg  and  qc/{ortho_name}/summary.txt
@@ -21,31 +21,41 @@ from pathlib import Path
 from dask.distributed import Client, LocalCluster
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-import scMPRAforge as scm
+import scMPRAforge.core as scm
 
-# ── config per dataset ────────────────────────────────────────────────────────
+# -- config per dataset -------------------------------------------------------
 DATASET_CONFIG = {
     "shendure": {
-        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data/shendure",
+        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/shendure",
         "cell_type_labels": {
             "reference": "Pluripotent (reference)",
-            "Cardiomyocyte": "Cardiomyocyte",
-            "Endothelial": "Endothelial",
-            "Neural_Crest": "Neural Crest",
-            "Epithelial": "Epithelial",
+            "Cardiomyocytes": "Cardiomyocytes",
+            "EpiblastPrimitiveStreak": "Epiblast/PrimStreak",
+            "ExEndodermParietal": "ExEndoderm Parietal",
+            "ExEndodermVisceral": "ExEndoderm Visceral",
+            "Haematoendothelial": "Haematoendothelial",
+            "Mesoderm": "Mesoderm",
+            "NeuroectodermBrain": "Neuroectoderm Brain",
+            "NeuroectodermRostral": "Neuroectoderm Rostral",
+            "SurfaceEctoderm": "Surface Ectoderm",
         },
     },
     "cohen": {
-        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data/cohen",
-        "cell_type_labels": {},  # many cell types — use raw names
+        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/cohen",
+        "cell_type_labels": {
+            "reference": "Retina (reference)",
+            "Bipolar": "Bipolar",
+            "Mueller Glia": "Mueller Glia",
+            "Interneuron": "Interneuron",
+        },
     },
     "seelig": {
-        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data/seelig",
+        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/seelig",
         "cell_type_labels": {"reference": "HepG2 (reference)", "K562": "K562"},
     },
 }
 
-# ── parse args ────────────────────────────────────────────────────────────────
+# -- parse args ----------------------------------------------------------------
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", required=True, choices=DATASET_CONFIG.keys())
 parser.add_argument("--ortho", required=True, help="Ortho directory name")
@@ -61,23 +71,24 @@ PLOT_DIR = WORK_DIR / "plots"
 PLOT_DIR.mkdir(parents=True, exist_ok=True)
 SUMMARY_PATH = WORK_DIR / "summary.txt"
 
-# ── cluster ───────────────────────────────────────────────────────────────────
+# -- cluster -------------------------------------------------------------------
 cluster = LocalCluster(n_workers=4, threads_per_worker=1, memory_limit="50GB", processes=False)
 client = Client(cluster)
 print(client.dashboard_link, flush=True)
 
-# ── load ──────────────────────────────────────────────────────────────────────
+# -- load ----------------------------------------------------------------------
 print(f"[+] Loading ortho: {DATA_ROOT / ORTHO_NAME}", flush=True)
 primordial = scm.ortho.load(client, DATA_ROOT, ORTHO_NAME)
 
-# ── detect NB-only ────────────────────────────────────────────────────────────
-# Check first by_cre model for nb_only flag
+# -- detect NB-only ------------------------------------------------------------
 first_cre_key = next(iter(primordial.by_cre.model))
-first_model = primordial.by_cre.model[first_cre_key].result()
+first_model = primordial.by_cre.model[first_cre_key]
+if hasattr(first_model, 'result'):
+    first_model = first_model.result()
 is_nb_only = first_model.get("nb_only", False)
 print(f"[+] Model type: {'NB-only' if is_nb_only else 'ZINB'}", flush=True)
 
-# ── compute QC ────────────────────────────────────────────────────────────────
+# -- compute QC ----------------------------------------------------------------
 print("[+] Computing model QC...", flush=True)
 primordial.compute_model_qc()
 by_cell = primordial.by_cell_qc
@@ -94,15 +105,15 @@ def save(fig, name):
 
 LOW_R_THRESH = 0.8
 
-# ── summary.txt ───────────────────────────────────────────────────────────────
+# -- summary.txt ---------------------------------------------------------------
 lines = [
     "=" * 72,
-    f"  {ORTHO_NAME} — Model QC Summary",
+    f"  {ORTHO_NAME} -- Model QC Summary",
     f"  Model type: {'NB-only' if is_nb_only else 'ZINB'}",
     "=" * 72, "",
 ]
 
-lines += ["── Convergence ─────────────────────────────────────────────────────", ""]
+lines += ["-- Convergence ---------------------------------------------------------", ""]
 for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
     total = len(qc)
     success = sum(1 for v in qc.values() if v["success"])
@@ -115,7 +126,7 @@ for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
             lines.append(f"      {short}")
 lines.append("")
 
-lines += ["── Mu range (NB mean estimate) ──────────────────────────────────────", ""]
+lines += ["-- Mu range (NB mean estimate) -----------------------------------------", ""]
 for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
     all_mu = pd.concat(
         [v["dat"]["mu"] for v in qc.values() if v["success"] and "mu" in v["dat"].columns],
@@ -129,7 +140,7 @@ for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
         lines.append(f"    WARNING: mu > 1000 detected")
 lines.append("")
 
-lines += ["── Pearson r (mu vs mean UMI) ───────────────────────────────────────", ""]
+lines += ["-- Pearson r (mu vs mean UMI) ------------------------------------------", ""]
 for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
     r_vals = {k: v["r_value"] for k, v in qc.items() if v["success"] and v["r_value"] is not None}
     arr = np.array(list(r_vals.values()))
@@ -146,7 +157,7 @@ lines.append("")
 SUMMARY_PATH.write_text("\n".join(lines) + "\n")
 print(f"[+] Summary written: {SUMMARY_PATH}", flush=True)
 
-# ── plot 1: theta distributions ──────────────────────────────────────────────
+# -- plot 1: theta distributions -----------------------------------------------
 print("[+] Plotting theta distributions...", flush=True)
 
 ct_params  = primordial.by_cell_type_parameters
@@ -163,7 +174,7 @@ cre_thetas_all = np.concatenate([
 ])
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-fig.suptitle(f"{ORTHO_NAME} — Theta (dispersion) distributions", fontsize=13)
+fig.suptitle(f"{ORTHO_NAME} -- Theta (dispersion) distributions", fontsize=13)
 
 axes[0].set_title("by_cell_type models")
 axes[0].violinplot(list(ct_thetas.values()), showmedians=True)
@@ -183,11 +194,11 @@ axes[1].set_yscale("log")
 fig.tight_layout()
 save(fig, "theta_distributions.svg")
 
-# ── plot 2: r-value distributions ────────────────────────────────────────────
+# -- plot 2: r-value distributions ---------------------------------------------
 print("[+] Plotting r-value distributions...", flush=True)
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-fig.suptitle(f"{ORTHO_NAME} — Pearson r (mu vs mean UMI)", fontsize=13)
+fig.suptitle(f"{ORTHO_NAME} -- Pearson r (mu vs mean UMI)", fontsize=13)
 
 for ax, (lbl, qc) in zip(axes, [("by_cell_type", by_cell), ("by_cre", by_cre)]):
     r_vals = [v["r_value"] for v in qc.values() if v["success"] and v["r_value"] is not None]
@@ -207,14 +218,14 @@ for ax, (lbl, qc) in zip(axes, [("by_cell_type", by_cell), ("by_cre", by_cre)]):
 fig.tight_layout()
 save(fig, "r_values.svg")
 
-# ── plot 3: mu vs mean UMI scatter — by_cell_type ────────────────────────────
+# -- plot 3: mu vs mean UMI scatter -- by_cell_type ----------------------------
 print("[+] Plotting mu vs mean UMI (by_cell_type)...", flush=True)
 
 n_ct = len(by_cell)
 ncols = min(n_ct, 6)
 nrows = int(np.ceil(n_ct / ncols))
 fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 5 * nrows), squeeze=False)
-fig.suptitle(f"{ORTHO_NAME} — mu vs mean(UMI) by cell type", fontsize=13)
+fig.suptitle(f"{ORTHO_NAME} -- mu vs mean(UMI) by cell type", fontsize=13)
 
 for i, (ct, qc_entry) in enumerate(by_cell.items()):
     ax = axes[i // ncols][i % ncols]
@@ -237,7 +248,7 @@ for i in range(len(by_cell), nrows * ncols):
 fig.tight_layout()
 save(fig, "mu_vs_mean_by_cell_type.svg")
 
-# ── plot 4: mu vs mean UMI — by_cre (worst 20 + random 20) ──────────────────
+# -- plot 4: mu vs mean UMI -- by_cre (worst 20 + random 20) ------------------
 print("[+] Plotting mu vs mean UMI (by_cre, worst + sample)...", flush=True)
 
 r_sorted = sorted(
@@ -253,7 +264,7 @@ to_plot = worst_20 + sample_20
 ncols_p = 8
 nrows_p = int(np.ceil(len(to_plot) / ncols_p))
 fig, axes = plt.subplots(nrows_p, ncols_p, figsize=(ncols_p * 2.5, nrows_p * 2.5))
-fig.suptitle(f"{ORTHO_NAME} — mu vs mean(UMI) by CRE\n"
+fig.suptitle(f"{ORTHO_NAME} -- mu vs mean(UMI) by CRE\n"
              "(worst 20 r-values + 20 random; red=worst)", fontsize=11)
 axes_flat = axes.flatten()
 
@@ -274,39 +285,43 @@ for ax in axes_flat[len(to_plot):]:
 fig.tight_layout()
 save(fig, "mu_vs_mean_by_cre_worst.svg")
 
-# ── plot 5: ZI parameter by cell type (ZINB only) ───────────────────────────
+# -- plot 5: ZI parameter by cell type (ZINB only) ----------------------------
 if not is_nb_only:
     print("[+] Plotting ZI parameters...", flush=True)
 
     zi_data = {}
     for ct in ct_params.zi:
         df = ct_params.zi[ct].result()
+        if df is None:
+            continue
         zi_col = ct if ct in df.columns else df.columns[0]
         zi_data[label(ct)] = df[zi_col].values
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    fig.suptitle(f"{ORTHO_NAME} — Zero-inflation (ZI) by cell type", fontsize=13)
+    if zi_data:
+        fig, ax = plt.subplots(figsize=(6, 5))
+        fig.suptitle(f"{ORTHO_NAME} -- Zero-inflation (ZI) by cell type", fontsize=13)
 
-    labels_zi = list(zi_data.keys())
-    data_zi = list(zi_data.values())
-    ax.violinplot(data_zi, showmedians=True)
-    for i, (lbl_zi, vals) in enumerate(zip(labels_zi, data_zi)):
-        ax.scatter(
-            np.ones(len(vals)) * (i + 1) + np.random.uniform(-0.05, 0.05, len(vals)),
-            vals, alpha=0.3, s=6, color="steelblue"
-        )
-    ax.set_xticks(range(1, len(labels_zi) + 1))
-    ax.set_xticklabels(labels_zi, rotation=15, ha="right")
-    ax.set_ylabel("ZI probability")
-    ax.set_title("Per-CRE zero-inflation estimates")
+        labels_zi = list(zi_data.keys())
+        data_zi = list(zi_data.values())
+        ax.violinplot(data_zi, showmedians=True)
+        for i, (lbl_zi, vals) in enumerate(zip(labels_zi, data_zi)):
+            ax.scatter(
+                np.ones(len(vals)) * (i + 1) + np.random.uniform(-0.05, 0.05, len(vals)),
+                vals, alpha=0.3, s=6, color="steelblue"
+            )
+        ax.set_xticks(range(1, len(labels_zi) + 1))
+        ax.set_xticklabels(labels_zi, rotation=15, ha="right")
+        ax.set_ylabel("ZI probability")
+        ax.set_title("Per-CRE zero-inflation estimates")
 
-    fig.tight_layout()
-    save(fig, "zi_by_cell_type.svg")
+        fig.tight_layout()
+        save(fig, "zi_by_cell_type.svg")
+    else:
+        print("[+] No ZI data available.", flush=True)
 else:
     print("[+] Skipping ZI plot (NB-only model).", flush=True)
 
-# ── plot 6: r-value vs missing data (consider_missing datasets) ──────────────
-# Check if any CREs have NaN in mean UMI (indicates consider_missing was used)
+# -- plot 6: r-value vs missing data (consider_missing datasets) ---------------
 has_missing = False
 for cre_id, qc_entry in by_cre.items():
     if qc_entry["success"] and qc_entry["dat"]["mean(umis_mpra_bc)"].isna().any():
@@ -327,7 +342,7 @@ if has_missing:
         n_missing.append(n_nan)
 
     fig, ax = plt.subplots(figsize=(6, 5))
-    fig.suptitle(f"{ORTHO_NAME} — r-value vs missing cell types (by_cre)", fontsize=12)
+    fig.suptitle(f"{ORTHO_NAME} -- r-value vs missing cell types (by_cre)", fontsize=12)
     ax.scatter(n_missing, r_vals_cre, alpha=0.3, s=8, color="steelblue")
     ax.axhline(LOW_R_THRESH, color="red", linestyle="--", alpha=0.7, label=f"r={LOW_R_THRESH}")
     ax.set_xlabel("n cell types with missing observations")
@@ -338,7 +353,7 @@ if has_missing:
 else:
     print("[+] Skipping r-vs-missing plot (no missing data detected).", flush=True)
 
-# ── done ──────────────────────────────────────────────────────────────────────
+# -- done ----------------------------------------------------------------------
 print(f"[+] All plots saved to: {PLOT_DIR}", flush=True)
 print(f"[+] Summary: {SUMMARY_PATH}", flush=True)
 client.close()

@@ -1,0 +1,20 @@
+========================================================================
+  shendure_cm_zinb_phantom -- Model QC Summary
+  Model type: ZINB
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 10/10 converged
+  by_cre: 208/208 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0000  max=1.9157  median=0.0001
+  by_cre: min=0.0000  max=1.8953  median=0.0001
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0
+  by_cre: mean r=0.993  min=0.849  max=1.000  n(r<0.8)=0
+
