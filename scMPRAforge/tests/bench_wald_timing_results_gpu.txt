@@ -1,0 +1,42 @@
+Wald precompute_wald timing benchmark -- device=gpu (H200)
+Date: 2026-04-04
+TF 2.21.0 with CUDA, eager mode + @tf.function JIT
+Hardware: NVIDIA H200 (144GB), Intel Xeon 8562Y+
+
+Label                          Models   Total(s)  Per-model(s)   OK  Fail
+--------------------------------------------------------------------------------
+cohen_obs_nb                      118      143.1          1.21   118     0
+cohen_obs_zinb                    118      152.2          1.29   117     1
+shendure_obs_nb                   218       16.5          0.08   218     0
+shendure_obs_zinb                 218       19.4          0.09   218     0
+seelig_cm_nb                     1346     >6000       >4.5(est)  ---   ---
+seelig_cm_zinb                   1346      (not reached)
+
+Notes:
+  - 100% success rate on cohen + shendure (672/673 models, 1 ZINB failure)
+  - Seelig timed out at 2h wall time. The 2 by_cell_type models with 1344 CRE
+    columns dominate -- Jacobian is (N x 1345) per model. The 1344 by_cre
+    models (2 columns each) are fast individually but numerous.
+  - GPU utilization was 0-3%: the per-observation Jacobian is still sequential
+    within each tape.jacobian() call. GPU helps via lower per-op dispatch
+    overhead vs CPU eager (~10-20x faster than CPU).
+  - @tf.function JIT did not improve GPU speed vs pure eager (both ~1.2s/model
+    for cohen). The JIT benefit is bounded graph caching (no memory leak)
+    rather than speed.
+
+Comparison across implementations:
+                        cohen/model  shendure/model  memory leak  seelig feasible
+  TF1 graph mode (old)    ~1.0s        ~0.04s          YES (segf)    unknown
+  TF2 eager CPU           ~60s+        ~2s+            no            no
+  TF2 eager GPU            1.18s        0.06s          no            timed out
+  TF2 JIT GPU              1.21s        0.08s          no            timed out
+
+Extrapolation for power analysis (20 simulation replicates, GPU):
+  cohen (118 models):    20 x 118 x 1.2s = 2832s (47 min) -- feasible
+  shendure (218 models): 20 x 218 x 0.08s = 349s (6 min) -- easy
+  seelig (1346 models):  20 x 1346 x ~4.5s = 121140s (33.6h) -- needs optimization
+    seelig by_cre only (1344 x 2-col): est 20 x 1344 x 0.1s = 2688s (45 min)
+    seelig by_ct only (2 x 1344-col): est 20 x 2 x ~3000s = way too slow
+
+Recommendation: For seelig, skip by_cell_type Wald (only 2 cell types, use
+MWU/bootstrap instead) and run by_cre Wald only.

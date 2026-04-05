@@ -69,12 +69,20 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
 - [x] Regen LRT figures (NB vs ZINB comparison) with properly phantomed models
 - [x] Pick 1x canonical model (NB or ZINB) per dataset from phantomed LRT results
 - [x] Re-extract bounds (from_ortho bug fixed, all 10 presets extracted)
-- [ ] Fix Wald for phantom and Wald for NB
+- [x] QC plots for all 10 phantom orthos (convergence, theta, r-values, mu vs mean, ZI)
+- [x] Fix Wald for phantom and Wald for NB
+  - NB-only loglik, weighted covariance, design matrix reconstruction from recipe
+  - Adaptive ridge + sandwich->hessian fallback for extreme phantom weights
+  - 15 unit tests + 3 simulation tests passing
 - [x] Delete pre-phantom run_stats/run_summary files (obsolete after phantom refit)
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Review simulation notebooks (shendure + cohen calibration, power, pairwise)
 - [ ] Create all figures
 - [ ] Code style corrections
+- [ ] (v2) Port Wald SE computation from TF1 graph mode to TF2 eager + GradientTape for GPU acceleration
+  - Current: TF1 tf.hessians + tf.map_fn per-obs scores, CPU-only (~1s/model cohen, ~0.04s shendure)
+  - Target: tf.GradientTape.jacobian for vectorized per-obs scores on GPU, est. 10-50x speedup
+  - Enables dense simulation power sweeps at scale
 
 ---
 
@@ -225,3 +233,39 @@ from `de_novo_simulation`.
 
 Model convergence diagnostics across fits. Infrastructure exists (`run_qc.py`,
 `wrap_qc.sh`, seelig QC plots). Could strengthen methods section.
+
+---
+
+## Dream features (post-publication)
+
+Ideas that are out of scope for v1 but worth recording for a future version.
+
+- **Empirical Bayes shrinkage.** Estimate the cross-CRE (or cross-cell-type)
+  distribution of effect sizes from MLE results, then shrink noisy per-CRE
+  estimates toward the population mean -- analogous to limma/DESeq2 dispersion
+  shrinkage. Purely a post-processing step on existing ortho coefficients, no
+  new fitting engine needed. Main benefit: stabilizes inference for low-count
+  CREs without discarding them via MIN_PTS.
+
+- **Full hierarchical Bayesian ZINB.** Partial pooling across CREs via
+  hierarchical priors on regression coefficients and dispersion. Posterior
+  contrasts replace Wald/MWU/bootstrap. Would unify the three testing
+  frameworks and give principled uncertainty on the ZI mixing weight. Likely
+  engine: NumPyro (JAX, GPU-native MCMC). Abandoned early in development due
+  to scale: MCMC on thousands of coupled ZINB models is 10-100x slower than
+  MLE, and consider_missing at Bayesian scale is probably intractable.
+  Empirical Bayes (above) captures most of the benefit at a fraction of the
+  cost.
+
+- **Cell-type-specific variant effects.** Testing whether a variant's effect
+  (CRE_A vs CRE_B) differs across cell types -- a CRE x cell-type interaction.
+  The current stratified approach decouples these axes: by_cell_type gives
+  variant effects within a cell type, by_cre gives cell-type effects within a
+  CRE, but neither directly tests the interaction. For v1, MWU on the paired
+  observations is sufficient (prelim results show Wald doesn't outperform MWU
+  anyway). A future version could use a post-hoc contrast-of-contrasts approach:
+  compute delta_k = beta_A - beta_B within each cell-type model (with proper
+  within-model covariance from Wald), then test heterogeneity of delta_k across
+  cell types via Cochran's Q. Cross-model independence is exact by construction
+  (cell-type models are fitted independently), so no joint covariance estimation
+  needed. Would pair well with empirical Bayes shrinkage for low-count CREs.

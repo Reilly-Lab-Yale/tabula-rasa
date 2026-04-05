@@ -1,0 +1,17 @@
+Wald precompute_wald timing benchmark -- device=cpu
+Date: 2026-04-04
+TF 2.21.0, eager mode + @tf.function JIT
+Hardware: Intel Xeon 8562Y+ (Emerald Rapids), 4 cores, 128GB RAM
+
+CPU JIT benchmark timed out at 2h without completing even cohen_obs_nb (118 models).
+Estimated per-model time: >60s (vs ~1s on GPU).
+
+The GradientTape.jacobian() per-observation computation is fundamentally slow on
+CPU -- the sequential gradient computation has high dispatch overhead that neither
+pure eager nor @tf.function JIT can resolve. The JIT compiles the graph but the
+Jacobian is still computed one observation at a time within the compiled graph.
+
+CONCLUSION: Wald precomputation is not viable on CPU with the current TF2
+GradientTape implementation. Use GPU (H200) for all Wald precomputation.
+The old TF1 graph-mode implementation (~1s/model on CPU) was faster but had a
+memory leak that caused segfaults after ~400 models.

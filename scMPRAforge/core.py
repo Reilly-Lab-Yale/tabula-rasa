@@ -2065,7 +2065,8 @@ def _smart_matrix(data,split):
         'nb_formula':nb_formula,
         'zi_formula':zi_formula,
         'reference':reference,
-        'split':split
+        'split':split,
+        'fit_mode':'standard',
     }
 
 
@@ -2232,6 +2233,7 @@ def _build_cm_fit_inputs(pd_maps, split, level):
         'reference': reference,
         'split': split,
         'weights': comp_w,
+        'fit_mode': 'cm_phantom',
     }
 
 
@@ -2449,6 +2451,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
         'reference': reference,
         'split': split,
         'weights': comp_w,
+        'fit_mode': 'obs_phantom',
     }
 
 
@@ -2529,7 +2532,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
 def _strip_design_to_recipe(dm):
     """Strip full matrices from a design dict, keeping only recipe metadata."""
     _RECIPE_KEYS = {'nb_regressor_names', 'zi_regressor_names', 'model_type',
-                    'nb_formula', 'zi_formula', 'reference', 'split'}
+                    'nb_formula', 'zi_formula', 'reference', 'split', 'fit_mode'}
     return {k: v for k, v in dm.items() if k in _RECIPE_KEYS}
 
 
@@ -3252,26 +3255,22 @@ class ortho:
         every by-cell-type model and every by-CRE model in this ortho.
         Stores results in self.wald_precomp (as Futures); persists with save().
 
-        UNDER CONSTRUCTION: Wald precomputation does not yet support phantom-zero
-        compressed design matrices or the recipe save format. It requires the
-        full per-observation design matrices, which are no longer saved to disk.
-        A weight-aware Wald implementation is planned (Phase 2).
+        Supports phantom-zero compressed orthos (frequency-weighted SEs) and
+        NB-only models. Reconstructs design matrices from training data + recipe
+        when full matrices are not stored (recipe save format).
 
         Parameters
         ----------
         client : dask.distributed.Client
             Dask client for dispatching work.
-        cov_method : {"sandwich", "opg"}
-            - "sandwich": use H^{-1} J H^{-1} covariance (default).
-            - "opg":      use OPG-only covariance J^{-1}.
+        cov_method : {"sandwich", "hessian", "opg"}
+            Starting estimator for covariance. Falls back through the chain
+            sandwich -> hessian -> opg if the chosen estimator produces a
+            non-positive-definite covariance matrix.
+            - "sandwich": H^{-1} J H^{-1} (default, robust to misspecification)
+            - "hessian":  H^{-1} (efficient under correct specification)
+            - "opg":      J^{-1} (first-derivative only, last resort)
         """
-        raise NotImplementedError(
-            "UNDER CONSTRUCTION: precompute_wald does not yet support "
-            "phantom-zero compressed design matrices or the recipe save "
-            "format. A weight-aware Wald implementation is planned (Phase 2). "
-            "Roll back to commit 3562c5a if you need Wald on pre-phantom orthos."
-        )
-
         if self.training_data is None:
             raise RuntimeError(
                 "precompute_wald requires self.training_data to subset matrices."
@@ -3282,63 +3281,137 @@ class ortho:
                 "precompute_wald requires at least one of by_cell_type, by_cre models."
             )
 
-        # Map cov_method -> opg_only flag
         cov_method = cov_method.lower()
-        if cov_method not in {"sandwich", "opg"}:
-            raise ValueError("cov_method must be 'sandwich' or 'opg'")
-        opg_only = (cov_method == "opg")
+        if cov_method not in {"sandwich", "hessian", "opg"}:
+            raise ValueError("cov_method must be 'sandwich', 'hessian', or 'opg'")
+
+        # Determine fit mode from recipe or training data properties
+        td = self.training_data
+        td_use_missing = bool(getattr(td, "consider_missing_enabled", False))
+        td_has_reporter = getattr(td, '_coarse_reporter', None) is not None
+
+        # Check first design dict for fit_mode tag (present in new orthos)
+        sample_design = None
+        if self.by_cell_type_design is not None:
+            k = next(iter(self.by_cell_type_design))
+            sample_design = _to_plain(self.by_cell_type_design[k])
+        elif self.by_cre_design is not None:
+            k = next(iter(self.by_cre_design))
+            sample_design = _to_plain(self.by_cre_design[k])
+
+        has_matrices = (sample_design is not None
+                        and 'nb_regressors' in sample_design)
+        fit_mode = None
+        if sample_design is not None:
+            fit_mode = sample_design.get('fit_mode', None)
+        if fit_mode is None:
+            # Infer from training data properties (backward compat)
+            if td_use_missing:
+                fit_mode = "cm_phantom"
+            elif td_has_reporter:
+                fit_mode = "obs_phantom"
+            else:
+                fit_mode = "standard"
+
+        # Gather reconstruction inputs once (driver-side), shared across levels
+        raw = td.get_data(include_missing=False)
+
+        if fit_mode == "cm_phantom" and not has_matrices:
+            maps = td._get_missing_maps()
+            pd_maps = {}
+            for k in ["cell_map", "mpra_map", "observed"]:
+                v = maps[k]
+                pd_maps[k] = v.compute() if hasattr(v, 'compute') else v
+
+        elif fit_mode == "obs_phantom" and not has_matrices:
+            reporter = getattr(td, '_coarse_reporter', None)
+            anti_ct = anti_split("cell_type")
+            anti_cr = anti_split("cre_id")
+
+            nz_cols_ct = ["cell_type", anti_ct, "rep_id", "umis_mpra_bc", "cell_bc"]
+            nz_cols_cr = ["cre_id", anti_cr, "rep_id", "umis_mpra_bc", "cell_bc"]
+            nz_pdf = raw[raw["umis_mpra_bc"] > 0].compute()
+            for col in ["cell_type", "cre_id", "rep_id"]:
+                if col in nz_pdf.columns:
+                    nz_pdf[col] = nz_pdf[col].astype(str)
+
+            cell_map = (raw[["rep_id", "cell_bc", "cell_type"]]
+                        .drop_duplicates().compute())
+            mpra_map = (raw[["rep_id", "mpra_bc", "cre_id"]]
+                        .drop_duplicates().compute())
+            for df in [cell_map, mpra_map]:
+                for col in df.columns:
+                    if col != "umis_mpra_bc":
+                        df[col] = df[col].astype(str)
+
+        elif fit_mode == "standard" and not has_matrices:
+            raw_pdf = raw.compute().reset_index(drop=True)
+
+        def _submit_precomp(model_key, model_dict_or_future, design_dict_or_future,
+                            split_col, cov_method):
+            """Submit a single Wald precomp task, reconstructing matrices if needed."""
+            design_dict = _to_plain(design_dict_or_future)
+            model_dict = _to_plain(model_dict_or_future)
+
+            if 'nb_regressors' in design_dict:
+                # Full matrices available -- pass directly
+                return client.submit(
+                    _build_wald_precomp_for_subset,
+                    model_dict, design_dict, cov_method=cov_method,
+                )
+
+            # Recipe only -- reconstruct matrices
+            if fit_mode == "cm_phantom":
+                design_future = client.submit(
+                    _build_cm_fit_inputs, pd_maps, split_col, str(model_key),
+                )
+            elif fit_mode == "obs_phantom":
+                all_levels = [str(k) for k in (
+                    self.by_cell_type.model.keys() if split_col == "cell_type"
+                    else self.by_cre.model.keys()
+                )]
+                total_counts = _reporter_zero_counts(
+                    nz_pdf, reporter, mpra_map, cell_map, split_col, all_levels
+                )
+                mk = str(model_key)
+                design_future = client.submit(
+                    _build_obs_phantom_inputs,
+                    nz_pdf[nz_pdf[split_col] == mk].reset_index(drop=True),
+                    total_counts[total_counts[split_col] == mk].reset_index(drop=True),
+                    split_col, mk,
+                )
+            else:
+                pdf = raw_pdf[raw_pdf[split_col] == str(model_key)].reset_index(drop=True)
+                pdf = _prepare_subset_for_modeling(pdf)
+                design_future = client.submit(_smart_matrix, pdf, split_col)
+
+            return client.submit(
+                _build_wald_precomp_for_subset,
+                model_dict, design_future, cov_method=cov_method,
+            )
 
         by_ct = {}
         by_cr = {}
-        #Very Lame retry hack due to extremely rare failures in _hessian_se
-        #TODO: debug intermitant `AlreadyExistsError` properly once precompute_wald is faster.
         with dask.annotate(retries=10):
-            td = self.training_data
-            td_raw = td.get_data(include_missing=False)
-            td_use_missing = bool(getattr(td, "consider_missing_enabled", False))
-            if not self.by_cell_type is None:
+            if self.by_cell_type is not None:
                 for ct in self.by_cell_type.model.keys():
-                    model_f = self.by_cell_type.model[ct]
-                    design_f = self.by_cell_type_design[ct]
-                    if td_use_missing:
-                        df_ct = td.get_data(
-                            include_missing=True,
-                            context={"kind": "split_level", "split": "cell_type", "level": ct},
-                        )
-                    else:
-                        df_ct = td_raw[td_raw["cell_type"] == ct]
-                    df_ct = _prepare_subset_for_modeling(_to_pandas_df(df_ct))
-                    by_ct[ct] = client.submit(
-                        _build_wald_precomp_for_subset,
-                        model_f,
-                        design_f,
-                        df_ct,
-                        opg_only=opg_only,   # <-- pass the flag
+                    by_ct[ct] = _submit_precomp(
+                        ct, self.by_cell_type.model[ct],
+                        self.by_cell_type_design[ct],
+                        "cell_type", cov_method,
                     )
             else:
-                by_ct=None
+                by_ct = None
 
-            if not self.by_cre is None:
+            if self.by_cre is not None:
                 for cr in self.by_cre.model.keys():
-                    model_f = self.by_cre.model[cr]
-                    design_f = self.by_cre_design[cr]
-                    if td_use_missing:
-                        df_cr = td.get_data(
-                            include_missing=True,
-                            context={"kind": "split_level", "split": "cre_id", "level": cr},
-                        )
-                    else:
-                        df_cr = td_raw[td_raw["cre_id"] == cr]
-                    df_cr = _prepare_subset_for_modeling(_to_pandas_df(df_cr))
-                    by_cr[cr] = client.submit(
-                        _build_wald_precomp_for_subset,
-                        model_f,
-                        design_f,
-                        df_cr,
-                        opg_only=opg_only,   # <-- pass the flag
+                    by_cr[cr] = _submit_precomp(
+                        cr, self.by_cre.model[cr],
+                        self.by_cre_design[cr],
+                        "cre_id", cov_method,
                     )
             else:
-                by_cr=None
+                by_cr = None
 
         self.wald_precomp = WaldPrecomp(by_cell_type=by_ct, by_cre=by_cr)
 
@@ -4986,11 +5059,13 @@ def _to_plain(obj):
 
 
 # ---- Wald Test -------------------------------------
-def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
+def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False, nb_only=False):
     """
-    TF implementation of the ZINB log-likelihood.
+    TF implementation of the ZINB (or NB-only) log-likelihood.
 
-    params = concat([x_mu, x_pi, log_theta])
+    params layout:
+      ZINB:    concat([x_mu, x_pi, log_theta])
+      NB-only: concat([x_mu, log_theta])
 
     If return_per_obs=False (default):
         returns a scalar total log-likelihood (previous existing behavior).
@@ -5003,31 +5078,39 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
     N = tf.cast(tf.shape(endog)[0], tf.float64)
 
     num_features      = tf.shape(exog)[1]
-    num_infl_features = tf.shape(exog_infl)[1]
 
     # Split parameter vector
-    x_mu      = params[:num_features]
-    x_pi      = params[num_features:num_features + num_infl_features]
-    raw_log_theta = params[-1]
+    x_mu = params[:num_features]
+    if nb_only:
+        raw_log_theta = params[num_features]
+    else:
+        num_infl_features = tf.shape(exog_infl)[1]
+        x_pi      = params[num_features:num_features + num_infl_features]
+        raw_log_theta = params[-1]
 
-    # --- CLIPPED linear predictors and dispersion (same as prev. current version) ---
+    # --- CLIPPED linear predictors and dispersion ---
 
-    # μ part: η_mu = X β_mu, clipped before exp
+    # mu part: eta_mu = X @ beta_mu, clipped before exp
     eta_mu = tf.matmul(exog, tf.expand_dims(x_mu, axis=-1))
     eta_mu = tf.clip_by_value(eta_mu, -20.0, 20.0)
     mu     = tf.exp(eta_mu)
 
-    # π logits for ZI part
-    pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
-    pi_logits = tf.clip_by_value(pi_logits, -20.0, 20.0)
-
-    # θ (dispersion) bounded away from 0/∞ in log-space
+    # theta (dispersion) bounded away from 0/inf in log-space
     log_theta = tf.clip_by_value(raw_log_theta, -10.0, 10.0)
     theta     = tf.exp(log_theta)
 
-    # zero-inflation logits -> log(q0), log(q1)
-    log_q0 = -tf.nn.softplus(-pi_logits)
-    log_q1 = log_q0 - pi_logits
+    if nb_only:
+        # NB-only: no zero-inflation component
+        # log_q0 = -inf (no ZI mass at zero), log_q1 = 0 (all mass on NB)
+        log_q0 = tf.constant(-1e20, dtype=tf.float64) * tf.ones_like(mu)
+        log_q1 = tf.zeros_like(mu)
+    else:
+        # pi logits for ZI part
+        pi_logits = tf.matmul(exog_infl, tf.expand_dims(x_pi, axis=-1))
+        pi_logits = tf.clip_by_value(pi_logits, -20.0, 20.0)
+        # zero-inflation logits -> log(q0), log(q1)
+        log_q0 = -tf.nn.softplus(-pi_logits)
+        log_q1 = log_q0 - pi_logits
 
     y = tf.cast(endog, tf.float64)
 
@@ -5062,19 +5145,23 @@ def _zinb_loglik_tf(params, exog, exog_infl, endog, return_per_obs=False):
 
 def _setup_params_from_fit(zinb_model_fit):
     """
-    Extract params vector and [ optional, commented out for now TF variable] (x_mu, x_pi, theta) from a single
-    fitted TensorZINB result dict with labeled weights.
+    Extract params vector from a single fitted TensorZINB result dict.
+
+    ZINB:    returns concat([x_mu, x_pi, log_theta])
+    NB-only: returns concat([x_mu, log_theta])
     """
     x_mu = zinb_model_fit['weights']['x_mu']
-    x_pi = zinb_model_fit['weights']['x_pi']
     log_theta = zinb_model_fit['weights']['theta'].flatten()  # already log-space
 
-    # N.B. x_mu and x_pi are already pandas Series with names; keep arrays here
-    params = np.concatenate([np.asarray(x_mu).ravel(),
-                             np.asarray(x_pi).ravel(),
-                             np.asarray(log_theta).ravel()])
-    # params_tensor = tf.Variable(params, dtype=tf64)
-    return params.astype(np.float64, copy=False) #, params_tensor
+    if zinb_model_fit.get('nb_only', False):
+        params = np.concatenate([np.asarray(x_mu).ravel(),
+                                 np.asarray(log_theta).ravel()])
+    else:
+        x_pi = zinb_model_fit['weights']['x_pi']
+        params = np.concatenate([np.asarray(x_mu).ravel(),
+                                 np.asarray(x_pi).ravel(),
+                                 np.asarray(log_theta).ravel()])
+    return params.astype(np.float64, copy=False)
 
 def _pack_model_block(model_dict, entry, *, include_cov_nb=False):
     w = model_dict['weights']['x_mu']
@@ -5112,177 +5199,256 @@ def _estimate_cov_se(
     infl_np,
     endog_np,
     *,
+    weights_np=None,
+    nb_only=False,
     ridge_h=1e-8,
     ridge_j=1e-12,
     batch_size=4096,
-    opg_only=False,
+    cov_method="sandwich",
+    strict=False,
+    # Legacy alias -- if opg_only is passed, translate to cov_method
+    opg_only=None,
 ):
     """
-    Compute covariance via either:
-      - Sandwich: cov = H^{-1} J H^{-1}, where
-          H = -∂^2 log L / ∂θ∂θᵀ  (observed information)
-          J = Σ_i s_i s_iᵀ        (outer product of per-observation scores)
-      - OPG-only: cov ≈ J^{-1} (Outer Product of Gradients)
+    Compute covariance matrix and standard errors for ZINB/NB model parameters.
 
-    Uses TF1 graph mode; float64 throughout. Batches per-observation scores for memory safety.
+    Three estimators, in order of theoretical preference:
+      1. Sandwich: H^{-1} J H^{-1} -- robust to misspecification
+      2. Hessian:  H^{-1}          -- efficient under correct specification
+      3. OPG:     J^{-1}           -- uses only first derivatives
+
+    Uses TF2 eager mode with GradientTape. No persistent graph objects.
 
     Parameters
     ----------
     params_np : np.ndarray
-        1D parameter vector θ = concat([x_mu, x_pi, log_theta]).
-    exog_np : np.ndarray
-        NB regressors (N × K_nb).
-    infl_np : np.ndarray
-        ZI regressors (N × K_zi).
-    endog_np : np.ndarray
-        Response counts (N × 1).
-    ridge_h : float
-        Small ridge added to diag(H_info) for stability (sandwich mode).
-    ridge_j : float
-        Small ridge added to diag(J) for stability.
+        1D parameter vector.
+        ZINB:    concat([x_mu, x_pi, log_theta])
+        NB-only: concat([x_mu, log_theta])
+    exog_np, infl_np, endog_np : np.ndarray
+        Design matrices and response. For NB-only, infl_np is a dummy.
+    weights_np : np.ndarray or None
+        Per-observation frequency weights (N,). None means all-ones.
+    nb_only : bool
+        If True, use NB-only log-likelihood (no ZI parameters).
+    ridge_h, ridge_j : float
+        Adaptive ridge scaling factors for H and J respectively.
     batch_size : int
         Batch size for per-observation score computation.
-    opg_only : bool
-        If True, skip the Hessian and use OPG-only covariance (J^{-1});
-        if False, use full sandwich H^{-1} J H^{-1}.
+    cov_method : {"sandwich", "hessian", "opg"}
+        Starting estimator. With strict=False (default), falls back through
+        sandwich -> hessian -> opg if the chosen estimator produces a
+        non-positive-definite covariance. With strict=True, no fallback.
+    strict : bool
+        If True, use only the chosen cov_method with no fallback.
+        Non-PD results will have zero or NaN SEs.
+    opg_only : bool or None
+        Legacy alias. If True, equivalent to cov_method="opg", strict=True.
     """
-    # Graph mode required for tf.compat.v1.placeholder / Session.
-    # Called only after all TensorZINB fits complete, so this is safe.
-    tf.compat.v1.disable_eager_execution()
+    # Legacy compatibility
+    if opg_only is not None:
+        if opg_only:
+            cov_method = "opg"
+            strict = True
+        else:
+            cov_method = "sandwich"
 
-    g = tf.Graph()
-    
-    with g.as_default():
-        # Shapes (placeholders accept variable N along axis 0)
-        P = int(params_np.size)
-        params = tf.compat.v1.placeholder(tf.float64, shape=[P],                           name="params")
-        exog   = tf.compat.v1.placeholder(tf.float64, shape=[None, exog_np.shape[1]],      name="exog")
-        infl   = tf.compat.v1.placeholder(tf.float64, shape=[None, infl_np.shape[1]],      name="infl")
-        endog  = tf.compat.v1.placeholder(tf.float64, shape=[None, 1],                     name="endog")
+    cov_method = cov_method.lower()
+    if cov_method not in {"sandwich", "hessian", "opg"}:
+        raise ValueError("cov_method must be 'sandwich', 'hessian', or 'opg'")
 
-        # total + per-observation loglik
-        ll_sum, ll_vec = _zinb_loglik_tf(params, exog, infl, endog, return_per_obs=True)
+    if weights_np is None:
+        weights_np = np.ones(endog_np.shape[0], dtype=np.float64)
+    else:
+        weights_np = np.asarray(weights_np, dtype=np.float64)
 
-        # Hessian only if we're not in OPG-only mode
-        if not opg_only:
-            H = tf.hessians(ll_sum, params)[0]  # (P, P)
+    # TF2 eager mode with GradientTape, JIT-compiled via @tf.function.
+    # tf.function traces the computation into a graph on the first call
+    # (per unique input shape + Python arg combo), then reuses the cached
+    # graph. This gives graph-mode speed with eager-mode memory management
+    # (no persistent graph leak across calls to _estimate_cov_se).
+    if not tf.executing_eagerly():
+        raise RuntimeError(
+            "_estimate_cov_se requires TF eager mode. "
+            "Do not call tf.compat.v1.disable_eager_execution() before Wald precomputation."
+        )
 
-        # Per-observation score vectors: s_i = ∂ ll_i / ∂ params
-        def _grad_one(li):
-            gi = tf.gradients(li, params)[0]
-            # Replace NaNs/Infs with 0 in the graph to avoid propagating nastiness
-            return tf.where(tf.math.is_finite(gi), gi, tf.zeros_like(gi))
+    # JIT-compiled helpers. nb_only is a Python bool captured in the closure,
+    # so tf.function traces a separate graph for True vs False.
+    @tf.function(reduce_retracing=True)
+    def _jit_hessian(params_var, exog_t, infl_t, endog_t, w_t):
+        with tf.GradientTape() as tape2:
+            tape2.watch(params_var)
+            with tf.GradientTape() as tape1:
+                tape1.watch(params_var)
+                _, ll_vec = _zinb_loglik_tf(
+                    params_var, exog_t, infl_t, endog_t,
+                    return_per_obs=True, nb_only=nb_only,
+                )
+                ll_weighted = tf.reduce_sum(w_t * ll_vec)
+            grad = tape1.gradient(ll_weighted, params_var)
+        return tape2.jacobian(grad, params_var)
 
-        S = tf.map_fn(_grad_one, ll_vec, dtype=tf.float64)  # shape (N, P)
-
-    with tf.compat.v1.Session(graph=g) as sess:
-        sess.run(tf.compat.v1.global_variables_initializer())
-
-        # Hessian evaluation (sandwich mode only)
-        if not opg_only:
-            H_np = sess.run(
-                H,
-                feed_dict={params: params_np, exog: exog_np, infl: infl_np, endog: endog_np},
+    @tf.function(reduce_retracing=True)
+    def _jit_scores_batch(params_var, exog_b, infl_b, endog_b):
+        with tf.GradientTape() as tape:
+            tape.watch(params_var)
+            _, ll_batch = _zinb_loglik_tf(
+                params_var, exog_b, infl_b, endog_b,
+                return_per_obs=True, nb_only=nb_only,
             )
-            if not np.all(np.isfinite(H_np)):
-                raise FloatingPointError("Sandwich path: non-finite Hessian")
+        return tape.jacobian(ll_batch, params_var)
 
-        # Batch J accumulation
-        P = params_np.size
+    P = int(params_np.size)
+    N = endog_np.shape[0]
+    need_hessian = cov_method in ("sandwich", "hessian")
+    need_scores = cov_method in ("sandwich", "opg")
+
+    params_var = tf.Variable(params_np, dtype=tf.float64)
+    exog_t   = tf.constant(exog_np,   dtype=tf.float64)
+    infl_t   = tf.constant(infl_np,   dtype=tf.float64)
+    endog_t  = tf.constant(endog_np,  dtype=tf.float64)
+    w_t      = tf.constant(weights_np, dtype=tf.float64)
+
+    # ---- Hessian (needed for sandwich and hessian methods) ----
+    H_info = None
+    if need_hessian:
+        H_np = _jit_hessian(params_var, exog_t, infl_t, endog_t, w_t).numpy()
+
+        if np.all(np.isfinite(H_np)):
+            H_info = -H_np
+            H_info = 0.5 * (H_info + H_info.T)
+            h_diag = np.diag(H_info)
+            h_scale = np.mean(np.abs(h_diag[h_diag != 0])) if np.any(h_diag != 0) else 1.0
+            H_info[np.diag_indices_from(H_info)] += ridge_h * max(h_scale, 1.0)
+
+    # ---- Per-observation scores (needed for sandwich and opg) ----
+    J = None
+    n_bad_total = 0
+    if need_scores:
         J = np.zeros((P, P), dtype=np.float64)
-        N = endog_np.shape[0]
-
         for start in range(0, N, batch_size):
             stop = min(start + batch_size, N)
-            S_b = sess.run(
-                S,
-                feed_dict={
-                    params: params_np,
-                    exog:   exog_np[start:stop],
-                    infl:   infl_np[start:stop],
-                    endog:  endog_np[start:stop],
-                },
-            )
-            # Safety: zero out non-finite scores
-            S_b[~np.isfinite(S_b)] = 0.0
-            J += S_b.T @ S_b
+            S_b = _jit_scores_batch(
+                params_var,
+                exog_t[start:stop],
+                infl_t[start:stop],
+                endog_t[start:stop],
+            ).numpy()
 
-    # HC1 correction and ridge on J
-    n, p = endog_np.shape[0], P
-    if n > p:
-        J *= (n / (n - p))
-    J[np.diag_indices_from(J)] += ridge_j
+            bad_mask = ~np.isfinite(S_b)
+            n_bad_total += int(bad_mask.sum())
+            S_b[bad_mask] = 0.0
 
-    # ---------- OPG-only path ----------
-    if opg_only:
-        used = "inv"
+            w_b = weights_np[start:stop]
+            S_w = S_b * np.sqrt(w_b)[:, None]
+            J += S_w.T @ S_w
+
+        # HC1 correction
+        n_eff = float(weights_np.sum())
+        if n_eff > P:
+            J *= (n_eff / (n_eff - P))
+        j_diag = np.diag(J)
+        j_scale = np.mean(np.abs(j_diag[j_diag != 0])) if np.any(j_diag != 0) else 1.0
+        J[np.diag_indices_from(J)] += ridge_j * max(j_scale, 1.0)
+
+    # Release TF tensors
+    del params_var, exog_t, infl_t, endog_t, w_t
+
+    # ---- Helper: check if covariance is usable (PD, finite, no zero diag) ----
+    def _cov_ok(cov):
+        d = np.diag(cov)
+        return np.all(np.isfinite(d)) and np.all(d > 0)
+
+    # ---- Helper: try inverting a symmetric matrix ----
+    def _safe_inv(M, label):
+        for method, fn in [
+            ("chol", lambda: la.cho_solve(la.cho_factor(M, check_finite=False), np.eye(M.shape[0]), check_finite=False)),
+            ("solve", lambda: la.solve(M, np.eye(M.shape[0]), assume_a="sym", check_finite=False)),
+            ("pinv", lambda: la.pinvh(M, check_finite=False)),
+        ]:
+            try:
+                inv = fn()
+                inv = 0.5 * (inv + inv.T)
+                return inv, f"{label}_{method}"
+            except (LinAlgError, ValueError, FloatingPointError):
+                continue
+        return np.full_like(M, np.nan), f"{label}_failed"
+
+    # ---- Try estimators in fallback order ----
+    # Build the chain based on cov_method + strict
+    chain = []
+    if cov_method == "sandwich":
+        chain = ["sandwich", "hessian", "opg"]
+    elif cov_method == "hessian":
+        chain = ["hessian", "opg"]
+    elif cov_method == "opg":
+        chain = ["opg"]
+
+    if strict:
+        chain = chain[:1]
+
+    cov = None
+    used = None
+    for method in chain:
+        if method == "sandwich" and H_info is not None and J is not None:
+            # H_info^{-1} J H_info^{-1}
+            try:
+                c, low = la.cho_factor(H_info, check_finite=False)
+                X_ = la.cho_solve((c, low), J, check_finite=False)
+                cov = la.cho_solve((c, low), X_, check_finite=False)
+                cov = 0.5 * (cov + cov.T)
+                used = "sandwich_chol"
+            except (LinAlgError, ValueError, FloatingPointError):
+                try:
+                    X_ = la.solve(H_info, J, assume_a="sym", check_finite=False)
+                    cov = la.solve(H_info, X_, assume_a="sym", check_finite=False)
+                    cov = 0.5 * (cov + cov.T)
+                    used = "sandwich_solve"
+                except (LinAlgError, ValueError):
+                    H_pinv = la.pinvh(H_info, check_finite=False)
+                    cov = H_pinv @ J @ H_pinv
+                    cov = 0.5 * (cov + cov.T)
+                    used = "sandwich_pinv"
+            if _cov_ok(cov):
+                break
+
+        elif method == "hessian" and H_info is not None:
+            cov, used = _safe_inv(H_info, "hessian")
+            if _cov_ok(cov):
+                break
+
+        elif method == "opg" and J is not None:
+            cov, used = _safe_inv(J, "opg")
+            if _cov_ok(cov):
+                break
+
+    if cov is None:
+        cov = np.full((P, P), np.nan)
+        used = "all_failed"
+
+    se = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
+    # ---- Diagnostics ----
+    diag_parts = [f"sol={used}"]
+    if H_info is not None:
         try:
-            if not np.all(np.isfinite(J)):
-                raise FloatingPointError("OPG path: non-finite J")
-            cov = np.linalg.inv(J)
-        except (LinAlgError, FloatingPointError):
-            used = "pinv"
-            cov = la.pinvh(J, check_finite=False)
-
-        cov = 0.5 * (cov + cov.T)
-        se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
-
-        # Compact diagnostics for OPG
+            evals_H = la.eigvalsh(H_info, check_finite=False)
+            diag_parts.append(f"Hmin={evals_H.min():.2e},Hmax={evals_H.max():.2e},"
+                              f"condH={evals_H.max()/max(evals_H.min(),1e-300):.2e}")
+        except Exception:
+            pass
+    if J is not None:
         try:
             evals_J = la.eigvalsh(J, check_finite=False)
-            jmin    = float(evals_J.min())
-            jmax    = float(evals_J.max())
-            condJ   = (np.inf if jmin <= 0 else jmax / jmin)
-            diag = (
-                f"opg: Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; "
-                f"sol={used}"
-            )
+            diag_parts.append(f"Jmin={evals_J.min():.2e},Jmax={evals_J.max():.2e},"
+                              f"condJ={evals_J.max()/max(evals_J.min(),1e-300):.2e}")
         except Exception:
-            diag = f"opg: sol={used}"
-
-        return se, cov, diag
-
-    # ---------- Sandwich path (uses H as well) ----------
-    H_info = -H_np
-    H_info = 0.5 * (H_info + H_info.T)
-    H_info[np.diag_indices_from(H_info)] += ridge_h
-
-    used = "chol"
-    try:
-        if not np.all(np.isfinite(H_info)):
-            raise FloatingPointError("non-finite H_info")
-        c, low = la.cho_factor(H_info, check_finite=False)
-        X   = la.cho_solve((c, low), J, check_finite=False)
-        cov = la.cho_solve((c, low), X, check_finite=False)
-    except (LinAlgError, ValueError, FloatingPointError):
-        used = "solve"
-        try:
-            X   = la.solve(H_info, J, assume_a="sym", check_finite=False)
-            cov = la.solve(H_info, X, assume_a="sym", check_finite=False)
-        except (LinAlgError, ValueError):
-            used = "pinv"
-            H_pinv = la.pinvh(H_info, check_finite=False)
-            cov    = H_pinv @ J @ H_pinv
-
-    cov = 0.5 * (cov + cov.T)
-    se  = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
-
-    # Compact diagnostics for sandwich
-    try:
-        evals_H = la.eigvalsh(H_info, check_finite=False)
-        evals_J = la.eigvalsh(J,      check_finite=False)
-        hmin    = float(evals_H.min())
-        hmax    = float(evals_H.max())
-        jmin    = float(evals_J.min())
-        jmax    = float(evals_J.max())
-        condH   = (np.inf if hmin <= 0 else hmax / hmin)
-        condJ   = (np.inf if jmin <= 0 else jmax / jmin)
-        diag = (
-            f"sandwich: Hmin={hmin:.2e},Hmax={hmax:.2e},condH={condH:.2e}; "
-            f"Jmin={jmin:.2e},Jmax={jmax:.2e},condJ={condJ:.2e}; sol={used}"
-        )
-    except Exception:
-        diag = f"sandwich: sol={used}"
+            pass
+    if n_bad_total > 0:
+        n_elems = N * P
+        diag_parts.append(f"{n_bad_total}/{n_elems} non-finite scores zeroed ({100*n_bad_total/n_elems:.1f}%)")
+    diag = "; ".join(diag_parts)
 
     return se, cov, diag
 def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
@@ -5360,62 +5526,112 @@ def _hessian_se_graph(params_np, exog_np, infl_np, endog_np, *, ridge=1e-8):
     se = np.sqrt(np.diag(cov))
     return se, cov, H
 
-def _slice_se(standard_errors, exog_cols, infl_cols):
+def _slice_se(standard_errors, exog_cols, infl_cols, nb_only=False):
     """
     Split the stacked SE vector into (se_x_mu, se_x_pi, se_theta) by actual sizes.
+    For NB-only: no ZI block, layout is [x_mu, theta].
     """
     k_nb = len(exog_cols)
-    k_zi = len(infl_cols)
-    se_x_mu = standard_errors[:k_nb]
-    se_x_pi = standard_errors[k_nb:k_nb+k_zi]
-    se_theta = standard_errors[k_nb+k_zi:]
+    if nb_only:
+        se_x_mu = standard_errors[:k_nb]
+        se_x_pi = np.array([])
+        se_theta = standard_errors[k_nb:]
+    else:
+        k_zi = len(infl_cols)
+        se_x_mu = standard_errors[:k_nb]
+        se_x_pi = standard_errors[k_nb:k_nb+k_zi]
+        se_theta = standard_errors[k_nb+k_zi:]
     return se_x_mu, se_x_pi, se_theta
 
 def _build_wald_precomp_for_subset(
     model_dict,
     design_dict,
-    df_subset,
+    df_subset=None,
     *,
+    cov_method: str = "sandwich",
+    # Legacy alias
     opg_only: bool = False,
 ) -> WaldPrecompEntry:
     """
-    Worker-safe function: builds X/Z/y, computes covariance/SEs for the NB
-    block via either sandwich or OPG, splits SE, returns WaldPrecompEntry.
+    Worker-safe function: extracts X/Z/y/weights from the design dict,
+    computes covariance/SEs for the NB block, returns WaldPrecompEntry.
+
+    Handles three matrix formats:
+      - Dense DataFrames (legacy non-phantom)
+      - Sparse CSR matrices (phantom-compressed)
+      - Recipe-only (reconstruct from df_subset -- not yet implemented)
+
+    Also handles NB-only models (no ZI parameters).
 
     Parameters
     ----------
-    opg_only : bool
-        If True, use OPG-only covariance (J^{-1});
-        if False, use full sandwich H^{-1} J H^{-1}.
+    cov_method : {"sandwich", "hessian", "opg"}
+        Covariance estimator. Falls back through the chain if non-PD.
     """
+    if opg_only:
+        cov_method = "opg"
     _require_tensorflow()
+    import scipy.sparse as sp
 
-    nb_formula, zi_formula = design_dict["nb_formula"], design_dict["zi_formula"]
-    (_, X, Z), (endog_np, exog_np, infl_np) = _model_matrices_for_subset(
-        df_subset, design_dict, nb_formula, zi_formula
-    )
+    is_nb_only = model_dict.get("nb_only", False)
+    nb_col_names = design_dict["nb_regressor_names"]
+    zi_col_names = design_dict.get("zi_regressor_names", [])
+
+    # --- Extract matrices from design dict ---
+    X_raw = design_dict["nb_regressors"]
+    y_raw = design_dict["regressand"]
+    weights_np = design_dict.get("weights", None)
+
+    if sp.issparse(X_raw):
+        exog_np = np.asarray(X_raw.todense(), dtype=np.float64)
+    elif hasattr(X_raw, "to_numpy"):
+        exog_np = X_raw.to_numpy().astype(np.float64, copy=False)
+    else:
+        exog_np = np.asarray(X_raw, dtype=np.float64)
+
+    if hasattr(y_raw, "to_numpy"):
+        endog_np = y_raw.to_numpy().reshape(-1, 1).astype(np.float64, copy=False)
+    else:
+        endog_np = np.asarray(y_raw).reshape(-1, 1).astype(np.float64, copy=False)
+
+    if is_nb_only:
+        # NB-only: dummy ZI design matrix (unused but needed for TF graph shape)
+        infl_np = np.ones((exog_np.shape[0], 1), dtype=np.float64)
+    else:
+        Z_raw = design_dict["zi_regressors"]
+        if sp.issparse(Z_raw):
+            infl_np = np.asarray(Z_raw.todense(), dtype=np.float64)
+        elif hasattr(Z_raw, "to_numpy"):
+            infl_np = Z_raw.to_numpy().astype(np.float64, copy=False)
+        else:
+            infl_np = np.asarray(Z_raw, dtype=np.float64)
+
+    if weights_np is not None:
+        weights_np = np.asarray(weights_np, dtype=np.float64)
+
+    k_nb = len(nb_col_names)
     params_np = _setup_params_from_fit(model_dict)
 
     try:
-        # se_all, cov = _hessian_se_graph(params_np, exog_np, infl_np, endog_np, ridge=1e-8)
         se_all, cov, diag = _estimate_cov_se(
             params_np,
             exog_np,
             infl_np,
             endog_np,
+            weights_np=weights_np,
+            nb_only=is_nb_only,
             ridge_h=1e-8,
             ridge_j=1e-12,
-            opg_only=opg_only,
+            cov_method=cov_method,
         )
-        se_x_mu, _, _ = _slice_se(se_all, X.columns, Z.columns)
-        k_nb = len(X.columns)
+        se_x_mu, _, _ = _slice_se(se_all, nb_col_names, zi_col_names, nb_only=is_nb_only)
         cov_nb = cov[:k_nb, :k_nb]
 
         # Diagnostics
         zero_var_cols = [
-            c
-            for c in X.columns
-            if np.allclose(exog_np[:, X.columns.get_loc(c)], 0)
+            nb_col_names[i]
+            for i in range(k_nb)
+            if np.allclose(exog_np[:, i], 0)
         ]
 
         cov_has_nan = np.isnan(cov_nb).any()
@@ -5445,26 +5661,24 @@ def _build_wald_precomp_for_subset(
         if cond_nb > 1e12 and not (cov_has_nan or cov_has_inf):
             issues.append(f"ill-conditioned cov_nb (cond={cond_nb:.2e})")
 
-        # `diag` already encodes "sandwich: ..." or "opg: ..."
         if issues:
             debug_msg = diag + "; " + "; ".join(issues)
         else:
             debug_msg = diag
     except Exception as e:
-        # Any failure: fill NaNs and report which path failed
-        se_x_mu = np.full(len(X.columns), np.nan)
-        cov_nb = np.full((len(X.columns), len(X.columns)), np.nan)
-        mode = "opg" if opg_only else "sandwich"
-        debug_msg = f"{mode} failure: {type(e).__name__}: {e}"
+        se_x_mu = np.full(k_nb, np.nan)
+        cov_nb = np.full((k_nb, k_nb), np.nan)
+        debug_msg = f"{cov_method} failure: {type(e).__name__}: {e}"
 
     # Collinearity check
     try:
-        rank_X = np.linalg.matrix_rank(X)
-        rank_Z = np.linalg.matrix_rank(Z)
-        if rank_X < X.shape[1]:
-            debug_msg += f"; colinearity in X (rank {rank_X}/{X.shape[1]})"
-        if rank_Z < Z.shape[1]:
-            debug_msg += f"; colinearity in Z (rank {rank_Z}/{Z.shape[1]})"
+        rank_X = np.linalg.matrix_rank(exog_np)
+        if rank_X < exog_np.shape[1]:
+            debug_msg += f"; colinearity in X (rank {rank_X}/{exog_np.shape[1]})"
+        if not is_nb_only:
+            rank_Z = np.linalg.matrix_rank(infl_np)
+            if rank_Z < infl_np.shape[1]:
+                debug_msg += f"; colinearity in Z (rank {rank_Z}/{infl_np.shape[1]})"
     except Exception as e:
         debug_msg += f"; colinearity check failed: {e.__class__.__name__}"
 
@@ -5473,7 +5687,7 @@ def _build_wald_precomp_for_subset(
         xmu_names=xmu_names,
         se_x_mu=se_x_mu,
         cov_nb=cov_nb,
-        k_nb=len(X.columns),
+        k_nb=k_nb,
         debug_msg=debug_msg,
     )
 
