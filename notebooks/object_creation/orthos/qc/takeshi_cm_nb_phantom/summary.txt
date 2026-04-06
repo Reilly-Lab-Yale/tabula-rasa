@@ -1,0 +1,20 @@
+========================================================================
+  takeshi_cm_nb_phantom -- Model QC Summary
+  Model type: NB-only
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 3/3 converged
+  by_cre: 152/152 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0000  max=0.0104  median=0.0001
+  by_cre: min=0.0000  max=0.0112  median=0.0001
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: no valid r-values  n_nan=3
+  by_cre: mean r=0.991  min=0.888  max=1.000  n(r<0.8)=0  n_nan=47 (linregress needs >=2 cell types)
+

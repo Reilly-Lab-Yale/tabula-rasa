@@ -1,0 +1,222 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-06T11:21:22.484577
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-takeshi/notebooks/object_creation/orthos/takeshi_cm_zinb_phantom
+  Main jobs : 7356097
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7356097  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7356097
+   User/Account: mcn26/prio_skr2
+       Job Name: tak_cm_zinb
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 200GB (50GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Mon Apr 6, 2026 at 10:44 AM
+       Run Time: 00:35:54
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||                                30%]
+  CPU memory usage [||||                                            8%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u09n01: 00:43:51/02:23:36 (efficiency=30.5%)
+
+  CPU memory usage per node - used/allocated
+      a1130u09n01: 16.3GB/200GB (4.1GB/50GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 30.5%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/7356097
+
+  * This job only needed 5% of the requested time which was 12:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u09n01": {
+      "cpus": 4,
+      "total_memory": 214748364800,
+      "total_time": 2631.2,
+      "used_memory": 17550790656
+    }
+  },
+  "total_time": 2154
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7356097|tak_cm_zinb|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u09n01|1|4|200G|2026-04-06T10:42:09|2026-04-06T10:44:31|2026-04-06T11:20:25|00:35:54|12:00:00|44:01.258|41:35.435|02:25.822|02:23:36||||||||||0:0
+7356097.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u09n01|1|4||2026-04-06T10:44:31|2026-04-06T10:44:31|2026-04-06T11:20:25|00:35:54||44:01.257|41:35.434|02:25.822|02:23:36|17561284K|17561284K|17146784K|17146784K|231.45M|15.36M|231.45M|15.36M|1|0:0
+7356097.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u09n01|1|4||2026-04-06T10:44:31|2026-04-06T10:44:31|2026-04-06T11:20:25|00:35:54||00:00:00|00:00:00|00:00:00|02:23:36|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u09n01 ───────────────────────────────────────────────────────────────
+NodeName=a1130u09n01 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=60 CPUEfctv=64 CPUTot=64 CPULoad=51.52
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u09n01 NodeHostName=a1130u09n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=515072 FreeMem=320118 Sockets=2 Boards=1
+   State=MIXED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2026-04-02T14:00:44 SlurmdStartTime=2026-04-02T16:30:00
+   LastBusyTime=2026-04-04T14:05:19 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=60,mem=503G
+   CurrentWatts=872 AveWatts=584
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7356097.err  (1118 lines total) ─────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775486675.467025 3130909 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775486678.141295 3130909 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-06 10:44:41,111 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle baf5ece207b4fd13a4787287ded2708e initialized by task ('shuffle-transfer-baf5ece207b4fd13a4787287ded2708e', 1) executed on worker inproc://10.18.22.18/3130909/4
+2026-04-06 10:44:41,145 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle baf5ece207b4fd13a4787287ded2708e deactivated due to stimulus 'task-finished-1775486681.142496'
+scMPRAforge: INFO: Dropped 105 of 489 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+2026-04-06 10:44:46,358 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 17984072d1cef073d9482dd6bd8e8377 initialized by task ('shuffle-transfer-17984072d1cef073d9482dd6bd8e8377', 0) executed on worker inproc://10.18.22.18/3130909/4
+2026-04-06 10:44:46,393 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 17984072d1cef073d9482dd6bd8e8377 deactivated due to stimulus 'task-finished-1775486686.3903646'
+2026-04-06 10:44:47,310 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 63f8d5edc24bc74c78e7fb58a47d8f93 initialized by task ('shuffle-transfer-63f8d5edc24bc74c78e7fb58a47d8f93', 0) executed on worker inproc://10.18.22.18/3130909/4
+2026-04-06 10:44:47,345 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 63f8d5edc24bc74c78e7fb58a47d8f93 deactivated due to stimulus 'task-finished-1775486687.3425772'
+2026-04-06 10:44:48,325 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 27f1540da8ab71f606960ac0e9be4cf8 initialized by task ('shuffle-transfer-27f1540da8ab71f606960ac0e9be4cf8', 1) executed on worker inproc://10.18.22.18/3130909/4
+2026-04-06 10:44:48,467 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fc75489ed72f4f3a58f63ddb977707df initialized by task ('shuffle-transfer-fc75489ed72f4f3a58f63ddb977707df', 1) executed on worker inproc://10.18.22.18/3130909/4
+2026-04-06 10:44:48,517 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 27f1540da8ab71f606960ac0e9be4cf8 deactivated due to stimulus 'task-finished-1775486688.5170736'
+2026-04-06 10:44:48,528 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fc75489ed72f4f3a58f63ddb977707df deactivated due to stimulus 'task-finished-1775486688.5280786'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+[last 50 lines]
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 99.31 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'HepG2'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'K562'; falling back to NB init.
+scMPRAforge: WARNING: MoM init from CM maps not yet implemented for 'SKNSH'; falling back to NB init.
+
+── slurm-7356097.out  (30 lines total) ───────────────────────────────────────
+[first 20 lines]
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.18:8787/status
+Loading takeshi data...
+Data loaded and filtered.
+
+Fitting by_cre (CM phantom)...
+by_cre done in 19.3s
+
+Fitting by_cell_type (CM phantom)...
+by_cell_type done in 1871.1s
+
+Total fit time: 1896.4s (31.6min)
+Extracting parameters...
+Saving to /nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi/takeshi_cm_zinb_phantom...
+Saved.
+
+Total wall time: 1896.4s (31.6min)
+
+sacct:
+JobID|State|Elapsed|MaxRSS|AveRSS|AllocCPUS|ReqMem
+[last 10 lines]
+7356097|RUNNING|00:35:48|||4|200G
+7356097.batch|RUNNING|00:35:48|||4|
+7356097.extern|RUNNING|00:35:48|||4|
+
+  NodeName=a1130u09n01
+  CPUTot=64
+  RealMemory=1014783
+  AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+
+Done.

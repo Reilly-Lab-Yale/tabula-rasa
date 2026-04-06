@@ -1,0 +1,20 @@
+========================================================================
+  takeshi_obs_zinb_phantom -- Model QC Summary
+  Model type: ZINB
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 3/3 converged
+  by_cre: 152/152 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0016  max=1.5927  median=0.0372
+  by_cre: min=0.0016  max=1.5975  median=0.0373
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan=0 (linregress needs >=2 cell types)
+  by_cre: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan=25 (linregress needs >=2 cell types)
+

@@ -53,6 +53,10 @@ DATASET_CONFIG = {
         "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/seelig",
         "cell_type_labels": {"reference": "HepG2 (reference)", "K562": "K562"},
     },
+    "takeshi": {
+        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi",
+        "cell_type_labels": {"reference": "HepG2 (reference)", "K562": "K562", "SKNSH": "SK-N-SH"},
+    },
 }
 
 # -- parse args ----------------------------------------------------------------
@@ -144,9 +148,15 @@ lines += ["-- Pearson r (mu vs mean UMI) ---------------------------------------
 for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
     r_vals = {k: v["r_value"] for k, v in qc.items() if v["success"] and v["r_value"] is not None}
     arr = np.array(list(r_vals.values()))
-    low = {k: r for k, r in r_vals.items() if r < LOW_R_THRESH}
-    lines.append(f"  {lbl}: mean r={arr.mean():.3f}  min={arr.min():.3f}  "
-                 f"max={arr.max():.3f}  n(r<{LOW_R_THRESH})={len(low)}")
+    n_nan = int(np.isnan(arr).sum())
+    arr_clean = arr[~np.isnan(arr)]
+    low = {k: r for k, r in r_vals.items() if not np.isnan(r) and r < LOW_R_THRESH}
+    if len(arr_clean) > 0:
+        lines.append(f"  {lbl}: mean r={np.nanmean(arr):.3f}  min={np.nanmin(arr):.3f}  "
+                     f"max={np.nanmax(arr):.3f}  n(r<{LOW_R_THRESH})={len(low)}  "
+                     f"n_nan={n_nan} (linregress needs >=2 cell types)")
+    else:
+        lines.append(f"  {lbl}: no valid r-values  n_nan={n_nan}")
     if low:
         lines.append(f"    Low-r levels (r < {LOW_R_THRESH}):")
         for k, r in sorted(low.items(), key=lambda x: x[1]):
