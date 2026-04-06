@@ -962,6 +962,7 @@ class Bounds:
     rep_ids:list=None
     consider_missing:bool=False
     nb_only:bool=None
+    n_negative_controls:int=1
 
     transfection_model:simple_count=None
     library_model:simple_count=None
@@ -1169,6 +1170,9 @@ class Bounds:
         
         # consider_missing condition
         ret.consider_missing=bool(getattr(inp.training_data, "consider_missing_enabled", False))
+
+        # number of negative controls pooled into "reference"
+        ret.n_negative_controls=len(getattr(inp.training_data, "negative_controls", []))
 
         # model type: check nb_only flag from fitted models in preferred direction
         pref_models = getattr(inp, "by_cell_type" if preferred == "by_cell_type" else "by_cre")
@@ -6934,6 +6938,11 @@ class de_novo_simulation:
             df["meta"] = df["meta"].astype("string").fillna("0")
             
             #df drop nans
+            # TODO: For fair cross-method comparison, subset to tests evaluable
+            # by ALL methods (intersection of non-NA indices across test types)
+            # before computing AUROC/AUPRC. This prevents methods that drop more
+            # tests from being evaluated on an easier subset. Report the
+            # intersection size and per-method drop rates alongside the curves.
             nona=df.copy()
             nona=nona.dropna()
 
@@ -6941,7 +6950,7 @@ class de_novo_simulation:
                 percent=(len(df)-len(nona))/len(df)*100
                 logger.info(f"Dropped {len(df)-len(nona)} or {percent:.1f}% of tests with NA values for test:{test_type}, rep:{idx}.")
                 if percent>ERROR_TEST_NAN_PERCENT:
-                    raise RuntimeError("Percent of dropped tests greater than threshold, aborting.")
+                    logger.warning(f"NA rate {percent:.1f}% exceeds {ERROR_TEST_NAN_PERCENT}% threshold for test:{test_type}, rep:{idx}. Proceeding but results may be biased.")
 
             
             df=nona

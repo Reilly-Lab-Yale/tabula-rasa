@@ -280,14 +280,27 @@ def generate_barcodes(length, count):
 
     return barcodes
 
-def simulate_library(CREs,library_model):
+def simulate_library(CREs,library_model,reference_pooling=1):
     """
     In the event that you do not already have an MPRA library cloned,
     This function takes a np string array of CRE names and a library model from a bounds object
-    and produces a table mapping each CRE to a set of random 20-mer MPRA barcodes. 
+    and produces a table mapping each CRE to a set of random 20-mer MPRA barcodes.
+
+    reference_pooling : int
+        Number of empirical CREs pooled into the "reference" negative control.
+        The reference CRE gets this many independent draws from the library
+        model, summed, to reflect the pooled barcode count. Use
+        bounds.n_negative_controls to get this value.
     """
     CREs=CREs.unique()
     mpra_barcodes_per_CRE=library_model.draw_nb(len(CREs))
+
+    # Apply pooling multiplier to reference CRE
+    if reference_pooling > 1:
+        ref_mask = (CREs == "reference")
+        if ref_mask.any():
+            extra_draws = sum(library_model.draw_nb(1) for _ in range(reference_pooling - 1))
+            mpra_barcodes_per_CRE[ref_mask] += extra_draws
 
     
     ret=pd.DataFrame({'cre_id':CREs,'n_barcodes':mpra_barcodes_per_CRE})
