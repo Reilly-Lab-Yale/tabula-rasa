@@ -75,11 +75,11 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - Adaptive ridge + sandwich->hessian fallback for extreme phantom weights
   - 15 unit tests + 3 simulation tests passing
 - [x] Delete pre-phantom run_stats/run_summary files (obsolete after phantom refit)
-- [ ] Re-extract bounds presets with rep_ids, zi Series for NB bounds, and CM flag
-  - Current NB presets have zi=None; simulation now requires zi as a Series
-  - Can hack existing .tgz files or re-run from_ortho (which now populates rep_ids)
-  - Until done, simulation scripts must splice zi from ZINB bounds manually
-  - Future: persist consider_missing flag in Bounds so gamut can infer it automatically
+- [x] Re-extract bounds presets with rep_ids, zi Series, CM flag, nb_only, n_negative_controls
+  - All 10 presets re-extracted (shendure + cohen done, seelig job 7407765)
+  - NB bounds now have zero-valued zi Series (not None)
+  - n_negative_controls enables reference_pooling in simulate_library
+  - Simulation scripts no longer need manual ZINB zi splicing
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Review simulation notebooks (shendure + cohen calibration, power, pairwise)
 - [ ] Create all figures

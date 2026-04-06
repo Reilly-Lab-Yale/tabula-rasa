@@ -47,6 +47,11 @@ def main():
         print(f"  by_cell_type_theta: {bounds.by_cell_type_theta:.6f}", flush=True)
         print(f"  by_cre_theta: {bounds.by_cre_theta:.6f}", flush=True)
         print(f"  reference_activity: {bounds.reference_activity:.6f}", flush=True)
+        print(f"  rep_ids: {bounds.rep_ids}", flush=True)
+        print(f"  consider_missing: {bounds.consider_missing}", flush=True)
+        print(f"  nb_only: {bounds.nb_only}", flush=True)
+        print(f"  n_negative_controls: {bounds.n_negative_controls}", flush=True)
+        print(f"  zi type: {type(bounds.zi).__name__}, is None: {bounds.zi is None}", flush=True)
 
         # Short name for files (strip date suffix)
         short = name.replace("_20260401", "")

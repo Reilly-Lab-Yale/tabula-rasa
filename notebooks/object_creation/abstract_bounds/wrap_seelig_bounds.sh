@@ -7,9 +7,9 @@
 #SBATCH --job-name=seelig_bounds
 #SBATCH -o seelig_bounds_%j.out
 
-module load miniconda/24.11.3
+module load miniconda
 conda activate tz
 
-cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa
+cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/abstract_bounds
 
-python notebooks/object_creation/abstract_bounds/seelig_bounds.py
+python extract_seelig_bounds.py
