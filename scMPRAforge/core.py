@@ -961,6 +961,7 @@ class Bounds:
 
     rep_ids:list=None
     consider_missing:bool=False
+    nb_only:bool=None
 
     transfection_model:simple_count=None
     library_model:simple_count=None
@@ -1168,6 +1169,18 @@ class Bounds:
         
         # consider_missing condition
         ret.consider_missing=bool(getattr(inp.training_data, "consider_missing_enabled", False))
+
+        # model type: check nb_only flag from fitted models in preferred direction
+        pref_models = getattr(inp, "by_cell_type" if preferred == "by_cell_type" else "by_cre")
+        nb_flags = []
+        for key in pref_models.model:
+            m = pref_models.model[key]
+            if hasattr(m, 'result'):
+                m = m.result()
+            nb_flags.append(m.get("nb_only", False))
+        if nb_flags:
+            assert len(set(nb_flags)) == 1, f"Mixed nb_only flags in {preferred} models: {set(nb_flags)}"
+            ret.nb_only = nb_flags[0]
 
         #save the preferred model direction
         ret.preferred=preferred
