@@ -960,6 +960,8 @@ class Bounds:
     total_uniq_mpra_bc:int=None
 
     rep_ids:list=None
+    consider_missing:bool=False
+    nb_only:bool=None
 
     transfection_model:simple_count=None
     library_model:simple_count=None
@@ -1165,6 +1167,21 @@ class Bounds:
         )
 
         
+        # consider_missing condition
+        ret.consider_missing=bool(getattr(inp.training_data, "consider_missing_enabled", False))
+
+        # model type: check nb_only flag from fitted models in preferred direction
+        pref_models = getattr(inp, "by_cell_type" if preferred == "by_cell_type" else "by_cre")
+        nb_flags = []
+        for key in pref_models.model:
+            m = pref_models.model[key]
+            if hasattr(m, 'result'):
+                m = m.result()
+            nb_flags.append(m.get("nb_only", False))
+        if nb_flags:
+            assert len(set(nb_flags)) == 1, f"Mixed nb_only flags in {preferred} models: {set(nb_flags)}"
+            ret.nb_only = nb_flags[0]
+
         #save the preferred model direction
         ret.preferred=preferred
 
@@ -1624,9 +1641,9 @@ class scMPRA_data:
         self.data = self.data.assign(cre_id=self.data["cre_id"].astype("string[pyarrow]"))
 
         #record which names we have flattened.
-        #(Can be deduced from difference between cre_id and 
+        #(Can be deduced from difference between cre_id and
         #cre_id_original, but this is more convienient).
-        self.negative_controls=self.negative_controls+negative_controls
+        self.negative_controls=self.negative_controls+list(negative_controls)
     
     def set_reference_cell(self,reference_cell_type):
         assert self.reference_cell_type is None, "Already set reference cell type."
@@ -5286,7 +5303,7 @@ def _estimate_cov_se(
 
     # JIT-compiled helpers. nb_only is a Python bool captured in the closure,
     # so tf.function traces a separate graph for True vs False.
-    @tf.function(reduce_retracing=True)
+    @tf.function
     def _jit_hessian(params_var, exog_t, infl_t, endog_t, w_t):
         with tf.GradientTape() as tape2:
             tape2.watch(params_var)
@@ -5300,7 +5317,7 @@ def _estimate_cov_se(
             grad = tape1.gradient(ll_weighted, params_var)
         return tape2.jacobian(grad, params_var)
 
-    @tf.function(reduce_retracing=True)
+    @tf.function
     def _jit_scores_batch(params_var, exog_b, infl_b, endog_b):
         with tf.GradientTape() as tape:
             tape.watch(params_var)
@@ -6834,9 +6851,18 @@ class de_novo_simulation:
     def get_state_field(self,field):
         return self.state[field][0]
     
-    def gamut(self):
+    def gamut(self, consider_missing=False):
+        """
+        Run full simulation pipeline: transfection -> transcription.
+
+        consider_missing : bool
+            If True, set consider_missing_enabled on each simulated scMPRA_data
+            object before saving. Required for CM condition (e.g. seelig).
+            The flag persists through parquet save/load and is picked up
+            automatically by downstream fitting code.
+        """
         self._simulate_transfection()
-        self._simulate_transcription()
+        self._simulate_transcription(consider_missing=consider_missing)
     
     def _merge_in_ground_truth(self,hypothesis_set_name,test_type,index):
         """
@@ -7272,7 +7298,7 @@ class de_novo_simulation:
 
         self.futures["ortho"] = ortho_tracker
     
-    def _simulate_transcription(self):
+    def _simulate_transcription(self, consider_missing=False):
         """
         Simulates transcription.
         Most of the logic is offloaded to the non-method simulate_from_description.
@@ -7289,8 +7315,8 @@ class de_novo_simulation:
         n_sims=self.get_state_field("n_sims")
 
         #helper function to be submitted to the cluster...
-        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type,flatten):
-            
+        def _simulate_transcription_helper(tfection_fut,description_path,path,negative_controls,reference_cell_type,flatten,consider_missing):
+
             #load a description
             description=pd.read_csv(description_path,
                                     sep="\t",
@@ -7302,13 +7328,15 @@ class de_novo_simulation:
 
             scd.data=working
             scd.table_type="mpra_umiwise"
-            
+
             scd.set_negative_controls(negative_controls)
             scd.set_reference_cell(reference_cell_type)
             scd.flag_synthetic()
             scd.overtransfected()
             if flatten:
                 scd.flatten_overtransfection()
+            if consider_missing:
+                scd.set_consider_missing(enabled=True)
 
             scd.to_parquet(path)
 
@@ -7332,7 +7360,8 @@ class de_novo_simulation:
                                path=path,
                                negative_controls=self.get_state_field("negative_controls"),
                                reference_cell_type=self.get_state_field("reference_cell_type"),
-                               flatten=self.get_state_field("flatten_overtransfection"))
+                               flatten=self.get_state_field("flatten_overtransfection"),
+                               consider_missing=consider_missing)
             #append the 
             transcription_tracker.append(r)
         
