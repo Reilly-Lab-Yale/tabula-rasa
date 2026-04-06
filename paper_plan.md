@@ -75,9 +75,14 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - Adaptive ridge + sandwich->hessian fallback for extreme phantom weights
   - 15 unit tests + 3 simulation tests passing
 - [x] Delete pre-phantom run_stats/run_summary files (obsolete after phantom refit)
+- [ ] Re-extract bounds presets with rep_ids and zi Series for NB bounds
+  - Current NB presets have zi=None; simulation now requires zi as a Series
+  - Can hack existing .tgz files or re-run from_ortho (which now populates rep_ids)
+  - Until done, simulation scripts must splice zi from ZINB bounds manually
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Review simulation notebooks (shendure + cohen calibration, power, pairwise)
 - [ ] Create all figures
+- [ ] Takeshi data analysis (4th dataset)
 - [ ] Code style corrections
 - [ ] (v2) Port Wald SE computation from TF1 graph mode to TF2 eager + GradientTape for GPU acceleration
   - Current: TF1 tf.hessians + tf.map_fn per-obs scores, CPU-only (~1s/model cohen, ~0.04s shendure)
@@ -233,6 +238,25 @@ from `de_novo_simulation`.
 
 Model convergence diagnostics across fits. Infrastructure exists (`run_qc.py`,
 `wrap_qc.sh`, seelig QC plots). Could strengthen methods section.
+
+---
+
+## Caveats
+
+- **Wald SE computation requires GPU.** The TF2 GradientTape implementation
+  (which replaced TF1 graph mode to fix a memory leak after ~400 models) has
+  high per-observation dispatch overhead on CPU (~60s/model vs ~1.2s on GPU for
+  cohen). CPU runs time out before completing even small datasets. The old TF1
+  graph-mode code was CPU-viable (~1s/model) but leaked memory and segfaulted.
+  Maintaining both code paths is not justified for v1. Users without GPU access
+  should use MWU or bootstrap tests instead of Wald.
+
+- **Seelig by_cell_type Wald is slow.** The 2 by_cell_type models have
+  1344-column design matrices, making per-observation Jacobian computation
+  ~3000s/model on H200 (~100 min total for both). Fine for a single empirical
+  analysis, but expensive for power analysis (20 replicates x 2 models x
+  3000s = 33h). MWU/bootstrap may be more practical for seelig cell-type
+  power simulations. Seelig by_cre Wald (1344 models, 2 columns each) is fast.
 
 ---
 

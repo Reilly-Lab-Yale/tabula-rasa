@@ -959,6 +959,8 @@ class Bounds:
     total_tfection:float=None
     total_uniq_mpra_bc:int=None
 
+    rep_ids:list=None
+
     transfection_model:simple_count=None
     library_model:simple_count=None
 
@@ -1130,10 +1132,17 @@ class Bounds:
                 zis=pd.concat(zis,axis=1)
             else:
                 zis=pd.DataFrame()
+            if len(zis):
+                zi_series = zis.mean(axis=1)
+            else:
+                # NB models: no ZI parameters. Produce a zero-valued Series
+                # indexed by rep_id so simulation code can iterate replicates.
+                rep_keys = list(getattr(inp,var).nb.keys())
+                zi_series = pd.Series(0.0, index=pd.Index(rep_keys, name="rep_id"), name="zi")
             if var=="by_cell_type_parameters":
-                ret.by_cell_type_zi=zis.mean(axis=1) if len(zis) else None
+                ret.by_cell_type_zi=zi_series
             elif var=="by_cre_parameters":
-                ret.by_cre_zi=zis.mean(axis=1) if len(zis) else None
+                ret.by_cre_zi=zi_series
 
         
         #min & max nb and add to the return object
@@ -1158,16 +1167,18 @@ class Bounds:
         
         #save the preferred model direction
         ret.preferred=preferred
-        
+
         #choose representative parameters based on preferred model direction
         if preferred=="by_cell_type":
             ret.zi=ret.by_cell_type_zi
             ret.theta=ret.by_cell_type_theta
             ret.reference_activity=ret.by_cell_type_reference_activity
+            ret.rep_ids=list(getattr(inp,"by_cell_type_parameters").nb.keys())
         elif preferred=="by_cre":
             ret.zi=ret.by_cre_zi
             ret.theta=ret.by_cre_theta
             ret.reference_activity=ret.by_cre_reference_activity
+            ret.rep_ids=list(getattr(inp,"by_cre_parameters").nb.keys())
         else:
             assert False, "Unrecognized direction."
 
@@ -6672,6 +6683,7 @@ class de_novo_simulation:
         self.orthod=fullp/"orthos"
         self.sandwichd=fullp/"sandwich"
         self.opgd=fullp/"opg"
+        self.autod=fullp/"auto"
         self.testd=fullp/"tests"
 
         if statep.exists():
@@ -7103,27 +7115,35 @@ class de_novo_simulation:
             precompd=self.opgd
         elif cov_method =="sandwich":
             precompd=self.sandwichd
+        elif cov_method == "auto":
+            precompd=self.autod
         else:
-            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\' and \'opg\'.")
+            raise ValueError(f"Unrecognized cov_method \'{cov_method}\'. Valid options are \'sandwich\', \'opg\', and \'auto\'.")
         return precompd
     
-    def precompute_wald(self,cov_method="sandwich"):
+    def precompute_wald(self,cov_method="auto"):
         """
-        cov_method : {"sandwich", "opg"}
+        cov_method : {"auto", "sandwich", "opg"}
+        - "auto" starts at sandwich and falls back through hessian -> opg
+          (recommended). Stored in the "auto" directory.
         - See ortho.precompute_wald for more information.
         """
-        
+
         if "ortho" not in self.futures.columns:
             raise RuntimeError("Cannot precompute wald if orthos have not been fit. You want to call `fit_orthos`.")
 
-        #pull out the futures tracking 
+        #pull out the futures tracking
         ortho_futures=self.futures["ortho"].to_list()
 
         #pick output dir destination based on covariance matrix estimation procedure
         precompd=self._switch_cov_method(cov_method)
-        
+
         #make output directory
         precompd.mkdir(exist_ok=True)
+
+        # "auto" means start at sandwich and let ortho-level fallback handle
+        # the rest. For opg/sandwich, pass through directly.
+        ortho_cov_method = "sandwich" if cov_method == "auto" else cov_method
 
         #function to submit
         def _precomp_wald_helper(ortho_future, path_input, path_output, name):
@@ -7134,11 +7154,11 @@ class de_novo_simulation:
                 name=name
             )
             #perform precompute
-            orth.precompute_wald(client,cov_method=cov_method)
+            orth.precompute_wald(client,cov_method=ortho_cov_method)
             #save to disc
             orth.save(path=path_output,
                     name=name)
-            
+
             return True
 
         precomp_tracker=[]
@@ -7154,7 +7174,8 @@ class de_novo_simulation:
         
         self.futures[cov_method]=precomp_tracker
 
-    def fit_orthos(self, direction="both", disable_mom=False, serial_orthos: bool = False):
+    def fit_orthos(self, direction="both", disable_mom=False, serial_orthos: bool = False,
+                   nb_only=False, phantom_compress=False, gpu=False):
         """
         Applies ortho filtering fits & saves orthos for all simulated replicates.
         Note that this can spawn some very heavy functions!
@@ -7163,6 +7184,17 @@ class de_novo_simulation:
 
         If serial_orthos is True, only one _fit_ortho_helper will run at a time by
         chaining each submission to depend on the previous ortho future.
+
+        nb_only : bool
+            If True, fit plain NB models (no zero-inflation component).
+
+        phantom_compress : bool
+            If True, use phantom-zero compression during fitting.
+
+        gpu : bool
+            If True, submit fits with resources={"GPU": 1} so Dask schedules
+            them on GPU-enabled workers. Passed through to criss_cross or
+            fit_by_cell_type_models(fit_resources={"GPU": 1}).
         """
         valid_directions = ["both", "by_cre", "by_cell_type"]
         if direction not in valid_directions:
@@ -7196,12 +7228,17 @@ class de_novo_simulation:
             client = get_client()
             primordial = ortho()
 
+            ct_resources = {"GPU": 1} if gpu else {}
             if direction == "both":
-                primordial.criss_cross(client=client, dat=data, disable_mom=disable_mom)
+                primordial.criss_cross(client=client, dat=data, disable_mom=disable_mom,
+                                       nb_only=nb_only, phantom_compress=phantom_compress, gpu=gpu)
             elif direction == "by_cre":
-                primordial.fit_by_cre_models(client=client, dat=data, disable_mom=disable_mom)
+                primordial.fit_by_cre_models(client=client, dat=data, disable_mom=disable_mom,
+                                              nb_only=nb_only, phantom_compress=phantom_compress)
             elif direction == "by_cell_type":
-                primordial.fit_by_cell_type_models(client=client, dat=data, disable_mom=disable_mom)
+                primordial.fit_by_cell_type_models(client=client, dat=data, disable_mom=disable_mom,
+                                                    fit_resources=ct_resources,
+                                                    nb_only=nb_only, phantom_compress=phantom_compress)
 
             primordial.extract_params(client)
 
@@ -7392,13 +7429,14 @@ class de_novo_simulation:
             
             self.testqueue.append(r)
             
-    def wald(self, name, cov_method="sandwich", serial_orthos: bool = True):
+    def wald(self, name, cov_method="auto", serial_orthos: bool = True):
         """
         Takes a name of a hypotheses set added previously with
         `add_hypothesis_set` and runs wald tests.
         Requires that `precompute_wald` have been computed previously.
 
-        cov_method : {"sandwich", "opg"}
+        cov_method : {"auto", "sandwich", "opg"}
+        - Must match the cov_method used in precompute_wald.
         - See ortho.precompute_wald for more information.
 
         If serial_orthos is True, only one _wald_helper will run at a time by
@@ -7619,6 +7657,12 @@ def _simulate_transfection(experiment_bounds:Bounds,
     #that is, the overhead will probably be more expensive than gains from parallelization
     #so we won't bother.
     all_rep_cells_df=[]
+    if experiment_bounds.zi is None:
+        raise ValueError(
+            "experiment_bounds.zi must be a Series indexed by rep_id, not None. "
+            "For NB bounds, set zi to a zero-valued Series preserving the "
+            "replicate structure: e.g. bounds.zi = zinb_bounds.zi * 0.0"
+        )
     for rep_id in experiment_bounds.zi.index:
         working=_simulate_single_replicate_transfection()
         working["rep_id"]=rep_id
