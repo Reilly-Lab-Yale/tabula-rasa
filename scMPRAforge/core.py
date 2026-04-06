@@ -1628,9 +1628,9 @@ class scMPRA_data:
         self.data = self.data.assign(cre_id=self.data["cre_id"].astype("string[pyarrow]"))
 
         #record which names we have flattened.
-        #(Can be deduced from difference between cre_id and 
+        #(Can be deduced from difference between cre_id and
         #cre_id_original, but this is more convienient).
-        self.negative_controls=self.negative_controls+negative_controls
+        self.negative_controls=self.negative_controls+list(negative_controls)
     
     def set_reference_cell(self,reference_cell_type):
         assert self.reference_cell_type is None, "Already set reference cell type."
@@ -5290,7 +5290,7 @@ def _estimate_cov_se(
 
     # JIT-compiled helpers. nb_only is a Python bool captured in the closure,
     # so tf.function traces a separate graph for True vs False.
-    @tf.function(reduce_retracing=True)
+    @tf.function
     def _jit_hessian(params_var, exog_t, infl_t, endog_t, w_t):
         with tf.GradientTape() as tape2:
             tape2.watch(params_var)
@@ -5304,7 +5304,7 @@ def _estimate_cov_se(
             grad = tape1.gradient(ll_weighted, params_var)
         return tape2.jacobian(grad, params_var)
 
-    @tf.function(reduce_retracing=True)
+    @tf.function
     def _jit_scores_batch(params_var, exog_b, infl_b, endog_b):
         with tf.GradientTape() as tape:
             tape.watch(params_var)
