@@ -53,6 +53,10 @@ DATASET_CONFIG = {
         "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/seelig",
         "cell_type_labels": {"reference": "HepG2 (reference)", "K562": "K562"},
     },
+    "takeshi": {
+        "data_root": "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi",
+        "cell_type_labels": {"reference": "HepG2 (reference)", "K562": "K562", "SKNSH": "SK-N-SH"},
+    },
 }
 
 # -- parse args ----------------------------------------------------------------
@@ -144,9 +148,20 @@ lines += ["-- Pearson r (mu vs mean UMI) ---------------------------------------
 for lbl, qc in [("by_cell_type", by_cell), ("by_cre", by_cre)]:
     r_vals = {k: v["r_value"] for k, v in qc.items() if v["success"] and v["r_value"] is not None}
     arr = np.array(list(r_vals.values()))
-    low = {k: r for k, r in r_vals.items() if r < LOW_R_THRESH}
-    lines.append(f"  {lbl}: mean r={arr.mean():.3f}  min={arr.min():.3f}  "
-                 f"max={arr.max():.3f}  n(r<{LOW_R_THRESH})={len(low)}")
+    n_nan = int(np.isnan(arr).sum())
+    arr_clean = arr[~np.isnan(arr)]
+    low = {k: r for k, r in r_vals.items() if not np.isnan(r) and r < LOW_R_THRESH}
+    # Summarize NaN anti-levels dropped before regression
+    total_dropped = sum(v.get("n_dropped_nan", 0) for v in qc.values() if v["success"])
+    total_anti = sum(len(v["dat"]) for v in qc.values() if v["success"])
+    if len(arr_clean) > 0:
+        lines.append(f"  {lbl}: mean r={np.nanmean(arr):.3f}  min={np.nanmin(arr):.3f}  "
+                     f"max={np.nanmax(arr):.3f}  n(r<{LOW_R_THRESH})={len(low)}  "
+                     f"n_nan_r={n_nan}")
+    else:
+        lines.append(f"  {lbl}: no valid r-values  n_nan_r={n_nan}")
+    lines.append(f"    NaN anti-levels dropped before regression: "
+                 f"{total_dropped}/{total_anti} across all models")
     if low:
         lines.append(f"    Low-r levels (r < {LOW_R_THRESH}):")
         for k, r in sorted(low.items(), key=lambda x: x[1]):
@@ -201,15 +216,19 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 fig.suptitle(f"{ORTHO_NAME} -- Pearson r (mu vs mean UMI)", fontsize=13)
 
 for ax, (lbl, qc) in zip(axes, [("by_cell_type", by_cell), ("by_cre", by_cre)]):
-    r_vals = [v["r_value"] for v in qc.values() if v["success"] and v["r_value"] is not None]
-    ax.violinplot([r_vals], showmedians=True)
+    r_vals = [v["r_value"] for v in qc.values()
+              if v["success"] and v["r_value"] is not None and not np.isnan(v["r_value"])]
+    n_nan = sum(1 for v in qc.values()
+                if v["success"] and v["r_value"] is not None and np.isnan(v["r_value"]))
+    if r_vals:
+        ax.violinplot([r_vals], showmedians=True)
+        ax.scatter(
+            np.ones(len(r_vals)) + np.random.uniform(-0.05, 0.05, len(r_vals)),
+            r_vals, alpha=0.3, s=6, color="steelblue"
+        )
     ax.axhline(LOW_R_THRESH, color="red", linestyle="--", alpha=0.7, label=f"r={LOW_R_THRESH}")
-    ax.scatter(
-        np.ones(len(r_vals)) + np.random.uniform(-0.05, 0.05, len(r_vals)),
-        r_vals, alpha=0.3, s=6, color="steelblue"
-    )
     n_low = sum(1 for r in r_vals if r < LOW_R_THRESH)
-    ax.set_title(f"{lbl}\n(n_low={n_low})")
+    ax.set_title(f"{lbl}\n(n_low={n_low}, n_nan={n_nan})")
     ax.set_ylabel("r")
     ax.set_ylim(-0.1, 1.05)
     ax.set_xticks([])
@@ -229,18 +248,22 @@ fig.suptitle(f"{ORTHO_NAME} -- mu vs mean(UMI) by cell type", fontsize=13)
 
 for i, (ct, qc_entry) in enumerate(by_cell.items()):
     ax = axes[i // ncols][i % ncols]
-    dat = qc_entry["dat"]
+    dat = qc_entry["dat"].dropna(subset=["mu", "mean(umis_mpra_bc)"])
+    n_drop = len(qc_entry["dat"]) - len(dat)
     ax.scatter(dat["mean(umis_mpra_bc)"], dat["mu"], alpha=0.4, s=8, color="steelblue")
     r = qc_entry["r_value"]
     slope = qc_entry["slope"]
     intercept = qc_entry["intercept"]
-    if r is not None:
+    if r is not None and not np.isnan(r):
         x = np.linspace(dat["mean(umis_mpra_bc)"].min(), dat["mean(umis_mpra_bc)"].max(), 100)
         ax.plot(x, slope * x + intercept, color="tomato", linewidth=1.5, label=f"r={r:.3f}")
         ax.legend(fontsize=9)
+    subtitle = label(ct)
+    if n_drop > 0:
+        subtitle += f" ({n_drop} NaN dropped)"
     ax.set_xlabel("mean UMI (observed)")
     ax.set_ylabel("mu (NB estimate)")
-    ax.set_title(label(ct))
+    ax.set_title(subtitle)
 
 for i in range(len(by_cell), nrows * ncols):
     axes[i // ncols][i % ncols].set_visible(False)
@@ -252,9 +275,12 @@ save(fig, "mu_vs_mean_by_cell_type.svg")
 print("[+] Plotting mu vs mean UMI (by_cre, worst + sample)...", flush=True)
 
 r_sorted = sorted(
-    [(k, v) for k, v in by_cre.items() if v["success"] and v["r_value"] is not None],
+    [(k, v) for k, v in by_cre.items()
+     if v["success"] and v["r_value"] is not None and not np.isnan(v["r_value"])],
     key=lambda x: x[1]["r_value"]
 )
+n_nan_cre = sum(1 for v in by_cre.values()
+                if v["success"] and v["r_value"] is not None and np.isnan(v["r_value"]))
 worst_20 = r_sorted[:20]
 rng = np.random.default_rng(42)
 rest = r_sorted[20:]
@@ -262,15 +288,16 @@ sample_20 = [rest[i] for i in rng.choice(len(rest), min(20, len(rest)), replace=
 to_plot = worst_20 + sample_20
 
 ncols_p = 8
-nrows_p = int(np.ceil(len(to_plot) / ncols_p))
+nrows_p = max(1, int(np.ceil(len(to_plot) / ncols_p)))
 fig, axes = plt.subplots(nrows_p, ncols_p, figsize=(ncols_p * 2.5, nrows_p * 2.5))
+nan_note = f" [{n_nan_cre} CREs had NaN r, excluded]" if n_nan_cre else ""
 fig.suptitle(f"{ORTHO_NAME} -- mu vs mean(UMI) by CRE\n"
-             "(worst 20 r-values + 20 random; red=worst)", fontsize=11)
-axes_flat = axes.flatten()
+             f"(worst 20 r-values + 20 random; red=worst){nan_note}", fontsize=11)
+axes_flat = np.atleast_1d(axes).flatten()
 
 for i, (cre_id, qc_entry) in enumerate(to_plot):
     ax = axes_flat[i]
-    dat = qc_entry["dat"]
+    dat = qc_entry["dat"].dropna(subset=["mu", "mean(umis_mpra_bc)"])
     color = "tomato" if i < 20 else "steelblue"
     ax.scatter(dat["mean(umis_mpra_bc)"], dat["mu"], alpha=0.7, s=20, color=color)
     r = qc_entry["r_value"]

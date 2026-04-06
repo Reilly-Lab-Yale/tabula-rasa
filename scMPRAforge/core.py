@@ -3249,13 +3249,27 @@ class ortho:
             mu_estimates=params.nb[model_level].result()
 
             mu_summary=mu_estimates.join(data_means,how="left")
+
+            # Drop rows where either column is NaN before regression.
+            # NaN arises from anti-levels present in the model but absent
+            # from the (post-ortho-filter) data means -- e.g. a CRE with
+            # no observations in this cell type, or CM denominator = 0.
+            mu_clean = mu_summary.dropna(subset=["mu", "mean(umis_mpra_bc)"])
+            n_dropped = len(mu_summary) - len(mu_clean)
+            if n_dropped > 0:
+                logger.info(
+                    f"QC regression for '{model_level}': dropped {n_dropped} of "
+                    f"{len(mu_summary)} anti-levels with NaN before linregress."
+                )
+
             # Fit regression
             try:
-                slope, intercept, r_value, p_value, std_err = linregress(mu_summary["mean(umis_mpra_bc)"], mu_summary["mu"])
+                slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
 
                 #store regression info
                 ret={'success':True,
                     'dat':mu_summary,
+                    'n_dropped_nan': n_dropped,
                     'slope':slope,
                     'intercept':intercept,
                     'r_value':r_value,
@@ -3266,6 +3280,7 @@ class ortho:
                 print(f"regression error on {model_level}")
                 ret={'success':False,
                     'dat':mu_summary,
+                    'n_dropped_nan': n_dropped,
                     'slope':None,
                     'intercept':None,
                     'r_value':None,
