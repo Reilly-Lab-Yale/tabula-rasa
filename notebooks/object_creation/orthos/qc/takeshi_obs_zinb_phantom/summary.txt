@@ -15,6 +15,8 @@
 
 -- Pearson r (mu vs mean UMI) ------------------------------------------
 
-  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan=0 (linregress needs >=2 cell types)
-  by_cre: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan=25 (linregress needs >=2 cell types)
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=0
+    NaN anti-levels dropped before regression: 0/384 across all models
+  by_cre: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=25
+    NaN anti-levels dropped before regression: 0/384 across all models
 
