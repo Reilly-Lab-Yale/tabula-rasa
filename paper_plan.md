@@ -20,6 +20,7 @@ Restricting to the condition each dataset would actually use in practice
 | Seelig    | CM (mandatory)  | 0%                 | 0%               | 0.22%              |
 | Cohen     | obs             | 54%                | 82.5%            | 2.87%              |
 | Shendure  | obs             | 6.7%               | 25%              | 12.3%              |
+| Takeshi   | obs             | 0%                 | 0%               | ~0%                |
 
 ### Conclusions and canonical model choices
 
@@ -34,6 +35,11 @@ Restricting to the condition each dataset would actually use in practice
 - **Shendure (obs)**: NB is sufficient. Only 7% survive Bonferroni,
   BIC agrees (3% prefer ZINB by_cre, 0% by_cell_type).
   **Canonical: `SHENDURE_BOUNDS` = obs NB** (`shendure_obs_nb_phantom`)
+
+- **Takeshi (obs)**: NB is the right model. Zero significant under any test
+  (LRT, AIC, BIC), both by_cre (150 models) and by_cell_type (3 models).
+  ZINB lambda negative for by_cell_type -- NB fits strictly better.
+  **Canonical: `TAKESHI_BOUNDS` = obs NB** (`takeshi_obs_nb_phantom`)
 
 These canonical choices are set as default aliases in `scMPRAforge.core` and
 will be used to parameterize all downstream simulations.

@@ -3,7 +3,7 @@
 Takeshi obs ZINB ortho -- phantom-enabled, barcode-level oBC reporter.
 """
 import sys, time, os, subprocess
-sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-takeshi')
+sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
 
 from pathlib import Path
 
@@ -15,6 +15,7 @@ SLURM_JOB_ID = os.environ.get("SLURM_JOB_ID", "unknown")
 
 NEGATIVE_CONTROLS = [
     "1:113047064:NA:NA", "1:50938700:NA:NA", "1:65979308:NA:NA",
+    "4:108065576:T:C:R:wC", "10:57784083:A:G:R:wC",
     "12:117944158:NA:NA", "12:69973147:NA:NA", "14:34259631:NA:NA",
     "18:73114109:NA:NA", "2:150206278:NA:NA", "2:153327926:NA:NA",
     "2:4341678:NA:NA", "2:79600326:NA:NA", "3:384644:NA:NA",
