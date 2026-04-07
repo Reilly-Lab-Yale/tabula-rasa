@@ -7,11 +7,7 @@ __pycache__/
 *.pkl
 *.py[cod]
 *.h5ad
-preprocessing/.ipynb_checkpoints/
-.ipynb_checkpoints/Data_exploration-checkpoint.ipynb
-.ipynb_checkpoints/mcn-checkpoint.ipynb
-notebooks/.ipynb_checkpoints/Data_exploration-checkpoint.ipynb
-notebooks/.ipynb_checkpoints/R_testing-checkpoint.ipynb
+.ipynb_checkpoints/
 notebooks/R_model_files/negbin_rep_id_CRE_id.RDS
 notebooks/R_model_files/poisson_rep_id_CRE_id.RDS
 notebooks/R_model_files/zip_rep_id_CRE_id_rep_id.RDS
