@@ -80,10 +80,17 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - NB bounds now have zero-valued zi Series (not None)
   - n_negative_controls enables reference_pooling in simulate_library
   - Simulation scripts no longer need manual ZINB zi splicing
+- [ ] Fix _classifier_summary empty-array crash on seelig CM metrics
+  - roc_auc_score throws on empty input when all hypotheses are NA after MIN_PTS filtering
+  - Need guard upstream of sklearn call; subset-based evaluation (only score hypotheses valid in all tests)
+  - Wald+MWU test results save fine, only the summary/metrics phase crashes
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Review simulation notebooks (shendure + cohen calibration, power, pairwise)
 - [ ] Create all figures
 - [ ] Takeshi data analysis (4th dataset)
+  - Re-fitting all 4 orthos (obs/CM x NB/ZINB) with corrected negative controls
+    (was 18, now 20 -- added 10:57784083:A:G:R:wC and 4:108065576:T:C:R:wC)
+  - Also fixed sys.path from stale worktree back to main repo
 - [ ] Code style corrections
 - [ ] (v2) Port Wald SE computation from TF1 graph mode to TF2 eager + GradientTape for GPU acceleration
   - Current: TF1 tf.hessians + tf.map_fn per-obs scores, CPU-only (~1s/model cohen, ~0.04s shendure)

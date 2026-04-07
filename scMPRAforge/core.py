@@ -2373,7 +2373,8 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels,
     return total[[split, anti, "rep_id", "n_total"]]
 
 
-def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
+def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
+                              reporter_expansion="coarse"):
     """
     Build phantom-zero compressed design matrices from observed data
     (e.g. reporter-informed zeros baked into the dataset).
@@ -2427,7 +2428,13 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
     else:
         group_totals["n_nonzero"] = 0
     group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
-    group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
+    if reporter_expansion == "single":
+        # In single mode, n_total from _reporter_zero_counts is the detection
+        # count (= desired zero count). Recompute n_total to include nonzero.
+        group_totals["n_zeros"] = group_totals["n_total"]
+        group_totals["n_total"] = group_totals["n_nonzero"] + group_totals["n_zeros"]
+    else:
+        group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
 
     # ── Build compressed arrays ────────────────────────────────────────
     anti_col = anti
@@ -2502,6 +2509,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level):
         'split': split,
         'weights': comp_w,
         'fit_mode': 'obs_phantom',
+        'reporter_expansion': reporter_expansion,
     }
 
 
@@ -2582,7 +2590,8 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
 def _strip_design_to_recipe(dm):
     """Strip full matrices from a design dict, keeping only recipe metadata."""
     _RECIPE_KEYS = {'nb_regressor_names', 'zi_regressor_names', 'model_type',
-                    'nb_formula', 'zi_formula', 'reference', 'split', 'fit_mode'}
+                    'nb_formula', 'zi_formula', 'reference', 'split', 'fit_mode',
+                    'reporter_expansion'}
     return {k: v for k, v in dm.items() if k in _RECIPE_KEYS}
 
 
@@ -2767,6 +2776,7 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
                 nz_pdf[nz_pdf[split] == t].reset_index(drop=True),
                 total_counts[total_counts[split] == t].reset_index(drop=True),
                 split, t,
+                reporter_expansion=reporter_expansion,
                 resources=mat_resource
             )
             for t in levels
@@ -3434,12 +3444,14 @@ class ortho:
                     _build_cm_fit_inputs, pd_maps, split_col, str(model_key),
                 )
             elif fit_mode == "obs_phantom":
+                re = sample_design.get('reporter_expansion', 'coarse')
                 all_levels = [str(k) for k in (
                     self.by_cell_type.model.keys() if split_col == "cell_type"
                     else self.by_cre.model.keys()
                 )]
                 total_counts = _reporter_zero_counts(
-                    nz_pdf, reporter, mpra_map, cell_map, split_col, all_levels
+                    nz_pdf, reporter, mpra_map, cell_map, split_col, all_levels,
+                    reporter_expansion=re,
                 )
                 mk = str(model_key)
                 design_future = client.submit(
@@ -3447,6 +3459,7 @@ class ortho:
                     nz_pdf[nz_pdf[split_col] == mk].reset_index(drop=True),
                     total_counts[total_counts[split_col] == mk].reset_index(drop=True),
                     split_col, mk,
+                    reporter_expansion=re,
                 )
             else:
                 pdf = raw_pdf[raw_pdf[split_col] == str(model_key)].reset_index(drop=True)
