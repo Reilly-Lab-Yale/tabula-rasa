@@ -18,7 +18,8 @@ Restricting to the condition each dataset would actually use in practice
 | Dataset   | Condition       | LRT Bonferroni sig | AIC prefers ZINB | mu shift NB->ZINB |
 |-----------|-----------------|--------------------|------------------|--------------------|
 | Seelig    | CM (mandatory)  | 0%                 | 0%               | 0.22%              |
-| Cohen     | obs             | 54%                | 82.5%            | 2.87%              |
+| Cohen     | obs (coarse)    | 54%                | 82.5%            | 2.87%              |
+| Cohen     | obs (obsingle)  | 0%                 | 0%               | ~0%                |
 | Shendure  | obs             | 6.7%               | 25%              | 12.3%              |
 | Takeshi   | obs             | 0%                 | 0%               | ~0%                |
 
@@ -28,9 +29,14 @@ Restricting to the condition each dataset would actually use in practice
   wins, mu parameters identical to 4 decimal places.
   **Canonical: `SEELIG_BOUNDS` = CM NB** (`seelig_cm_nb_phantom`)
 
-- **Cohen (obs)**: ZINB is warranted. Majority significant under Bonferroni,
-  mu stable (~3% shift). By-cell-type: 100% LRT significant, 100% AIC.
-  **Canonical: `COHEN_BOUNDS` = obs ZINB** (`cohen_obs_zinb_phantom_20260401`)
+- **Cohen (obs, obsingle)**: Under CRE-coarse reporter expansion, ZINB appeared
+  warranted (54% Bonferroni sig). However, coarse expansion floods zeros
+  (N barcodes per U6 detection), crushing mu estimates (median 0.001 vs true
+  0.88) and distorting the ZI component. Under obsingle expansion (1 zero per
+  U6 detection), mu estimates recover (median 0.88), QC r-values improve
+  dramatically (by_cell_type: 0.59-0.72 vs negative under coarse), and LRT/AIC
+  confirm NB is sufficient (0% significant, 0% AIC).
+  **Canonical: `COHEN_BOUNDS` = obsingle NB** (`cohen_obsingle_nb_phantom`)
 
 - **Shendure (obs)**: NB is sufficient. Only 7% survive Bonferroni,
   BIC agrees (3% prefer ZINB by_cre, 0% by_cell_type).
@@ -43,6 +49,25 @@ Restricting to the condition each dataset would actually use in practice
 
 These canonical choices are set as default aliases in `scMPRAforge.core` and
 will be used to parameterize all downstream simulations.
+
+### Cohen obsingle expansion -- impact on power analysis
+
+Switching from CRE-coarse to obsingle reporter expansion dramatically changed
+Cohen simulation results (5x5 activity, 70% inactive):
+
+| Test | Coarse ZINB AUROC | Obsingle NB AUROC | Delta |
+|------|-------------------|-------------------|-------|
+| MWU  | 0.592             | 0.880             | +0.29 |
+| Wald | 0.739             | 0.751             | +0.01 |
+
+Key observations:
+- MWU jumps ~29 AUROC points -- coarse expansion was poisoning rank-based tests
+  by flooding identical zeros across all barcodes of a CRE
+- Wald is similar but noisier under obsingle (std=0.13 vs 0.07), with GT draw 0
+  at 0.89 AUROC vs draws 1-4 at 0.58-0.65. Needs investigation.
+- MWU now beats Wald under obsingle NB (reversal from coarse ZINB where Wald
+  was better). This is consistent with the other datasets (shendure, seelig)
+  where MWU also outperforms Wald for activity hypotheses.
 
 ### Collision rates
 
