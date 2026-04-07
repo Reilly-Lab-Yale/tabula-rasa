@@ -2,8 +2,10 @@
 Cohen activity hypothesis power analysis -- 5 GT draws x 5 sim reps.
 
 Scriptified from two_thirds_inactive.ipynb. Cohen-specific notes:
-  - Canonical model: ZINB (nb_only=False)
-  - COHEN_BOUNDS already has zi as a Series (no NB->ZINB splice needed)
+  - Canonical model: obsingle NB (nb_only=True)
+    Changed from coarse obs ZINB after obsingle expansion showed coarse
+    was flooding zeros and distorting mu estimates (median 0.001 -> 0.88).
+    LRT/AIC confirm NB is sufficient under obsingle expansion (0% sig).
   - Cohen has "total transfection" -- all CREs present in all cell types,
     unlike shendure's clonotype bottleneck. The max_tfection subsampling
     step is still included for consistency but is essentially a no-op
@@ -30,9 +32,9 @@ N_SIMS_PER_DRAW = 5
 DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 SIM_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/simulated")
 
-# Canonical phantom ortho for cohen (obs ZINB)
+# Canonical phantom ortho for cohen (obsingle NB)
 ORTHO_DIR = DATA_ROOT / "cohen"
-ORTHO_NAME = "cohen_obs_zinb_phantom_20260401"
+ORTHO_NAME = "cohen_obsingle_nb_phantom"
 
 
 def sim_name(gt_idx):
@@ -76,8 +78,12 @@ def phase_create(client):
 
     minP = scm.COHEN_BOUNDS.reference_activity
 
-    # Cohen canonical is ZINB -- bounds already have zi as Series
+    # Cohen canonical is now obsingle NB. NB bounds have zero-valued zi
+    # Series but need rep_ids from ZINB counterpart for simulation structure.
     bound_template = scm.COHEN_BOUNDS.copy()
+    zinb_zi = scm.COHEN_OBSINGLE_ZINB_BOUNDS.zi
+    bound_template.zi = zinb_zi * 0.0  # same index, zero ZI
+    bound_template.rep_ids = list(zinb_zi.index)
     s = bound_template.cells_per_cell_type
     s.index = [f"ct_{i}" for i in range(1, num_cell_types)] + ["reference"]
     bound_template.cells_per_cell_type = s
@@ -155,12 +161,12 @@ def phase_fit(client):
         sim = scm.de_novo_simulation(
             location=SIM_ROOT, name=sim_name(gt_idx), client=client
         )
-        # Cohen canonical is ZINB. Only by_cell_type for activity hypotheses.
+        # Cohen canonical is now obsingle NB. Only by_cell_type for activity.
         # serial_orthos=True: avoids Dask nested-task deadlock with LocalCluster
         sim.fit_orthos(
             direction="by_cell_type",
             serial_orthos=True,
-            nb_only=False,
+            nb_only=True,
             phantom_compress=False,
             gpu=True,
         )

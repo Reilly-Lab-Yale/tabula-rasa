@@ -1,0 +1,646 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-07T12:05:27.490263
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/simulations/emperically_calibrated/cohen
+  Main jobs : 7502046, 7511917, 7513838
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7502046  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7502046
+   User/Account: mcn26/prio_skr2
+       Job Name: cohen_5x5_create
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 2
+     CPU Memory: 128GB (64GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Tue Apr 7, 2026 at 12:11 AM
+       Run Time: 00:57:57
+     Time Limit: 04:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||            71%]
+  CPU memory usage [|||||||||||||||                                30%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u07n02: 01:23:06/01:55:54 (efficiency=71.7%)
+
+  CPU memory usage per node - used/allocated
+      a1132u07n02: 39.0GB/128GB (19.5GB/64GB per core of 2)
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u07n02": {
+      "cpus": 2,
+      "total_memory": 137438953472,
+      "total_time": 4986.8,
+      "used_memory": 41869856768
+    }
+  },
+  "total_time": 3477
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7502046|cohen_5x5_create|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u07n02|1|2|128G|2026-04-07T00:11:01|2026-04-07T00:11:56|2026-04-07T01:09:53|00:57:57|04:00:00|01:23:19|01:21:12|02:07.172|01:55:54||||||||||0:0
+7502046.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u07n02|1|2||2026-04-07T00:11:56|2026-04-07T00:11:56|2026-04-07T01:09:53|00:57:57||01:23:19|01:21:12|02:07.172|01:55:54|43262084K|43262084K|42583880K|42583880K|32969.52M|3203.98M|32969.52M|3203.98M|1|0:0
+7502046.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u07n02|1|2||2026-04-07T00:11:56|2026-04-07T00:11:56|2026-04-07T01:09:53|00:57:57||00:00:00|00:00:00|00:00:00|01:55:54|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 7511917  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7511917
+   User/Account: mcn26/prio_skr2
+       Job Name: cohen_5x5_fit
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 64GB (16GB per CPU-core)
+           GPUs: 1
+  QOS/Partition: prio_skr2/priority_gpu
+        Cluster: bouchet
+     Start Time: Tue Apr 7, 2026 at 1:17 AM
+       Run Time: 00:26:48
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||                                31%]
+  CPU memory usage [|||||||||||||||||||                            39%]
+  GPU utilization  [||||||||||||||||                               32%]
+  GPU memory usage [|||||||||||||||||||||||||||||||||||||||||||||||99%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1124u11n01: 00:33:52/01:47:12 (efficiency=31.6%)
+
+  CPU memory usage per node - used/allocated
+      a1124u11n01: 25.0GB/64GB (6.2GB/16GB per core of 4)
+
+  GPU utilization per node
+      a1124u11n01 (GPU 6): 31.8%
+
+  GPU memory usage per node - maximum used/total
+      a1124u11n01 (GPU 6): 138.7GB/140.4GB (98.8%)
+
+                                     Notes                                      
+================================================================================
+  * This job only needed 4% of the requested time which was 12:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 1,
+  "nodes": {
+    "a1124u11n01": {
+      "cpus": 4,
+      "gpu_total_memory": {
+        "6": 150754820096
+      },
+      "gpu_used_memory": {
+        "6": 148941373440
+      },
+      "gpu_utilization": {
+        "6": 31.8
+      },
+      "total_memory": 68719476736,
+      "total_time": 2032.8,
+      "used_memory": 26789986304
+    }
+  },
+  "total_time": 1608
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7511917|cohen_5x5_fit|COMPLETED|priority_gpu|prio_skr2|prio_skr2|bouchet|a1124u11n01|1|4|64G|2026-04-07T01:16:52|2026-04-07T01:17:18|2026-04-07T01:44:06|00:26:48|12:00:00|34:11.010|30:49.523|03:21.486|01:47:12||||||||||0:0
+7511917.batch|batch|COMPLETED||prio_skr2||bouchet|a1124u11n01|1|4||2026-04-07T01:17:18|2026-04-07T01:17:18|2026-04-07T01:44:06|00:26:48||34:11.009|30:49.522|03:21.486|01:47:12|28106880K|28106880K|26948480K|26948480K|2561.58M|11.20M|2561.58M|11.20M|1|0:0
+7511917.extern|extern|COMPLETED||prio_skr2||bouchet|a1124u11n01|1|4||2026-04-07T01:17:18|2026-04-07T01:17:18|2026-04-07T01:44:06|00:26:48||00:00:00|00:00:00|00:00:00|01:47:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 7513838  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7513838
+   User/Account: mcn26/prio_skr2
+       Job Name: cohen_5x5_wald
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 128GB (32GB per CPU-core)
+           GPUs: 1
+  QOS/Partition: prio_skr2/priority_gpu
+        Cluster: bouchet
+     Start Time: Tue Apr 7, 2026 at 1:44 AM
+       Run Time: 00:17:28
+     Time Limit: 04:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||              66%]
+  CPU memory usage [||||||||||||||||                               33%]
+  GPU utilization  [||||||||                                       16%]
+  GPU memory usage [|||||||||||||||||||||||||||||||||||||||||||||||99%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1124u19n01: 00:46:32/01:09:52 (efficiency=66.6%)
+
+  CPU memory usage per node - used/allocated
+      a1124u19n01: 41.6GB/128GB (10.4GB/32GB per core of 4)
+
+  GPU utilization per node
+      a1124u19n01 (GPU 4): 16.5%
+
+  GPU memory usage per node - maximum used/total
+      a1124u19n01 (GPU 4): 138.7GB/140.4GB (98.8%)
+
+                                     Notes                                      
+================================================================================
+  * This job only needed 7% of the requested time which was 04:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 1,
+  "nodes": {
+    "a1124u19n01": {
+      "cpus": 4,
+      "gpu_total_memory": {
+        "4": 150754820096
+      },
+      "gpu_used_memory": {
+        "4": 148943470592
+      },
+      "gpu_utilization": {
+        "4": 16.5
+      },
+      "total_memory": 137438953472,
+      "total_time": 2792.8,
+      "used_memory": 44669009920
+    }
+  },
+  "total_time": 1048
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7513838|cohen_5x5_wald|COMPLETED|priority_gpu|prio_skr2|prio_skr2|bouchet|a1124u19n01|1|4|128G|2026-04-07T01:44:50|2026-04-07T01:44:59|2026-04-07T02:02:27|00:17:28|04:00:00|47:02.003|44:29.620|02:32.382|01:09:52||||||||||0:0
+7513838.batch|batch|COMPLETED||prio_skr2||bouchet|a1124u19n01|1|4||2026-04-07T01:44:59|2026-04-07T01:44:59|2026-04-07T02:02:27|00:17:28||47:02.003|44:29.620|02:32.382|01:09:52|46839052K|46839052K|46004480K|46004480K|1537.69M|26.64M|1537.69M|26.64M|1|0:0
+7513838.extern|extern|COMPLETED||prio_skr2||bouchet|a1124u19n01|1|4||2026-04-07T01:44:59|2026-04-07T01:44:59|2026-04-07T02:02:27|00:17:28||00:00:00|00:00:00|00:00:00|01:09:52|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1124u11n01 ───────────────────────────────────────────────────────────────
+NodeName=a1124u11n01 Arch=x86_64 CoresPerSocket=24 
+   CPUAlloc=46 CPUEfctv=48 CPUTot=48 CPULoad=34.27
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:6542Y,gpu:h200,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:6542Y,gpu:h200,common:yes
+   Gres=gpu:h200:8(S:0-1)
+   NodeAddr=a1124u11n01 NodeHostName=a1124u11n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=2043833 AllocMem=479232 FreeMem=1204517 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11212 Owner=N/A MCS_label=N/A
+   Partitions=priority_gpu,gpu_h200,scavenge,scavenge_gpu 
+   BootTime=2026-03-04T17:53:56 SlurmdStartTime=2026-04-02T16:30:00
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=48,mem=2043833M,billing=2400,gres/gpu=8,gres/gpu:h200=8
+   AllocTRES=cpu=46,mem=468G,gres/gpu=8,gres/gpu:h200=8
+   CurrentWatts=4508 AveWatts=2583
+   
+
+
+
+── a1124u19n01 ───────────────────────────────────────────────────────────────
+NodeName=a1124u19n01 Arch=x86_64 CoresPerSocket=24 
+   CPUAlloc=34 CPUEfctv=48 CPUTot=48 CPULoad=18.24
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:6542Y,gpu:h200,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:6542Y,gpu:h200,common:yes
+   Gres=gpu:h200:8(S:0-1)
+   NodeAddr=a1124u19n01 NodeHostName=a1124u19n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=2043833 AllocMem=261120 FreeMem=1349908 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11212 Owner=N/A MCS_label=N/A
+   Partitions=priority_gpu,gpu_h200,scavenge,scavenge_gpu 
+   BootTime=2025-12-18T07:29:54 SlurmdStartTime=2026-04-02T16:30:00
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=48,mem=2043833M,billing=2400,gres/gpu=8,gres/gpu:h200=8
+   AllocTRES=cpu=34,mem=255G,gres/gpu=8,gres/gpu:h200=8
+   CurrentWatts=3234 AveWatts=2713
+   
+
+
+
+── a1132u07n02 ───────────────────────────────────────────────────────────────
+NodeName=a1132u07n02 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=32.67
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u07n02 NodeHostName=a1132u07n02 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=549888 FreeMem=376551 Sockets=2 Boards=1
+   State=ALLOCATED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-18T09:33:50 SlurmdStartTime=2026-04-02T16:30:02
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=64,mem=537G
+   CurrentWatts=792 AveWatts=600
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7502046.err  (341 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775535123.913146  648194 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775535130.224833  648194 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+scMPRAforge: INFO: QC regression for 'reference': dropped 2 of 116 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'Bipolar': dropped 2 of 115 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'Mueller Glia': dropped 3 of 116 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'Interneuron': dropped 2 of 114 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'ebox_gcagctgg_to_gcagctga': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/simulations/emperically_calibrated/cohen/scMPRAforge/core.py:3300: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: No 'state.parquet' found for 'cohen_5x5_activity_gt0'. Initalizing new object.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 100.86 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 93.05 MiB.
+This may cause some slowdown.
+[last 50 lines]
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 108.41 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 93.21 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: INFO: 1943/6410728 transfection events (0.030%) are collisions (same mpra_bc in same cell).
+scMPRAforge: INFO: 1775/6349961 transfection events (0.028%) are collisions (same mpra_bc in same cell).
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 1.07 GiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 1.06 GiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: INFO: 1600/6366613 transfection events (0.025%) are collisions (same mpra_bc in same cell).
+scMPRAforge: INFO: 1640/6303587 transfection events (0.026%) are collisions (same mpra_bc in same cell).
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 1.06 GiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 1.05 GiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: INFO: 1865/6382232 transfection events (0.029%) are collisions (same mpra_bc in same cell).
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 1.07 GiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+
+── slurm-7502046.out  (12 lines total) ───────────────────────────────────────
+[first 12 lines]
+http://10.18.22.71:8787/status
+--- GT draw 0 ---
+GT draw 0: gamut done, saved.
+--- GT draw 1 ---
+GT draw 1: gamut done, saved.
+--- GT draw 2 ---
+GT draw 2: gamut done, saved.
+--- GT draw 3 ---
+GT draw 3: gamut done, saved.
+--- GT draw 4 ---
+GT draw 4: gamut done, saved.
+DONE
+
+── slurm-7511917.err  (699 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775539040.825635 2668826 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775539042.783587 2668826 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt0', loading.
+2026-04-07 01:17:26,115 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6316d929b05cbcf46758891f099aaa63 initialized by task ('shuffle-transfer-6316d929b05cbcf46758891f099aaa63', 0) executed on worker inproc://10.18.20.35/2668826/4
+2026-04-07 01:17:26,130 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6316d929b05cbcf46758891f099aaa63 deactivated due to stimulus 'task-finished-1775539046.1294434'
+scMPRAforge: INFO: Dropped 1 of 464 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 548.46 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 31.53 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+[last 50 lines]
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 34.45 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 25.11 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 24.13 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+2026-04-07 01:42:41,771 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 435ca6c82613d14250cfaa36b5401ea0 initialized by task ('shuffle-transfer-435ca6c82613d14250cfaa36b5401ea0', 0) executed on worker inproc://10.18.20.35/2668826/4
+2026-04-07 01:42:41,785 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 435ca6c82613d14250cfaa36b5401ea0 deactivated due to stimulus 'task-finished-1775540561.7847967'
+scMPRAforge: WARNING: ortho_filter removed 1 combinations involving 'reference'
+scMPRAforge: INFO: Dropped 2 of 463 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 551.45 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 33.20 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 25.74 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 22.79 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+
+── slurm-7511917.out  (12 lines total) ───────────────────────────────────────
+[first 12 lines]
+http://10.18.20.35:8787/status
+--- Fitting GT draw 0 ---
+GT draw 0: fit done.
+--- Fitting GT draw 1 ---
+GT draw 1: fit done.
+--- Fitting GT draw 2 ---
+GT draw 2: fit done.
+--- Fitting GT draw 3 ---
+GT draw 3: fit done.
+--- Fitting GT draw 4 ---
+GT draw 4: fit done.
+DONE
+
+── slurm-7513838.err  (684 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775540705.774590 2527679 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775540711.498106 2527679 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt0', loading.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 553.01 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 31.78 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 24.96 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+[last 50 lines]
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt4', loading.
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+scMPRAforge: INFO: flattened ortho successfully
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775541741.928863 2571091 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775541743.699871 2571091 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt0', loading.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:mwu, rep:1.
+scMPRAforge: INFO: Dropped 4 or 0.9% of tests with NA values for test:mwu, rep:2.
+scMPRAforge: INFO: Dropped 4 or 0.9% of tests with NA values for test:mwu, rep:4.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:wald_auto, rep:0.
+scMPRAforge: INFO: Dropped 8 or 1.7% of tests with NA values for test:wald_auto, rep:1.
+scMPRAforge: INFO: Dropped 7 or 1.5% of tests with NA values for test:wald_auto, rep:2.
+scMPRAforge: INFO: Dropped 2 or 0.4% of tests with NA values for test:wald_auto, rep:3.
+scMPRAforge: INFO: Dropped 8 or 1.7% of tests with NA values for test:wald_auto, rep:4.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt1', loading.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:mwu, rep:1.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:mwu, rep:3.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:mwu, rep:4.
+scMPRAforge: INFO: Dropped 3 or 0.7% of tests with NA values for test:wald_auto, rep:0.
+scMPRAforge: INFO: Dropped 3 or 0.7% of tests with NA values for test:wald_auto, rep:1.
+scMPRAforge: INFO: Dropped 6 or 1.3% of tests with NA values for test:wald_auto, rep:3.
+scMPRAforge: INFO: Dropped 7 or 1.5% of tests with NA values for test:wald_auto, rep:4.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt2', loading.
+scMPRAforge: INFO: Dropped 4 or 0.9% of tests with NA values for test:mwu, rep:3.
+scMPRAforge: INFO: Dropped 4 or 0.9% of tests with NA values for test:mwu, rep:4.
+scMPRAforge: INFO: Dropped 5 or 1.1% of tests with NA values for test:wald_auto, rep:0.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:wald_auto, rep:1.
+scMPRAforge: INFO: Dropped 5 or 1.1% of tests with NA values for test:wald_auto, rep:3.
+scMPRAforge: INFO: Dropped 5 or 1.1% of tests with NA values for test:wald_auto, rep:4.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt3', loading.
+scMPRAforge: INFO: Dropped 2 or 0.4% of tests with NA values for test:wald_auto, rep:0.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:wald_auto, rep:1.
+scMPRAforge: INFO: Dropped 2 or 0.4% of tests with NA values for test:wald_auto, rep:3.
+scMPRAforge: INFO: Dropped 4 or 0.9% of tests with NA values for test:wald_auto, rep:4.
+scMPRAforge: INFO: 'state.parquet' found for 'cohen_5x5_activity_gt4', loading.
+scMPRAforge: INFO: Dropped 3 or 0.7% of tests with NA values for test:mwu, rep:1.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:mwu, rep:4.
+scMPRAforge: INFO: Dropped 3 or 0.7% of tests with NA values for test:wald_auto, rep:0.
+scMPRAforge: INFO: Dropped 9 or 2.0% of tests with NA values for test:wald_auto, rep:1.
+scMPRAforge: INFO: Dropped 1 or 0.2% of tests with NA values for test:wald_auto, rep:2.
+scMPRAforge: INFO: Dropped 2 or 0.4% of tests with NA values for test:wald_auto, rep:3.
+scMPRAforge: INFO: Dropped 3 or 0.7% of tests with NA values for test:wald_auto, rep:4.
+
+── slurm-7513838.out  (150 lines total) ──────────────────────────────────────
+[first 20 lines]
+http://10.18.20.36:8787/status
+--- Wald precomp GT draw 0 ---
+  rep 0...
+  rep 0 done.
+  rep 1...
+  rep 1 done.
+  rep 2...
+  rep 2 done.
+  rep 3...
+  rep 3 done.
+  rep 4...
+  rep 4 done.
+GT draw 0: wald precomp done.
+--- Wald precomp GT draw 1 ---
+  rep 0...
+  rep 0 done.
+  rep 1...
+  rep 1 done.
+  rep 2...
+  rep 2 done.
+[last 50 lines]
+1          1  0.849303  0.848100  wald_auto        1
+2          2  0.722360  0.693992  wald_auto        1
+3          3  0.598149  0.360694  wald_auto        1
+4          4  0.810011  0.752562  wald_auto        1
+GT draw 2:
+   replicate     auroc     auprc       test  gt_draw
+0          0  0.860944  0.854416        mwu        2
+1          1  0.870535  0.866011        mwu        2
+2          2  0.895648  0.886704        mwu        2
+3          3  0.859605  0.857814        mwu        2
+4          4  0.883132  0.875667        mwu        2
+0          0  0.869921  0.858530  wald_auto        2
+1          1  0.648922  0.490138  wald_auto        2
+2          2  0.894220  0.889125  wald_auto        2
+3          3  0.593866  0.418953  wald_auto        2
+4          4  0.879501  0.872929  wald_auto        2
+GT draw 3:
+   replicate     auroc     auprc       test  gt_draw
+0          0  0.919576  0.897335        mwu        3
+1          1  0.842211  0.804847        mwu        3
+2          2  0.811213  0.782019        mwu        3
+3          3  0.882174  0.858893        mwu        3
+4          4  0.906484  0.879018        mwu        3
+0          0  0.922601  0.900350  wald_auto        3
+1          1  0.623386  0.350077  wald_auto        3
+2          2  0.484406  0.270881  wald_auto        3
+3          3  0.833741  0.773737  wald_auto        3
+4          4  0.894896  0.863103  wald_auto        3
+GT draw 4:
+   replicate     auroc     auprc       test  gt_draw
+0          0  0.920000  0.899812        mwu        4
+1          1  0.856361  0.844419        mwu        4
+2          2  0.904160  0.885152        mwu        4
+3          3  0.867738  0.862633        mwu        4
+4          4  0.892158  0.877454        mwu        4
+0          0  0.889469  0.868333  wald_auto        4
+1          1  0.583701  0.450034  wald_auto        4
+2          2  0.595017  0.373173  wald_auto        4
+3          3  0.589728  0.382993  wald_auto        4
+4          4  0.649045  0.410115  wald_auto        4
+
+=== Aggregated across all GT draws ===
+              auroc                                   auprc                              
+               mean       std       min       max      mean       std       min       max
+test                                                                                     
+mwu        0.880142  0.027886  0.811213  0.934187  0.862861  0.027906  0.782019  0.899812
+wald_auto  0.751159  0.133409  0.484406  0.922601  0.648713  0.221476  0.270881  0.900350
+
+Saved to /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/simulations/emperically_calibrated/cohen/output/cohen_5x5_activity_summary.tsv
+DONE

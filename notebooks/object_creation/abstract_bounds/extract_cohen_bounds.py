@@ -22,6 +22,8 @@ ORTHOS = [
     "cohen_obs_nb_phantom_20260401",
     "cohen_cm_zinb_phantom_20260401",
     "cohen_cm_nb_phantom_20260401",
+    "cohen_obsingle_nb_phantom",
+    "cohen_obsingle_zinb_phantom",
 ]
 
 def main():

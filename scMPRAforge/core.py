@@ -1232,7 +1232,9 @@ COHEN_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obs_zinb_phanto
 COHEN_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obs_nb_phantom.tgz")
 COHEN_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_zinb_phantom.tgz")
 COHEN_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_nb_phantom.tgz")
-COHEN_BOUNDS=COHEN_OBS_ZINB_BOUNDS
+COHEN_OBSINGLE_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obsingle_nb_phantom.tgz")
+COHEN_OBSINGLE_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obsingle_zinb_phantom.tgz")
+COHEN_BOUNDS=COHEN_OBSINGLE_NB_BOUNDS
 
 SEELIG_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_zinb_phantom.tgz")
 SEELIG_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_nb_phantom.tgz")
