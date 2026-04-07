@@ -40,20 +40,29 @@ scMPRAforge is a Python package for analysis of single-cell MPRA (Massively Para
 
 ```
 scMPRAforge/
-  core.py           — all main classes and functions (~7000 lines)
-  utils.py          — helper functions
-  presets/           — serialized Bounds objects
-notebooks/
-  preprocessing/    — raw data processing
-  object_creation/  — ortho fitting scripts, simulation setup
-    orthos/         — fit scripts, wrappers, run graveyards
-    simulations/    — empirically calibrated simulations
-  results/          — analysis notebooks, figures
+  core.py           -- all main classes and functions (~7000 lines)
+  utils.py          -- helper functions
+  presets/           -- serialized Bounds objects
+analyses/
+  preprocessing/    -- raw data processing
+  model_fitting/    -- ortho fitting scripts, QC, bounds extraction
+    fits/           -- per-ortho fit scripts and wrappers
+    qc/             -- QC plots and summary notebook
+    bounds/         -- bounds extraction scripts and output
+  model_selection/  -- NB vs ZINB (LRT, AIC, ZI decomposition, bias-variance)
+  simulation/       -- empirically calibrated + synthetic simulations
+    activity_prc/   -- 5x5 activity PRC (per dataset)
+    activity_calibration/  -- null p-value calibration
+    activity_power/ -- power curves
+    variant_power/  -- pairwise variant effect power
+    fully_synthetic/
+  empirical_testing/ -- real-data hypothesis testing
+  supplementary/    -- coupon collector, collision rates
 ```
 
 ## Running fits
 
-All fit scripts follow the pattern: sbatch wrapper (.sh) → ipython script (.py) → Dask cluster → TensorZINB. The wrapper activates `tz` conda env and `cd`s to the script directory (never use `dirname "$0"` in sbatch scripts). Scripts are in `notebooks/object_creation/orthos/`.
+All fit scripts follow the pattern: sbatch wrapper (.sh) -> ipython script (.py) -> Dask cluster -> TensorZINB. The wrapper activates `tz` conda env and `cd`s to the script directory (never use `dirname "$0"` in sbatch scripts). Scripts are in `analyses/model_fitting/fits/`.
 
 ## After a successful fit
 

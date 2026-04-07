@@ -210,7 +210,7 @@ refer to it that way in directories and code.
   - Plotting: `lrt_nb_vs_zinb_plot.ipynb`
 - 1d: bias-variance / ground truth recovery
   - Show that as cell number increases, parameter estimates converge to ground
-    truth. Existing: `notebooks/results/bias/vsground_subsampling.ipynb`
+    truth. Existing: `analyses/model_selection/bias/vsground_subsampling.ipynb`
     (synthetic data, 100/1000/10000 cells). MSE drops ~50x, bias near-zero at
     all sizes -- the interesting finding is how few cells suffice.
   - Needs: updated paths (old McCleary /gpfs/gibbs/ paths), re-run, saved SVGs.
