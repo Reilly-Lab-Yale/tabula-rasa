@@ -2281,7 +2281,8 @@ def _mom_from_cm_maps(pd_maps, split, level, indicies):
     return None
 
 
-def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels):
+def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels,
+                          reporter_expansion="coarse"):
     """
     Compute total observation counts (nonzero + reporter-informed zeros) per
     (split_level, anti_level, rep_id) group from a coarse reporter table.
@@ -2289,6 +2290,13 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels):
     Cells with nonzero MPRA obs but no reporter detection (-U6 +MPRA, i.e.
     orphan cells) are treated as confirmed transfections (false-negative
     reporter) and included in n_total alongside reporter-confirmed cells.
+
+    reporter_expansion controls how CRE-level detections map to observation
+    counts:
+      "coarse" (default): each detection contributes n_barcodes zeros (one per
+          barcode of the detected CRE). This is the CRE-coarse expansion.
+      "single": each detection contributes exactly 1 zero regardless of barcode
+          count. Conservative interpretation of a CRE-level reporter signal.
 
     nz_pdf must include a cell_bc column.
 
@@ -2334,19 +2342,29 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels):
         [reporter_keys[["rep_id", "cell_bc", "cre_id"]], orphan_cells],
         ignore_index=True)
 
-    # Add cell_type and expected barcodes per (cell, CRE)
+    # Add cell_type
     all_cells = all_cells.merge(
         cell_map[["rep_id", "cell_bc", "cell_type"]],
         on=["rep_id", "cell_bc"], how="inner")
-    all_cells = all_cells.merge(bc_per_cre, on=["rep_id", "cre_id"], how="inner")
 
     all_cells["_split"] = all_cells["cre_id"] if split == "cre_id" else all_cells["cell_type"]
     all_cells["_anti"] = all_cells["cell_type"] if split == "cre_id" else all_cells["cre_id"]
 
-    total = (all_cells
-             .groupby(["_split", "_anti", "rep_id"])["n_barcodes"]
-             .sum()
-             .reset_index(name="n_total"))
+    if reporter_expansion == "coarse":
+        # Each detection contributes n_barcodes zeros (CRE-coarse expansion)
+        all_cells = all_cells.merge(bc_per_cre, on=["rep_id", "cre_id"], how="inner")
+        total = (all_cells
+                 .groupby(["_split", "_anti", "rep_id"])["n_barcodes"]
+                 .sum()
+                 .reset_index(name="n_total"))
+    elif reporter_expansion == "single":
+        # Each detection contributes exactly 1 zero
+        total = (all_cells
+                 .groupby(["_split", "_anti", "rep_id"])
+                 .size()
+                 .reset_index(name="n_total"))
+    else:
+        raise ValueError(f"Unknown reporter_expansion: {reporter_expansion!r}")
     total = total.rename(columns={"_split": split, "_anti": anti})
 
     # Filter to requested levels
@@ -2647,7 +2665,7 @@ def _compute_mats_futures(client, data, split):
     }
 
 
-def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False):
+def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -2740,7 +2758,8 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
 
         # Compute reporter-informed zero counts per (anti, rep) group
         total_counts = _reporter_zero_counts(
-            nz_pdf, reporter, mpra_map, cell_map, split, levels)
+            nz_pdf, reporter, mpra_map, cell_map, split, levels,
+            reporter_expansion=reporter_expansion)
 
         mats_futures = {
             t: client.submit(
@@ -3094,18 +3113,19 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False,phantom_compress=False):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
                                                      split="cre_id",
                                                      disable_mom=disable_mom,
                                                      nb_only=nb_only,
-                                                     phantom_compress=phantom_compress)
+                                                     phantom_compress=phantom_compress,
+                                                     reporter_expansion=reporter_expansion)
         self.by_cre.label_regressors(client,self.by_cre_design)
 
 
-    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
@@ -3114,21 +3134,22 @@ class ortho:
                                                         fit_resources=fit_resources,
                                                         pre_fit_hook=pre_fit_hook,
                                                         nb_only=nb_only,
-                                                        phantom_compress=phantom_compress)
+                                                        phantom_compress=phantom_compress,
+                                                        reporter_expansion=reporter_expansion)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
 
 
-    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False):
+    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
         """
         Makes by_cre and by_cell_type models.
         gpu=True: cell-type models are submitted with resources={"GPU": 1} so
         Dask schedules them only on GPU-enabled workers.  CRE models are
         unaffected.
         """
-        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only,phantom_compress=phantom_compress)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion)
         ct_resources = {"GPU": 1} if gpu else {}
         self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom,
-                                     fit_resources=ct_resources,nb_only=nb_only,phantom_compress=phantom_compress)
+                                     fit_resources=ct_resources,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion)
         
         
     
