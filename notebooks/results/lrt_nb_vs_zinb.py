@@ -56,6 +56,10 @@ pairs = {
         "zinb": data_root / "takeshi" / "takeshi_cm_zinb_phantom",
         "nb":   data_root / "takeshi" / "takeshi_cm_nb_phantom",
     },
+    "cohen_obsingle": {
+        "zinb": data_root / "cohen" / "cohen_obsingle_zinb_phantom",
+        "nb":   data_root / "cohen" / "cohen_obsingle_nb_phantom",
+    },
 }
 
 def load_models(path, filename):
