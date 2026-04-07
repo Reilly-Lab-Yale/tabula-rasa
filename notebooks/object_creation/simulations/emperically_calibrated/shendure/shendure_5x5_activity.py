@@ -32,6 +32,7 @@ notes for further discussion on the clonotype bottleneck workaround.
 """
 
 import sys
+import os
 import scMPRAforge as scm
 from dask.distributed import Client, LocalCluster
 from pathlib import Path
@@ -313,6 +314,14 @@ def phase_metrics(client):
 if __name__ == "__main__":
     phase = sys.argv[1] if len(sys.argv) > 1 else "all"
 
+    # Detect available memory from SLURM allocation (or system total).
+    import psutil
+    _slurm_mem_mb = os.environ.get("SLURM_MEM_PER_NODE")
+    if _slurm_mem_mb:
+        _mem_limit = f"{int(int(_slurm_mem_mb) * 0.9)}MB"
+    else:
+        _mem_limit = f"{int(psutil.virtual_memory().total * 0.9 / 1e9)}GB"
+
     # Single worker: fit uses serial_orthos=True, wald_precomp is bypassed
     # (direct Python loop). No nested-task deadlock risk.
     # processes=False: avoids TF multi-thread/process conflicts.
@@ -320,7 +329,7 @@ if __name__ == "__main__":
         n_workers=1,
         threads_per_worker=2,
         processes=False,
-        memory_limit="120GB",
+        memory_limit=_mem_limit,
         resources={"GPU": 1},
     )
     client = Client(cluster)
