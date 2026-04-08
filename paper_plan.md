@@ -50,6 +50,8 @@ Restricting to the condition each dataset would actually use in practice
 These canonical choices are set as default aliases in `scMPRAforge.core` and
 will be used to parameterize all downstream simulations.
 
+(generally, ZI has a very hard time pulling out structural zeroes because of the identifiability issue: nb is too flexible, and the means are too low to allow separation. we see this in how CM shendure does OK for ZINB because shendure has high averages. we can ignore this and just do nb for shendure obs becuase it has a fine reporter. we can probably do the same (simple nb) for cohen obsingle, which is better than cohen obs. for seelig, we don't have the luxury of a tfection reporter AND we have low counts causing the identifyability problem, so we introduce the MOI prior).
+
 ### Cohen obsingle expansion -- impact on power analysis
 
 Switching from CRE-coarse to obsingle reporter expansion dramatically changed
@@ -115,6 +117,7 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - roc_auc_score throws on empty input when all hypotheses are NA after MIN_PTS filtering
   - Need guard upstream of sklearn call; subset-based evaluation (only score hypotheses valid in all tests)
   - Wald+MWU test results save fine, only the summary/metrics phase crashes
+- [ ] MOI-based phantom zero downweighting (see section below)
 - [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Review simulation notebooks (shendure + cohen calibration, power, pairwise)
 - [ ] Create all figures
@@ -160,20 +163,30 @@ Transfection reporters add cloning complexity but provide two benefits:
 Without a reporter, `consider_missing` re-introduces structural zeros, and the
 ZINB ZI component must absorb them.
 
-### Design
+### Design (revised)
 
-For each empirical dataset (shendure, cohen), simulate matched conditions:
+Simulate with reporter (shendure-like or cohen-like bounds), then fit the
+SAME simulated data twice:
 
-| Condition | Reporter | consider_missing | Model | flatten_overtransfection |
-|-----------|----------|-----------------|-------|--------------------------|
-| A: with reporter | Yes | No | per NB/ZINB results | True |
-| B: without reporter | No | Yes | per NB/ZINB results | True |
+| Condition | Fit strategy | Model |
+|-----------|-------------|-------|
+| A: with reporter | obs-condition, reporter-informed zeros | NB |
+| B: without reporter | strip reporter, consider_missing + MOIB | NB |
 
-Seelig is already the "no reporter" case -- serves as empirical validation.
+Identical ground truth, identical cells, identical simulated counts. The only
+variable is whether the reporter information is used at fit time. Any power
+difference is purely attributable to the reporter.
+
+This is cleaner than the old design (which simulated two separate datasets
+with different parameters). No confounds from different simulation settings.
+
+Seelig is already the "no reporter" case -- serves as empirical validation
+that MOIB produces usable results without a reporter.
 
 ### Prerequisites
 
 - NB vs ZINB evaluation complete (done -- see table above)
+- MOIB implementation and validation (done -- shendure convergence r=0.994)
 - Existing `de_novo_simulation` framework
 
 ### Metrics
@@ -182,17 +195,21 @@ Seelig is already the "no reporter" case -- serves as empirical validation.
 - Power at alpha=0.05 vs effect size
 - AUROC / AUPRC
 - Precision-recall curves at median-AUPRC replicate
+- Discovery count comparison (how many additional positives/negatives
+  detected with vs without reporter)
 
 ### Open questions
 
 - How to handle shendure's clonotype bottlenecking? `two_thirds_inactive`
   notebook handles this -- review and reuse.
 - Number of simulation replicates: 5 is fast but noisy, 10-20 better.
+- The MOIB 1.8x mu offset for shendure may or may not affect power --
+  parameter accuracy != discrimination ability. Must test empirically.
 
 ### Note
 
-This may be deferred to v2 / companion paper depending on timeline. If included
-in v1, could serve as Fig 5 (see below).
+Priority elevated from "maybe v2" to "soon after MOIB validation". If
+seelig MOIB works, this analysis follows directly. Could serve as Fig 5.
 
 ---
 
@@ -220,7 +237,7 @@ refer to it that way in directories and code.
 
 ### Fig S1: ancillary model justification
 
-- s1a: coupon collector plot (formula matches simulations)
+- s1a: coupon collector plot (formula matches simulations, validating assumption that barcode complexity overwhelms multi-transfection. worst for cohen not because of hi moi but because of low barcode complexity)
   - Done: `coupon_collector.ipynb`, SVG generated
 - s1b: collision rate barchart
   - Done: `estimated_percent_conflict.ipynb`, SVG generated
@@ -277,6 +294,104 @@ from `de_novo_simulation`.
 
 Model convergence diagnostics across fits. Infrastructure exists (`run_qc.py`,
 `wrap_qc.sh`, seelig QC plots). Could strengthen methods section.
+
+---
+
+## MOI-based phantom zero downweighting
+
+### Problem
+
+CM (consider_missing) expansion creates a phantom zero for every unobserved
+(cell, barcode) pair. Most of these are structural zeros from non-transfection,
+not expression zeros. When fitting NB (no ZI component), the model absorbs
+structural zeros into a deflated mu. The LRT correctly reports that ZINB is
+unnecessary -- the NB's own zero mass at low mu explains the zeros -- but the
+mu is now unconditional (incorporates P(not transfected)).
+
+This causes a 124x sparsity gap in seelig simulations: the simulation handles
+transfection explicitly (via MOI-based sampling), then uses the deflated CM mu
+as a per-event rate, double-counting the transfection sparsity. 44% of
+simulated CREs fall below MIN_PTS vs 0% in real data.
+
+Empirical validation: P(transfected) predicted from MOI (74/6646 = 0.011)
+predicts 756K transfected pairs; observed nonzero count is 760K. Match to <1%.
+Expression-conditional zero rate is effectively 0% for seelig.
+
+### Proposed fix
+
+Use the MOI to compute the expected number of structural zeros per phantom
+group and subtract them from phantom weights before NB fitting:
+
+```
+P_transfected = 1 - (1 - 1/n_barcodes)^MOI   (per barcode per cell)
+n_transfected = n_total * P_transfected
+corrected_phantom_weight = max(0, n_transfected - n_nonzero)
+```
+
+The NB then fits to expression zeros only, yielding conditional mu (given
+transfection). Simulation uses conditional mu directly with zi=0.
+
+### Interaction with reporter conditions
+
+| Condition | Reporter | MOI downweight? | Rationale |
+|-----------|----------|-----------------|-----------|
+| CM | None (seelig) | Yes | All zeros are structural + expression; MOI separates them |
+| CM | Any (shendure, cohen) | Yes | Same logic; reporter unused in CM path |
+| obs | Fine (shendure oBC) | No | Reporter already confirms transfection; zeros are expression zeros |
+| obs | Coarse (cohen U6) | TBD | Coarse expansion inflates within-CRE barcode-level structural zeros; obsingle sidesteps this |
+
+### Testable prediction
+
+obs-condition mu and MOI-downweighted CM mu should converge for the same
+dataset. Shendure has both conditions fitted, so:
+shendure_obs_nb mu ~ shendure_cm_nb_moi_corrected mu (per CRE, per cell type).
+
+### Wald test implications
+
+1. Seelig sim CREs that drop below MIN_PTS (44% NA rate) should recover -- the
+   conditional NB produces far fewer zeros per transfected event
+2. SEs computed at conditional mu (correct scale) should be better calibrated
+3. May help Cohen Wald high-variance behavior (GT0=0.89 vs draws 1-4=0.58-0.65)
+
+### Code changes required
+
+**Must change (3 sites):**
+1. `_build_cm_fit_inputs` (core.py ~2107): accept MOI + n_barcodes params,
+   replace `n_zeros = n_total - n_nonzero` with
+   `n_zeros = max(0, n_total * P_transfected - n_nonzero)`, update weight
+   assertion (weights no longer sum to Cartesian product size)
+2. `standard_fit` (core.py ~2679): compute MOI via `data.describe_transfection()`
+   and n_barcodes from mpra_map, pass to `_build_cm_fit_inputs`
+3. `precompute_wald` (core.py ~3327): same -- pass MOI when reconstructing CM
+   design matrices at ~3446
+
+**Does NOT change:**
+- Reporter-informed paths (`_build_obs_phantom_inputs`, `_reporter_zero_counts`)
+- Bounds extraction (`from_ortho` -- extracted mu is now conditional, which is
+  correct for simulation)
+- Simulation code (already NB-only with zi=0; conditional mu is the right input)
+- TensorZINB fitter (just receives weights)
+- `_inflate_missing_split_level` / `get_data` (correction is at phantom weight
+  level, not data expansion level)
+
+**Note:** `describe_transfection()` counts observed unique barcodes per cell
+(post-collision). For high-collision datasets (seelig ~7.6%), consider using
+the collision-corrected MOI from `from_ortho` instead. For seelig the practical
+difference is small.
+
+### Minimal validation analyses
+
+1. **Shendure convergence test**: fit shendure CM NB with MOI downweighting,
+   compare by_cre and by_cell_type mu to existing shendure obs NB mu.
+   Expect strong correlation (r > 0.95). This is the primary correctness test.
+2. **Seelig refit**: fit seelig CM NB with MOI downweighting, verify mu shifts
+   from ~0.006 to ~0.5-1.0 range. Verify QC r-values remain good.
+3. **Seelig simulation sanity**: re-extract bounds from MOI-corrected seelig
+   ortho, run 1 GT draw x 1 rep, verify MIN_PTS dropout rate matches real data
+   (~0% instead of 44%).
+4. **Seelig 5x5 activity PRC**: re-run full 5x5 with corrected bounds, compare
+   Wald NA rate and AUROC to current results. Expect Wald NA ~ 0% and improved
+   AUROC.
 
 ---
 

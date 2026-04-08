@@ -2104,15 +2104,26 @@ def _smart_matrix(data,split):
     }
 
 
-def _build_cm_fit_inputs(pd_maps, split, level):
+def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     """
     Build phantom-zero compressed design matrices for a consider_missing
     split-level, bypassing full Cartesian expansion.
 
-    Groups observations by (anti_level, rep_id) — the unique design-matrix
-    rows — and collapses all zeros in each group into a single weighted
+    Groups observations by (anti_level, rep_id) -- the unique design-matrix
+    rows -- and collapses all zeros in each group into a single weighted
     phantom observation.  Returns the same dict format as _smart_matrix,
     plus a 'weights' key for TensorZINB sample_weight.
+
+    Parameters
+    ----------
+    moi_correction : dict or None
+        If provided, correct phantom zero weights for structural zeros from
+        incomplete transfection. Dict must contain:
+        - 'moi': float, mean observed barcodes per cell (from describe_transfection)
+        - 'n_library_barcodes': int, total unique barcodes in the library
+        P(specific barcode transfected into a cell) is computed as
+        1 - (1 - 1/n_library_barcodes)^moi, and phantom weights are reduced
+        to count only expression zeros (transfected but unobserved).
     """
     import scipy.sparse as sp
 
@@ -2192,7 +2203,22 @@ def _build_cm_fit_inputs(pd_maps, split, level):
     else:
         group_totals["n_nonzero"] = 0
     group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
-    group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
+
+    if moi_correction is not None:
+        # MOI-based phantom zero downweighting: subtract structural zeros
+        # (from incomplete transfection) so phantom weight reflects only
+        # expression zeros (transfected but unobserved).
+        moi = moi_correction['moi']
+        n_lib = moi_correction['n_library_barcodes']
+        p_transfected = 1.0 - (1.0 - 1.0 / n_lib) ** moi
+        group_totals["n_transfected"] = (
+            group_totals["n_total"] * p_transfected
+        ).round().astype(np.int64)
+        group_totals["n_zeros"] = np.maximum(
+            0, group_totals["n_transfected"] - group_totals["n_nonzero"]
+        )
+    else:
+        group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
 
     # ── Build compressed arrays ────────────────────────────────────────
     # Nonzero observations: individual rows, weight=1
@@ -2220,9 +2246,16 @@ def _build_cm_fit_inputs(pd_maps, split, level):
     all_zi = np.concatenate([zi_cols_nz, zi_cols_ph])
     n_c = len(comp_y)
 
-    expected_n = int(group_totals["n_total"].sum())
-    assert abs(comp_w.sum() - expected_n) < 0.5, \
-        f"Weight sum {comp_w.sum()} != expected {expected_n}"
+    if moi_correction is not None:
+        # With MOI correction, phantom weights are per-group
+        # max(0, n_transfected_group - n_nonzero_group). The np.maximum
+        # clamp guarantees non-negative weights. No global sum invariant
+        # holds because groups independently clamp.
+        pass
+    else:
+        expected_n = int(group_totals["n_total"].sum())
+        assert abs(comp_w.sum() - expected_n) < 0.5, \
+            f"Weight sum {comp_w.sum()} != expected {expected_n}"
 
     # ── Sparse NB matrix (intercept + treatment contrast) ──────────────
     nb_row = list(range(n_c))
@@ -2267,7 +2300,7 @@ def _build_cm_fit_inputs(pd_maps, split, level):
         'reference': reference,
         'split': split,
         'weights': comp_w,
-        'fit_mode': 'cm_phantom',
+        'fit_mode': 'cm_phantom_moib' if moi_correction is not None else 'cm_phantom',
     }
 
 
@@ -2676,7 +2709,7 @@ def _compute_mats_futures(client, data, split):
     }
 
 
-def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
+def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):
     """
     Takes an scMPRA object and produces a set of models along one axis,
     specified by split.
@@ -2684,6 +2717,10 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
     phantom_compress=True enables phantom-zero compression of existing
     observed zeros (e.g. reporter-informed zeros baked into the dataset).
     This avoids materializing the full dataset on the driver.
+
+    moi_correct_cm=True corrects CM phantom zero weights for structural
+    zeros from incomplete transfection, using the MOI estimated from the
+    data. Only applies when consider_missing is enabled.
     """
 
     if not isinstance(data, scMPRA_data):
@@ -2713,10 +2750,26 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
             v = maps[k]
             pd_maps[k] = v.compute() if hasattr(v, 'compute') else v
 
+        # MOI-based phantom zero correction
+        moi_correction = None
+        if moi_correct_cm:
+            transfection_desc = data.describe_transfection()
+            moi = float(transfection_desc.mu_nb)
+            n_library_barcodes = int(pd_maps["mpra_map"]["mpra_bc"].nunique())
+            moi_correction = {
+                'moi': moi,
+                'n_library_barcodes': n_library_barcodes,
+            }
+            logger.info(
+                f"MOI correction: moi={moi:.2f}, n_barcodes={n_library_barcodes}, "
+                f"P(transfected)={1.0 - (1.0 - 1.0/n_library_barcodes)**moi:.6f}"
+            )
+
         mats_futures = {
             t: client.submit(
                 _build_cm_fit_inputs,
                 pd_maps, split, t,
+                moi_correction=moi_correction,
                 resources=mat_resource
             )
             for t in levels
@@ -3125,7 +3178,7 @@ class ortho:
         return dat
 
     
-    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
+    def fit_by_cre_models(self,client,dat=None,disable_mom=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):
         dat=self._condense_dat(dat)
         self.by_cre, self.by_cre_design=standard_fit(client,
                                                      dat,
@@ -3133,11 +3186,12 @@ class ortho:
                                                      disable_mom=disable_mom,
                                                      nb_only=nb_only,
                                                      phantom_compress=phantom_compress,
-                                                     reporter_expansion=reporter_expansion)
+                                                     reporter_expansion=reporter_expansion,
+                                                     moi_correct_cm=moi_correct_cm)
         self.by_cre.label_regressors(client,self.by_cre_design)
 
 
-    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
+    def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):
         dat=self._condense_dat(dat)
         self.by_cell_type, self.by_cell_type_design=standard_fit(client,
                                                         dat,
@@ -3147,21 +3201,22 @@ class ortho:
                                                         pre_fit_hook=pre_fit_hook,
                                                         nb_only=nb_only,
                                                         phantom_compress=phantom_compress,
-                                                        reporter_expansion=reporter_expansion)
+                                                        reporter_expansion=reporter_expansion,
+                                                        moi_correct_cm=moi_correct_cm)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
 
 
-    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse"):
+    def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):
         """
         Makes by_cre and by_cell_type models.
         gpu=True: cell-type models are submitted with resources={"GPU": 1} so
         Dask schedules them only on GPU-enabled workers.  CRE models are
         unaffected.
         """
-        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion)
+        self.fit_by_cre_models(client=client,dat=dat,disable_mom=disable_mom,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion,moi_correct_cm=moi_correct_cm)
         ct_resources = {"GPU": 1} if gpu else {}
         self.fit_by_cell_type_models(client=client,dat=dat,disable_mom=disable_mom,
-                                     fit_resources=ct_resources,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion)
+                                     fit_resources=ct_resources,nb_only=nb_only,phantom_compress=phantom_compress,reporter_expansion=reporter_expansion,moi_correct_cm=moi_correct_cm)
         
         
     
@@ -3396,12 +3451,23 @@ class ortho:
         # Gather reconstruction inputs once (driver-side), shared across levels
         raw = td.get_data(include_missing=False)
 
-        if fit_mode == "cm_phantom" and not has_matrices:
+        if (fit_mode in ("cm_phantom", "cm_phantom_moib")) and not has_matrices:
             maps = td._get_missing_maps()
             pd_maps = {}
             for k in ["cell_map", "mpra_map", "observed"]:
                 v = maps[k]
                 pd_maps[k] = v.compute() if hasattr(v, 'compute') else v
+
+            # Reconstruct MOI correction if this ortho was fit with it
+            moi_correction_wald = None
+            if fit_mode == "cm_phantom_moib":
+                transfection_desc = td.describe_transfection()
+                moi = float(transfection_desc.mu_nb)
+                n_library_barcodes = int(pd_maps["mpra_map"]["mpra_bc"].nunique())
+                moi_correction_wald = {
+                    'moi': moi,
+                    'n_library_barcodes': n_library_barcodes,
+                }
 
         elif fit_mode == "obs_phantom" and not has_matrices:
             reporter = getattr(td, '_coarse_reporter', None)
@@ -3441,9 +3507,10 @@ class ortho:
                 )
 
             # Recipe only -- reconstruct matrices
-            if fit_mode == "cm_phantom":
+            if fit_mode in ("cm_phantom", "cm_phantom_moib"):
                 design_future = client.submit(
                     _build_cm_fit_inputs, pd_maps, split_col, str(model_key),
+                    moi_correction=moi_correction_wald,
                 )
             elif fit_mode == "obs_phantom":
                 re = sample_design.get('reporter_expansion', 'coarse')

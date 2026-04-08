@@ -1,0 +1,27 @@
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775660689.099841 4135543 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775660692.359778 4135543 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 22.00 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 19.70 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+2026-04-08 11:05:10,708 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0c7ec661519fd8f3fdb33d5c779d2bb8 initialized by task ('shuffle-transfer-0c7ec661519fd8f3fdb33d5c779d2bb8', 0) executed on worker inproc://10.18.22.69/4135543/8
+2026-04-08 11:05:11,970 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0c7ec661519fd8f3fdb33d5c779d2bb8 deactivated due to stimulus 'task-finished-1775660711.9700603'
+2026-04-08 11:05:14,161 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 284f5bdda10d4b80984a8e6f2b350145 initialized by task ('shuffle-transfer-284f5bdda10d4b80984a8e6f2b350145', 0) executed on worker inproc://10.18.22.69/4135543/4
+2026-04-08 11:05:14,183 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 284f5bdda10d4b80984a8e6f2b350145 deactivated due to stimulus 'task-finished-1775660714.1815817'
+scMPRAforge: INFO: QC regression for 'reference': dropped 1 of 1344 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'K562': dropped 10 of 1344 anti-levels with NaN before linregress.
+2026-04-08 11:05:21,359 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ff4b3e3d598ccd0566f3869c9ca65626 initialized by task ('shuffle-transfer-ff4b3e3d598ccd0566f3869c9ca65626', 0) executed on worker inproc://10.18.22.69/4135543/4
+2026-04-08 11:05:21,613 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ff4b3e3d598ccd0566f3869c9ca65626 deactivated due to stimulus 'task-finished-1775660721.612433'
+2026-04-08 11:05:23,840 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 760cd87975a3dc815e66b199e3bffda2 initialized by task ('shuffle-transfer-760cd87975a3dc815e66b199e3bffda2', 0) executed on worker inproc://10.18.22.69/4135543/4
+2026-04-08 11:05:23,862 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 760cd87975a3dc815e66b199e3bffda2 deactivated due to stimulus 'task-finished-1775660723.8624067'
