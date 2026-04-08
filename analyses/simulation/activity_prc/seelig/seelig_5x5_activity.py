@@ -33,9 +33,9 @@ N_SIMS_PER_DRAW = 5
 DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 SIM_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/simulated")
 
-# Canonical phantom ortho for seelig (CM NB)
+# Canonical phantom ortho for seelig (MOIB NB)
 ORTHO_DIR = DATA_ROOT / "seelig"
-ORTHO_NAME = "seelig_cm_nb_phantom"
+ORTHO_NAME = "seelig_cm_moib_phantom"
 
 
 def sim_name(gt_idx):
