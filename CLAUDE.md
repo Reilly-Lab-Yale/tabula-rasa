@@ -94,8 +94,11 @@ The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes 
 | **CRE-coarse reporter-informed zeros** | CRE-coarse reporter-informed expansion | The specific case where the transfection reporter operates at CRE level (not barcode level), requiring imputation across all barcodes of that CRE. Because the reporter cannot distinguish which barcodes were present, every unobserved barcode of a detected CRE is imputed as zero. Cohen U6 is the canonical example. Produces many more zeros than a barcode-level reporter would (where only the specific unobserved barcode gets a zero). |
 | **consider_missing zeros** | consider_missing expansion | Full Cartesian-product expansion: every (cell × barcode) combination in a replicate, regardless of reporter signal. Appropriate when there is no reporter (Seelig). |
 
+| **MOIB (MOI-biased) zeros** | MOIB expansion | CM expansion with phantom zero weights downweighted by the expected number of structural (non-transfection) zeros. Uses P(transfected) = 1 - (1-1/n_lib)^MOI to estimate how many of the Cartesian-product zeros are from non-transfection vs expression silence. Phantom weight per group = max(0, n_transfected - n_nonzero) instead of n_total - n_nonzero. Yields conditional mu (given transfection) rather than unconditional mu. Appropriate for datasets without a reporter (Seelig) where NB mu would otherwise be deflated by structural zeros. |
+
 **Relationship**: CRE-coarse reporter-informed zeros ⊂ reporter-informed zeros ⊂ consider_missing zeros.
-The obs condition uses only reporter-informed zeros (or none); CM uses all possible zeros.
+MOIB is a reweighted CM: same zero set, reduced phantom weights.
+The obs condition uses only reporter-informed zeros (or none); CM uses all possible zeros; MOIB uses all possible zeros but downweights structural zeros.
 
 ## Reporter-informed zero logic (Cohen U6 orphan handling)
 
