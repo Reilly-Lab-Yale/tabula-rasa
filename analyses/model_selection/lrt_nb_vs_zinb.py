@@ -60,6 +60,10 @@ pairs = {
         "zinb": data_root / "cohen" / "cohen_obsingle_zinb_phantom",
         "nb":   data_root / "cohen" / "cohen_obsingle_nb_phantom",
     },
+    "seelig_cm_moib": {
+        "zinb": data_root / "seelig" / "seelig_cm_moib_zinb_phantom",
+        "nb":   data_root / "seelig" / "seelig_cm_moib_phantom",
+    },
 }
 
 def load_models(path, filename):

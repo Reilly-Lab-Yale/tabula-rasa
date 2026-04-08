@@ -1,0 +1,340 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-08T16:05:21.001149
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc
+  Main jobs : 7672506, 7672507
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7672506  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7672506
+   User/Account: mcn26/prio_skr2
+       Job Name: ortho_qc
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 1
+     CPU Memory: 64GB
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Apr 8, 2026 at 2:55 PM
+       Run Time: 00:49:30
+     Time Limit: 04:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||||||||||||| 92%]
+  CPU memory usage [|                                               3%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u07n02: 00:45:31/00:49:30 (efficiency=92.0%)
+
+  CPU memory usage per node - used/allocated
+      a1130u07n02: 2.0GB/64GB 
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u07n02": {
+      "cpus": 1,
+      "total_memory": 68719476736,
+      "total_time": 2731.0,
+      "used_memory": 2115010560
+    }
+  },
+  "total_time": 2970
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7672506|ortho_qc|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u07n02|1|1|64G|2026-04-08T14:55:10|2026-04-08T14:55:12|2026-04-08T15:44:42|00:49:30|04:00:00|45:31.556|42:15.064|03:16.491|00:49:30||||||||||0:0
+7672506.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u07n02|1|1||2026-04-08T14:55:12|2026-04-08T14:55:12|2026-04-08T15:44:42|00:49:30||45:31.555|42:15.064|03:16.491|00:49:30|2920800K|2920800K|2765748K|2765748K|38532.55M|70.60M|38532.55M|70.60M|1|0:0
+7672506.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n02|1|1||2026-04-08T14:55:12|2026-04-08T14:55:12|2026-04-08T15:44:42|00:49:30||00:00:00|00:00:00|00:00:00|00:49:30|292K|292K|84K|84K|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 7672507  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7672507
+   User/Account: mcn26/prio_skr2
+       Job Name: ortho_qc
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 1
+     CPU Memory: 64GB
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Wed Apr 8, 2026 at 2:55 PM
+       Run Time: 00:49:47
+     Time Limit: 04:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||||||||||||||||||||||||  91%]
+  CPU memory usage [|                                               3%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u07n02: 00:45:19/00:49:47 (efficiency=91.0%)
+
+  CPU memory usage per node - used/allocated
+      a1130u07n02: 2.1GB/64GB 
+
+                                     Notes                                      
+================================================================================
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u07n02": {
+      "cpus": 1,
+      "total_memory": 68719476736,
+      "total_time": 2719.6,
+      "used_memory": 2230784000
+    }
+  },
+  "total_time": 2987
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7672507|ortho_qc|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u07n02|1|1|64G|2026-04-08T14:55:10|2026-04-08T14:55:12|2026-04-08T15:44:59|00:49:47|04:00:00|45:36.078|42:55.494|02:40.584|00:49:47||||||||||0:0
+7672507.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u07n02|1|1||2026-04-08T14:55:12|2026-04-08T14:55:12|2026-04-08T15:44:59|00:49:47||45:36.077|42:55.493|02:40.584|00:49:47|2888372K|2888372K|2712472K|2712472K|38411.64M|69.17M|38411.64M|69.17M|1|0:0
+7672507.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n02|1|1||2026-04-08T14:55:12|2026-04-08T14:55:12|2026-04-08T15:44:59|00:49:47||00:00:00|00:00:00|00:00:00|00:49:47|23264K|23348K|756K|1512K|0.21M|0.01M|0.21M|0.01M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u07n02 ───────────────────────────────────────────────────────────────
+NodeName=a1130u07n02 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=56 CPUEfctv=64 CPUTot=64 CPULoad=38.33
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u07n02 NodeHostName=a1130u07n02 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=563696 FreeMem=644642 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2026-02-27T02:01:31 SlurmdStartTime=2026-04-02T16:30:00
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=56,mem=563696M
+   CurrentWatts=728 AveWatts=647
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7672506.err  (58 lines total) ───────────────────────────────────────
+[first 20 lines]
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775674521.443965  750875 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775674527.634371  750875 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 20.99 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 26.22 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+2026-04-08 14:55:46,235 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cfbc9dec71a34a250d333f212af6b20 initialized by task ('shuffle-transfer-1cfbc9dec71a34a250d333f212af6b20', 0) executed on worker inproc://10.18.22.15/750875/8
+2026-04-08 14:55:47,441 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cfbc9dec71a34a250d333f212af6b20 deactivated due to stimulus 'task-finished-1775674547.4405534'
+scMPRAforge: INFO: QC: MOIB mode, p_transfected=0.011010 (MOI=73.5715, n_lib=6646).
+[last 38 lines]
+scMPRAforge: INFO: QC regression for 'reference': dropped 1 of 1344 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'K562': dropped 10 of 1344 anti-levels with NaN before linregress.
+2026-04-08 14:55:56,628 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cfbc9dec71a34a250d333f212af6b20 initialized by task ('shuffle-transfer-1cfbc9dec71a34a250d333f212af6b20', 0) executed on worker inproc://10.18.22.15/750875/8
+2026-04-08 14:55:56,762 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cfbc9dec71a34a250d333f212af6b20 deactivated due to stimulus 'task-finished-1775674556.7619817'
+scMPRAforge: INFO: QC: MOIB mode, p_transfected=0.011010 (MOI=73.5715, n_lib=6646).
+scMPRAforge: INFO: QC regression for 'CTCCCCTGCTCTGTACATACATCCCCCGGCATGTTTGCACACAGGTCGCTCCTCCGCTCCTCCGCTCCTCTGCTCTCCTCCCCTCTCCTCCGCTCCTCTGCTCCCCCTCTCGGTACATTCCCCGGCATGTTTGCACCTTCCCCTC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'CCCTGGCCCTGGGGGGGCCGGCCTATCGGCGCGGATGCGGCTGGGGGGGCCGGCCTATCCGCGCGGATCCGCTTCCAGATATCGCGGTGCGGCGGCTGAGTCATCTCGCGGGGCCGCGCTTCCGAGATACGCGGGGCCCCGCGCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GCTGGACACGGCCACCGGAACCCCCTTCTGACAGGAAATACATCCGGGGTGGAGGGGGCTGGGCAGCTGAATCCCAGCGACGGAATGGCCCTTGCCCTCACGAGTTACTTTACACAAACCCGCTGTCCCTGACCTTTCCAGCTGC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GCCCTTCCGCGTTTTCGCGTATCTTCCTTCCTATACGCTTTCTCATCCGCCCTCCCCCCCCCCCCTCCCCCCCCCCCCGCTTTCCCGCGCCTATCCGCGTTTTCGCGTATCTCCCTCCCTATGCGTCTTCCCGCGTATACGCTTT': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'TCGACTTCCTTATCTCTCGGAAGAGGGCGCGGCCTATCGGAAGGAAGCGCCGCCCGCCCTCCCCCCCACACCCCCCCCGATTTCGCGGAAGTCACACCCATTGGCTGATTTAATCCGCCCGATGACTCATCCGCCCCCCGCCCAC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGCCCCGCCCCGGGGCCCCCCCCCGCTTCCAGGAAGTGACTCATCCGCGGGGGGCGGGCCCCCCCCCCCCCACCCAGAAGAGGATGAGTCATCCTATATCGGCGGGGGGCCCAGCCTATAGGCCGGCCCCCCCCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGGGGCCCCGCCTATAGGGGCGGCGCTTCCAGGAAGTGACTCATCGGGGGGGGGCGGGGGGGGCGGCCTATAGGGCCGGGGGGGGGGGACTTCCCGGAAGCGCCGCCCCAAGAGGATGAGTCATCCTATATCGGCGGAGGGCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'AAGCGGCGCAGATAACGCGGAACCAATCGCTATATCTGACTCACACCCTCCCGCCCCAGATAAGGCGGAAGCGGCGGGCCCACCCCCACATATAGGGGGGGCCGACCCCCCGCCTATGAGTCACGCCACATCCGCGTCACGCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGAGGTTTAAACATGCGGGGAGATTTACATAAGGGGAATGTTGGGAGCTGACGGAAAGTTGAACTAACGGAAAGTCGAACAATGGTTGTTGCGGAATGTCGGAAAGTTGAAC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'CCGTGGGCCTGGGGGGCCCCGCCTATCGGCGGGGGGCGGCTTCGAGATATCGCGATCCGGCGGCTGAGTCATATCGGCGTGGACCCGCGGACCCCGGGGGGGCCCTGGGGGGGCCGCGCTTCCGAGATACGGCGGCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GTGGCACAAAACAATGACCGGACGGACATGCCCGGGCATGTCTGCCGCCCAGGCATGCCAGGGGCAAAGGACTTTGGACTGTGGCACCAAACAATCAACCAACGGTCATGCCCGGGCATGCCCCCTGCCCCCCCCCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+
+── slurm-7672506.out  (19 lines total) ───────────────────────────────────────
+[first 19 lines]
+http://10.18.22.15:8787/status
+[+] Loading ortho: /nfs/roberts/project/pi_skr2/shared/tabula_data_new/seelig/seelig_cm_moib_phantom
+[+] Model type: NB-only
+[+] Computing model QC...
+[+] Summary written: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/summary.txt
+[+] Plotting theta distributions...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots/theta_distributions.svg
+[+] Plotting r-value distributions...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots/r_values.svg
+[+] Plotting mu vs mean UMI (by_cell_type)...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots/mu_vs_mean_by_cell_type.svg
+[+] Plotting mu vs mean UMI (by_cre, worst + sample)...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots/mu_vs_mean_by_cre_worst.svg
+[+] Skipping ZI plot (NB-only model).
+[+] Plotting r-value vs missing data...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots/r_vs_missing.svg
+[+] All plots saved to: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/plots
+[+] Summary: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_phantom/summary.txt
+EXITING SHELL
+
+── slurm-7672507.err  (62 lines total) ───────────────────────────────────────
+[first 20 lines]
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: None
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775674521.443965  750874 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775674527.634370  750874 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/node.py:188: UserWarning: Port 8787 is already in use.
+Perhaps you already have a cluster running?
+Hosting the HTTP server on port 35599 instead
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 22.00 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 19.70 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+[last 42 lines]
+  warnings.warn(
+2026-04-08 14:55:49,974 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ef3e1323470cf5c33e548f382b91df0a initialized by task ('shuffle-transfer-ef3e1323470cf5c33e548f382b91df0a', 0) executed on worker inproc://10.18.22.15/750874/4
+2026-04-08 14:55:50,375 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ef3e1323470cf5c33e548f382b91df0a deactivated due to stimulus 'task-finished-1775674550.374322'
+scMPRAforge: INFO: QC: MOIB mode, p_transfected=0.011010 (MOI=73.5715, n_lib=6646).
+scMPRAforge: INFO: QC regression for 'reference': dropped 1 of 1344 anti-levels with NaN before linregress.
+scMPRAforge: INFO: QC regression for 'K562': dropped 10 of 1344 anti-levels with NaN before linregress.
+2026-04-08 14:55:59,225 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ef3e1323470cf5c33e548f382b91df0a initialized by task ('shuffle-transfer-ef3e1323470cf5c33e548f382b91df0a', 0) executed on worker inproc://10.18.22.15/750874/4
+2026-04-08 14:55:59,346 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle ef3e1323470cf5c33e548f382b91df0a deactivated due to stimulus 'task-finished-1775674559.346295'
+scMPRAforge: INFO: QC: MOIB mode, p_transfected=0.011010 (MOI=73.5715, n_lib=6646).
+scMPRAforge: INFO: QC regression for 'CTCCCCTGCTCTGTACATACATCCCCCGGCATGTTTGCACACAGGTCGCTCCTCCGCTCCTCCGCTCCTCTGCTCTCCTCCCCTCTCCTCCGCTCCTCTGCTCCCCCTCTCGGTACATTCCCCGGCATGTTTGCACCTTCCCCTC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'CCCTGGCCCTGGGGGGGCCGGCCTATCGGCGCGGATGCGGCTGGGGGGGCCGGCCTATCCGCGCGGATCCGCTTCCAGATATCGCGGTGCGGCGGCTGAGTCATCTCGCGGGGCCGCGCTTCCGAGATACGCGGGGCCCCGCGCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GCTGGACACGGCCACCGGAACCCCCTTCTGACAGGAAATACATCCGGGGTGGAGGGGGCTGGGCAGCTGAATCCCAGCGACGGAATGGCCCTTGCCCTCACGAGTTACTTTACACAAACCCGCTGTCCCTGACCTTTCCAGCTGC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GCCCTTCCGCGTTTTCGCGTATCTTCCTTCCTATACGCTTTCTCATCCGCCCTCCCCCCCCCCCCTCCCCCCCCCCCCGCTTTCCCGCGCCTATCCGCGTTTTCGCGTATCTCCCTCCCTATGCGTCTTCCCGCGTATACGCTTT': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'TCGACTTCCTTATCTCTCGGAAGAGGGCGCGGCCTATCGGAAGGAAGCGCCGCCCGCCCTCCCCCCCACACCCCCCCCGATTTCGCGGAAGTCACACCCATTGGCTGATTTAATCCGCCCGATGACTCATCCGCCCCCCGCCCAC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGCCCCGCCCCGGGGCCCCCCCCCGCTTCCAGGAAGTGACTCATCCGCGGGGGGCGGGCCCCCCCCCCCCCACCCAGAAGAGGATGAGTCATCCTATATCGGCGGGGGGCCCAGCCTATAGGCCGGCCCCCCCCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGGGGCCCCGCCTATAGGGGCGGCGCTTCCAGGAAGTGACTCATCGGGGGGGGGCGGGGGGGGCGGCCTATAGGGCCGGGGGGGGGGGACTTCCCGGAAGCGCCGCCCCAAGAGGATGAGTCATCCTATATCGGCGGAGGGCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'AAGCGGCGCAGATAACGCGGAACCAATCGCTATATCTGACTCACACCCTCCCGCCCCAGATAAGGCGGAAGCGGCGGGCCCACCCCCACATATAGGGGGGGCCGACCCCCCGCCTATGAGTCACGCCACATCCGCGTCACGCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGAGGTTTAAACATGCGGGGAGATTTACATAAGGGGAATGTTGGGAGCTGACGGAAAGTTGAACTAACGGAAAGTCGAACAATGGTTGTTGCGGAATGTCGGAAAGTTGAAC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'CCGTGGGCCTGGGGGGCCCCGCCTATCGGCGGGGGGCGGCTTCGAGATATCGCGATCCGGCGGCTGAGTCATATCGGCGTGGACCCGCGGACCCCGGGGGGGCCCTGGGGGGGCCGCGCTTCCGAGATACGGCGGCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+scMPRAforge: INFO: QC regression for 'GTGGCACAAAACAATGACCGGACGGACATGCCCGGGCATGTCTGCCGCCCAGGCATGCCAGGGGCAAAGGACTTTGGACTGTGGCACCAAACAATCAACCAACGGTCATGCCCGGGCATGCCCCCTGCCCCCCCCCCCCCCCCCC': dropped 1 of 2 anti-levels with NaN before linregress.
+/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/core.py:3483: SmallSampleWarning: One or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.
+  slope, intercept, r_value, p_value, std_err = linregress(mu_clean["mean(umis_mpra_bc)"], mu_clean["mu"])
+
+── slurm-7672507.out  (20 lines total) ───────────────────────────────────────
+[first 20 lines]
+http://10.18.22.15:35599/status
+[+] Loading ortho: /nfs/roberts/project/pi_skr2/shared/tabula_data_new/seelig/seelig_cm_moib_zinb_phantom
+[+] Model type: ZINB
+[+] Computing model QC...
+[+] Summary written: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/summary.txt
+[+] Plotting theta distributions...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/theta_distributions.svg
+[+] Plotting r-value distributions...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/r_values.svg
+[+] Plotting mu vs mean UMI (by_cell_type)...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/mu_vs_mean_by_cell_type.svg
+[+] Plotting mu vs mean UMI (by_cre, worst + sample)...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/mu_vs_mean_by_cre_worst.svg
+[+] Plotting ZI parameters...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/zi_by_cell_type.svg
+[+] Plotting r-value vs missing data...
+  saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots/r_vs_missing.svg
+[+] All plots saved to: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/plots
+[+] Summary: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/qc/qc/seelig_cm_moib_zinb_phantom/summary.txt
+EXITING SHELL

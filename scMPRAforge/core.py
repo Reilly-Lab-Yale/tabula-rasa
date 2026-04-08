@@ -2103,6 +2103,81 @@ def _smart_matrix(data,split):
     }
 
 
+def _cm_group_totals(pd_maps, split, level, moi_correction=None):
+    """
+    Compute per-(anti_level, rep_id) group totals for a CM split-level.
+
+    Returns a DataFrame with columns: [anti_col, rep_id, n_cells,
+    n_barcodes, n_total, n_nonzero, n_zeros] (and n_transfected when
+    moi_correction is provided).  Used by both _build_cm_fit_inputs
+    (fitting) and _nb_versus_means (QC) so that the phantom zero
+    denominator is computed in exactly one place.
+    """
+    anti = anti_split(split)
+    cell_map = pd_maps["cell_map"]
+    mpra_map = pd_maps["mpra_map"]
+    observed = pd_maps["observed"]
+
+    # ── Filter to this level ───────────────────────────────────────────
+    if split == "cell_type":
+        cell_subset = cell_map[cell_map["cell_type"] == level]
+        mpra_subset = mpra_map
+    else:
+        cell_subset = cell_map
+        mpra_subset = mpra_map[mpra_map["cre_id"] == level]
+
+    # ── Compute group totals: n_total per (anti_val, rep_id) ───────────
+    if split == "cre_id":
+        cells_per_group = (cell_subset.groupby(["rep_id", "cell_type"])
+                           .size().reset_index(name="n_cells"))
+        barcodes_per_rep = (mpra_subset.groupby("rep_id")
+                            .size().reset_index(name="n_barcodes"))
+        group_totals = cells_per_group.merge(barcodes_per_rep, on="rep_id")
+        anti_col = "cell_type"
+    else:
+        barcodes_per_group = (mpra_subset.groupby(["rep_id", "cre_id"])
+                              .size().reset_index(name="n_barcodes"))
+        cells_per_rep = (cell_subset.groupby("rep_id")
+                         .size().reset_index(name="n_cells"))
+        group_totals = barcodes_per_group.merge(cells_per_rep, on="rep_id")
+        anti_col = "cre_id"
+    group_totals["n_total"] = group_totals["n_cells"] * group_totals["n_barcodes"]
+
+    # ── Count nonzero per group ────────────────────────────────────────
+    obs_with_cell = observed.merge(
+        cell_subset[["rep_id", "cell_bc", "cell_type"]].drop_duplicates(),
+        on=["rep_id", "cell_bc"], how="inner")
+    obs_relevant = obs_with_cell.merge(
+        mpra_subset[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates(),
+        on=["rep_id", "mpra_bc"], how="inner")
+    nz = obs_relevant[obs_relevant["umis_mpra_bc"] > 0]
+
+    if len(nz) > 0:
+        nz_counts = (nz.groupby(["rep_id", anti_col])
+                     .size().reset_index(name="n_nonzero"))
+        group_totals = group_totals.merge(
+            nz_counts, on=["rep_id", anti_col], how="left")
+    else:
+        group_totals["n_nonzero"] = 0
+    group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
+
+    # ── Compute n_zeros (phantom weight per group) ─────────────────────
+    if moi_correction is not None:
+        moi = moi_correction['moi']
+        n_lib = moi_correction['n_library_barcodes']
+        p_transfected = 1.0 - (1.0 - 1.0 / n_lib) ** moi
+        group_totals["n_transfected"] = (
+            group_totals["n_total"] * p_transfected
+        ).round().astype(np.int64)
+        group_totals["n_zeros"] = np.maximum(
+            0, group_totals["n_transfected"] - group_totals["n_nonzero"]
+        )
+    else:
+        group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
+
+    return group_totals
+
+
 def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     """
     Build phantom-zero compressed design matrices for a consider_missing
@@ -2131,6 +2206,11 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     mpra_map = pd_maps["mpra_map"]
     observed = pd_maps["observed"]
 
+    # ── Group totals (shared with QC) ─────────────────────────────────
+    group_totals = _cm_group_totals(pd_maps, split, level,
+                                    moi_correction=moi_correction)
+    anti_col = "cell_type" if split == "cre_id" else "cre_id"
+
     # ── Filter to this level ───────────────────────────────────────────
     if split == "cell_type":
         cell_subset = cell_map[cell_map["cell_type"] == level]
@@ -2138,25 +2218,6 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     else:
         cell_subset = cell_map
         mpra_subset = mpra_map[mpra_map["cre_id"] == level]
-
-    # ── Compute group totals: n_total per (anti_val, rep_id) ───────────
-    if split == "cre_id":
-        # anti = cell_type; groups are (cell_type, rep_id)
-        cells_per_group = (cell_subset.groupby(["rep_id", "cell_type"])
-                           .size().reset_index(name="n_cells"))
-        barcodes_per_rep = (mpra_subset.groupby("rep_id")
-                            .size().reset_index(name="n_barcodes"))
-        group_totals = cells_per_group.merge(barcodes_per_rep, on="rep_id")
-        anti_col = "cell_type"
-    else:
-        # anti = cre_id; groups are (cre_id, rep_id)
-        barcodes_per_group = (mpra_subset.groupby(["rep_id", "cre_id"])
-                              .size().reset_index(name="n_barcodes"))
-        cells_per_rep = (cell_subset.groupby("rep_id")
-                         .size().reset_index(name="n_cells"))
-        group_totals = barcodes_per_group.merge(cells_per_rep, on="rep_id")
-        anti_col = "cre_id"
-    group_totals["n_total"] = group_totals["n_cells"] * group_totals["n_barcodes"]
 
     # ── Pick reference level ─────────────────────────────────────────
     freq = group_totals.groupby(anti_col)["n_total"].sum()
@@ -2192,32 +2253,6 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         mpra_subset[["rep_id", "mpra_bc", "cre_id"]],
         on=["rep_id", "mpra_bc"], how="inner")
     nz = obs_relevant[obs_relevant["umis_mpra_bc"] > 0]
-
-    # ── Count nonzero per group ────────────────────────────────────────
-    if len(nz) > 0:
-        nz_counts = (nz.groupby(["rep_id", anti_col])
-                     .size().reset_index(name="n_nonzero"))
-        group_totals = group_totals.merge(
-            nz_counts, on=["rep_id", anti_col], how="left")
-    else:
-        group_totals["n_nonzero"] = 0
-    group_totals["n_nonzero"] = group_totals["n_nonzero"].fillna(0).astype(np.int64)
-
-    if moi_correction is not None:
-        # MOI-based phantom zero downweighting: subtract structural zeros
-        # (from incomplete transfection) so phantom weight reflects only
-        # expression zeros (transfected but unobserved).
-        moi = moi_correction['moi']
-        n_lib = moi_correction['n_library_barcodes']
-        p_transfected = 1.0 - (1.0 - 1.0 / n_lib) ** moi
-        group_totals["n_transfected"] = (
-            group_totals["n_total"] * p_transfected
-        ).round().astype(np.int64)
-        group_totals["n_zeros"] = np.maximum(
-            0, group_totals["n_transfected"] - group_totals["n_nonzero"]
-        )
-    else:
-        group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
 
     # ── Build compressed arrays ────────────────────────────────────────
     # Nonzero observations: individual rows, weight=1
@@ -3261,15 +3296,29 @@ class ortho:
 
         Meant for debugging / manual inspection.
         """
+        # Detect fit_mode from design dicts for conditional mean adjustment
+        fit_mode = None
+        for design_dict in (self.by_cell_type_design, self.by_cre_design):
+            if design_dict is not None:
+                sample_key = next(iter(design_dict))
+                sample = design_dict[sample_key]
+                if hasattr(sample, 'result'):
+                    sample = sample.result()
+                fit_mode = sample.get('fit_mode', None)
+                if fit_mode is not None:
+                    break
+
         self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
             design_keys=list(self.by_cell_type_design.keys()) if self.by_cell_type_design is not None else None,
-            scMPRAdat=self.training_data)
+            scMPRAdat=self.training_data,
+            fit_mode=fit_mode)
         self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters,
             design_keys=list(self.by_cre_design.keys()) if self.by_cre_design is not None else None,
-            scMPRAdat=self.training_data)
+            scMPRAdat=self.training_data,
+            fit_mode=fit_mode)
     
     @staticmethod
-    def _nb_versus_means(params,scMPRAdat,design_keys=None):
+    def _nb_versus_means(params,scMPRAdat,design_keys=None,fit_mode=None):
         """
         Takes a model & original training data and produces a QC dictionary
         regressing data means against nb estimates.
@@ -3277,6 +3326,9 @@ class ortho:
 
         design_keys: optional list of level keys from the design dict, used
         only for a sanity-check assertion that params and design are aligned.
+        fit_mode: if a phantom fit_mode, uses _cm_group_totals to compute
+        the effective denominator (n_nonzero + n_zeros) the model actually
+        saw, so the QC comparison is on the correct scale.
         """
         if design_keys is not None:
             assert sorted(params.keys)==sorted(design_keys), "mismatched model"
@@ -3289,9 +3341,39 @@ class ortho:
         if hasattr(data["umis_mpra_bc"].dtype, 'fill_value'):
             data["umis_mpra_bc"] = data["umis_mpra_bc"].astype("int64")
 
-        # For CM orthos, precompute denominator info so we can estimate
-        # CM means without materializing the full Cartesian expansion.
-        if use_missing:
+        # For CM phantom orthos, gather maps and MOI correction info so we
+        # can call _cm_group_totals (the same function used at fit time).
+        cm_maps = None
+        moi_correction = None
+        if use_missing and fit_mode in ("cm_phantom", "cm_phantom_moib"):
+            obs_pdf = _to_pandas(data)
+            cell_map = obs_pdf[["rep_id", "cell_bc", "cell_type"]].drop_duplicates()
+            mpra_map = obs_pdf[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates()
+            # observed must match _get_missing_maps format: only
+            # [rep_id, cell_bc, mpra_bc, umis_mpra_bc] -- extra columns
+            # (cre_id, cell_type) cause suffix collisions in merges inside
+            # _cm_group_totals.
+            obs_for_maps = (obs_pdf.groupby(["rep_id", "cell_bc", "mpra_bc"])
+                            ["umis_mpra_bc"].sum().reset_index())
+            cm_maps = {"cell_map": cell_map, "mpra_map": mpra_map, "observed": obs_for_maps}
+
+            if fit_mode == "cm_phantom_moib":
+                transfection_desc = scMPRAdat.describe_transfection()
+                moi = float(transfection_desc.mu_nb)
+                n_lib = int(mpra_map["mpra_bc"].nunique())
+                moi_correction = {
+                    'moi': moi,
+                    'n_library_barcodes': n_lib,
+                }
+                p_t = 1.0 - (1.0 - 1.0 / n_lib) ** moi
+                logger.info(
+                    f"QC: MOIB mode, p_transfected={p_t:.6f} "
+                    f"(MOI={moi:.4f}, n_lib={n_lib})."
+                )
+
+        # For non-phantom CM orthos, precompute denominator info so we can
+        # estimate CM means without materializing the full Cartesian expansion.
+        if use_missing and cm_maps is None:
             # n_cells per (split_level, rep_id)
             cells_per_split_rep = _to_pandas(
                 data.groupby([split, "rep_id"])["cell_bc"].nunique()
@@ -3305,13 +3387,30 @@ class ortho:
         for model_level in params.keys:
             subset = data[data[split] == model_level]
 
-            if use_missing:
-                # CM mean = obs_sum / total_possible_rows
-                # total_possible per (anti_level, rep) = n_cells * n_barcodes
+            if use_missing and cm_maps is not None:
+                # Use _cm_group_totals for the same denominator as fitting
+                gt = _cm_group_totals(
+                    cm_maps, split, model_level,
+                    moi_correction=moi_correction,
+                )
+                anti_col = anti
+                obs_sum = _to_pandas(
+                    subset.groupby([anti, "rep_id"])["umis_mpra_bc"].sum()
+                )
+                obs_sum.name = "obs_sum"
+
+                # Effective denominator = n_nonzero + n_zeros per group
+                gt["n_effective"] = gt["n_nonzero"] + gt["n_zeros"]
+                eff = gt.groupby(anti_col)["n_effective"].sum()
+                obs_by_anti = obs_sum.groupby(level=0).sum()
+                data_means = obs_by_anti / eff.replace(0, np.nan)
+                data_means.name = "mean(umis_mpra_bc)"
+
+            elif use_missing:
+                # Legacy path for CM orthos without fit_mode tag
                 obs_sum = _to_pandas(subset.groupby([anti, "rep_id"])["umis_mpra_bc"].sum())
                 obs_sum.name = "obs_sum"
 
-                # Build total_possible per (anti_level, rep)
                 reps = cells_per_split_rep.loc[model_level] if model_level in cells_per_split_rep.index.get_level_values(0) else pd.Series(dtype="int64")
                 totals = {}
                 for anti_level in obs_sum.index.get_level_values(0).unique():
@@ -3323,7 +3422,6 @@ class ortho:
                 total_possible = pd.Series(totals, name="total_possible")
                 total_possible.index = pd.MultiIndex.from_tuples(total_possible.index, names=[anti, "rep_id"])
 
-                # CM mean per anti_level = sum(obs_sum across reps) / sum(total_possible across reps)
                 combined = pd.DataFrame({"obs_sum": obs_sum, "total_possible": total_possible}).fillna(0)
                 by_anti = combined.groupby(level=0).sum()
                 data_means = (by_anti["obs_sum"] / by_anti["total_possible"].replace(0, np.nan))

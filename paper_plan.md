@@ -447,3 +447,11 @@ Ideas that are out of scope for v1 but worth recording for a future version.
   cell types via Cochran's Q. Cross-model independence is exact by construction
   (cell-type models are fitted independently), so no joint covariance estimation
   needed. Would pair well with empirical Bayes shrinkage for low-count CREs.
+
+- **Per-cell-type MOI for MOIB.** Currently MOIB uses a single global MOI
+  (from `describe_transfection`) to compute P(transfected) for all groups.
+  Different cell types may have different transfection efficiencies, yielding
+  different effective MOIs. A future version could estimate per-cell-type MOI
+  and use cell-type-specific P(transfected) when computing phantom zero weights
+  in `_cm_group_totals`. Would require parameterizing `moi_correction` as a
+  dict keyed by cell_type rather than a single scalar.

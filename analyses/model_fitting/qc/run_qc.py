@@ -92,6 +92,20 @@ if hasattr(first_model, 'result'):
 is_nb_only = first_model.get("nb_only", False)
 print(f"[+] Model type: {'NB-only' if is_nb_only else 'ZINB'}", flush=True)
 
+# -- detect fit_mode for axis labels -------------------------------------------
+fit_mode = None
+for design_dict in (primordial.by_cell_type_design, primordial.by_cre_design):
+    if design_dict is not None:
+        sample_key = next(iter(design_dict))
+        sample = design_dict[sample_key]
+        if hasattr(sample, 'result'):
+            sample = sample.result()
+        fit_mode = sample.get('fit_mode', None)
+        if fit_mode is not None:
+            break
+is_moib = fit_mode == "cm_phantom_moib"
+mean_label = "mean UMI (conditional)" if is_moib else "mean UMI (observed)"
+
 # -- compute QC ----------------------------------------------------------------
 print("[+] Computing model QC...", flush=True)
 primordial.compute_model_qc()
@@ -261,7 +275,7 @@ for i, (ct, qc_entry) in enumerate(by_cell.items()):
     subtitle = label(ct)
     if n_drop > 0:
         subtitle += f" ({n_drop} NaN dropped)"
-    ax.set_xlabel("mean UMI (observed)")
+    ax.set_xlabel(mean_label)
     ax.set_ylabel("mu (NB estimate)")
     ax.set_title(subtitle)
 
@@ -303,7 +317,7 @@ for i, (cre_id, qc_entry) in enumerate(to_plot):
     r = qc_entry["r_value"]
     ax.set_title(f"r={r:.2f}", fontsize=7)
     ax.tick_params(labelsize=6)
-    ax.set_xlabel("mean UMI", fontsize=6)
+    ax.set_xlabel(mean_label, fontsize=6)
     ax.set_ylabel("mu", fontsize=6)
 
 for ax in axes_flat[len(to_plot):]:

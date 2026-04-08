@@ -1,5 +1,8 @@
 # scMPRAforge — CLAUDE.md
 
+See also: `paper_plan.md` in repo root for analysis tasks, figure plan, model
+selection results, and dream/v2 feature ideas.
+
 ## What this project is
 
 scMPRAforge is a Python package for analysis of single-cell MPRA (Massively Parallel Reporter Assay) data. It fits stratified ZINB (zero-inflated negative binomial) or NB (negative binomial) models to scMPRA count data and provides hypothesis testing (Wald, MWU, bootstrap), simulation, and power analysis.

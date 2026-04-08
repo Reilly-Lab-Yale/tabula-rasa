@@ -1,6 +1,6 @@
 ========================================================================
-  seelig_cm_moib_phantom -- Model QC Summary
-  Model type: NB-only
+  seelig_cm_moib_zinb_phantom -- Model QC Summary
+  Model type: ZINB
 ========================================================================
 
 -- Convergence ---------------------------------------------------------
@@ -10,8 +10,8 @@
 
 -- Mu range (NB mean estimate) -----------------------------------------
 
-  by_cell_type: min=0.0000  max=7.2557  median=0.5050
-  by_cre: min=0.0008  max=7.2444  median=0.5044
+  by_cell_type: min=0.0000  max=7.2421  median=0.5042
+  by_cre: min=0.0008  max=7.2531  median=0.5063
 
 -- Pearson r (mu vs mean UMI) ------------------------------------------
 
