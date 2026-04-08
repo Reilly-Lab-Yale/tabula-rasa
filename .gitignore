@@ -2,6 +2,9 @@ bc.md
 .vscode
 *DS_Store
 slave*.out
+slurm-*.out
+slurm-*.err
+worker_*.out
 mcn_workbench/*
 __pycache__/
 *.pkl

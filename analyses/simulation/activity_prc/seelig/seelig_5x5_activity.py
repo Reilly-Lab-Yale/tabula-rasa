@@ -231,7 +231,7 @@ def phase_test(client):
         sim.save()
         print(f"GT draw {gt_idx}: wald done.", flush=True)
 
-        sim.mwu("hs_all_ct")
+        sim.mwu("hs_all_ct", has_reporter=False)
         sim.save()
         print(f"GT draw {gt_idx}: mwu done.", flush=True)
 
