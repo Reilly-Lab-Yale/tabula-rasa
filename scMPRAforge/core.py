@@ -7616,12 +7616,21 @@ class de_novo_simulation:
                 sep="\t",
                 compression="gzip")
 
-    def mwu(self,name):
+    def mwu(self, name, has_reporter=True):
         """
-        Takes a name of a hypotheses set added previously with 
+        Takes a name of a hypotheses set added previously with
         `add_hypothesis_set` and runs mann whitney u tests.
         NOTE: Tests are performed directly on simulated data.
         This means that ortho filtering is not applied!
+
+        has_reporter : bool, default True
+            Whether the experiment has a transfection reporter. When False,
+            all zero-count observations are dropped before testing. This
+            matches what real no-reporter data looks like on disc (only
+            non-zero MPRA signal is observed). Without this, simulated data
+            gives MWU an unfair advantage: the simulation generates explicit
+            zeros for transfected-but-silent events, which a no-reporter
+            experiment would never observe.
         """
         #init & load relevant hypothesis set...
         hypod=self.testd/name
@@ -7646,7 +7655,8 @@ class de_novo_simulation:
         def _mwu_helper(tscription_future,
                         path_scmpradat,
                         path_output,
-                        hypothesis_set):
+                        hypothesis_set,
+                        has_reporter):
             # Column-projected pandas read — only loads the 3 columns MWU
             # needs, directly via pandas. Avoids dd.read_parquet which would
             # submit Dask sub-tasks from inside a worker task, causing
@@ -7656,6 +7666,11 @@ class de_novo_simulation:
                 columns=["cell_type", "cre_id", "umis_mpra_bc"],
                 engine="pyarrow",
             )
+            if not has_reporter:
+                pdf["umis_mpra_bc"] = pd.to_numeric(
+                    pdf["umis_mpra_bc"], errors="coerce"
+                ).fillna(0)
+                pdf = pdf[pdf["umis_mpra_bc"] > 0]
             bundle = _build_mwu_counts_dict(pdf)
             del pdf
 
@@ -7680,8 +7695,9 @@ class de_novo_simulation:
                     tscription_future=tscription_futures[idx],
                     path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
                     path_output=testd/f"{idx}_results.tsv",
-                    hypothesis_set=hypotheses)
-            
+                    hypothesis_set=hypotheses,
+                    has_reporter=has_reporter)
+
             self.testqueue.append(r)
             
     def wald(self, name, cov_method="auto", serial_orthos: bool = True):

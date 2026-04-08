@@ -18,6 +18,7 @@ module load miniconda
 conda activate tz
 module load CUDA cuDNN
 
+export PYTHONPATH=/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa:$PYTHONPATH
 cd /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/simulation/activity_prc/seelig
 
 python seelig_5x5_activity.py fit
