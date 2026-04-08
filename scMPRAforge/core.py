@@ -7,6 +7,8 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+import ctypes
+
 import pandas as pd
 import numpy as np
 
@@ -21,6 +23,7 @@ import pyarrow.parquet as pq
 import json
 
 import itertools
+from pathlib import Path
 
 import scipy
 from scipy.stats import linregress, chi2, norm, mannwhitneyu
@@ -42,6 +45,8 @@ import dask
 
 import os
 
+import re
+
 from enum import Enum
 from typing import List, Dict, Sequence, Tuple, Optional
 
@@ -54,14 +59,7 @@ from sklearn.metrics import precision_recall_curve, average_precision_score, roc
 
 import warnings
 
-# tensorflow import for Wald test Hessian/SE computation
-# NOTE: disable_eager_execution() is NOT called here — TensorZINB sparse training
-# requires TF2 eager mode. Graph mode is enabled lazily inside the Wald functions
-# (_estimate_cov_se, _hessian_se_graph) which are called only after fitting is done.
-try:
-    import tensorflow as tf
-except Exception as _tf_err:
-    tf = None
+import tensorflow as tf
 
 import scipy.linalg as la
 from numpy.linalg import LinAlgError
@@ -79,36 +77,6 @@ from .utils import pow_curve
 
 
 logger = logging.getLogger("scMPRAforge")
-
-def dump_df_debug(df, prefix="debug_df", outdir="."):
-    uid = uuid.uuid4().hex
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    path = outdir / f"{prefix}_{uid}.tsv.gz"
-    df.to_csv(path, sep="\t", index=False, compression="gzip")
-
-    logger.info(f"[debug] dumped df to: {path}")
-    return path
-
-def dump_df_pickle_debug(df, prefix="debug_df", outdir="."):
-    uid = uuid.uuid4().hex
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    path = outdir / f"{prefix}_{uid}.pkl"
-    df.to_pickle(path)
-
-    print(f"[debug] pickled df to: {path}")
-    return path
-
-
-def load_df_pickle_debug(path):
-    path = Path(path)
-    df = pd.read_pickle(path)
-
-    print(f"[debug] loaded df from: {path}")
-    return df
 
 MIN_PTS=3
 PARTITION_SIZE_MB=50
@@ -193,6 +161,37 @@ RESULT_ALL = HYPOTHESIS_ALL | RESULT_REQUIRED
 THREADS_DEFAULT = 5
 
 #functions
+
+def dump_df_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    path = outdir / f"{prefix}_{uid}.tsv.gz"
+    df.to_csv(path, sep="\t", index=False, compression="gzip")
+
+    logger.info(f"[debug] dumped df to: {path}")
+    return path
+
+def dump_df_pickle_debug(df, prefix="debug_df", outdir="."):
+    uid = uuid.uuid4().hex
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    path = outdir / f"{prefix}_{uid}.pkl"
+    df.to_pickle(path)
+
+    print(f"[debug] pickled df to: {path}")
+    return path
+
+
+def load_df_pickle_debug(path):
+    path = Path(path)
+    df = pd.read_pickle(path)
+
+    print(f"[debug] loaded df from: {path}")
+    return df
+
 @unimplemented
 def always_unfinished():
     """tests unimplemented decorator."""
@@ -232,15 +231,12 @@ def table_type(column_names):
     
     (We could extend to type-checking as well, but that seems a tad draconian / unpythonic.)
     """
-    ### UPDATE: ENG refactored slightly to incorporate hypothesis table and simplify some lines
-    #Performs subset checking so that extra columns are allowed.
-    #Matching multiple definitions however is NOT allowed. 
-    
-    #If columns match no definitions the table is malformed: so this is the default. 
     cols = set(map(str, column_names))  # tolerate ArrowDtype/Index types
     ret = 'malformed'
     matches = 0
 
+	#TODO: we are currently defining column sets here, when the established pattern was to use constants: fix. 
+	#TODO: Why do we have both strict and non-strict? Is non-strict actuallt being used anywhere.
     # Read-wise MPRA (use the names used elsewhere in the codebase)
     if {'cell_bc','rep_id','cre_id','cell_type','mpra_bc','umi','reads'} <= cols:
         ret = 'mpra_readwise'; matches += 1
@@ -336,13 +332,12 @@ def _prepare_subset_for_modeling(pdf: pd.DataFrame) -> pd.DataFrame:
     pdf["umis_mpra_bc"] = pd.to_numeric(pdf["umis_mpra_bc"], errors="coerce").fillna(0).astype("int64")
     return pdf
 
-import re
-
 def _extract_square(s):
     """
     Utility function which extracts the contents of [T. ] or [ ] brackets from  string `s`
     Assumes one pair of brackets
     If no brackets are found, returns `s` untouched.
+	TODO: See if we can move to .util
     """
     tm = re.search(r"\[T\.(.*?)\]", s)
     m = re.search(r"\[(.*?)\]", s)
@@ -352,12 +347,12 @@ def _extract_square(s):
         return m.group(1)
     else:
         return s
-    
 
 def _matricies_to_order(matricies):
     """
     Helper function. Extracts column index order from matricies for use elsewhere.
     Replaces `Intercept` with `reference`.
+	TODO: See if we can move to .util
     """
     zi_names=matricies["zi_regressor_names"] if "zi_regressor_names" in matricies else list(matricies["zi_regressors"].columns)
     zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_names]
@@ -367,7 +362,7 @@ def _matricies_to_order(matricies):
 
     return {'zi_idx':zi_idx,'nb_idx':nb_idx}
 
-def _mom_from_training_data(data,split,subset,indicies):
+def _mom_from_training_data(data,split,subset,indicies,identifiability_frac=0.05):
     """
     Helper function implementing warm start method of moments for parameter initalization.
     See [[Fixing zinb initialization]] and [[LFC is beta]] for math.
@@ -385,7 +380,7 @@ def _mom_from_training_data(data,split,subset,indicies):
     raw=data[data[split]==subset]
     raw=raw.drop(columns=split)
 
-    # --- ZI identifiability check ---
+    # ZI identifiability check
     # Compute P(X=0|NB) from *non-zero* observations per CRE.  When the
     # non-zero expression distribution already produces many zeros under NB,
     # ZI is not separable from NB and MoM's estimate is unreliable.
@@ -412,7 +407,7 @@ def _mom_from_training_data(data,split,subset,indicies):
                 f"MoM for '{subset}': median P(X=0|NB) from non-zero data = "
                 f"{median_pzero:.4f}"
             )
-            if median_pzero > 0.05:
+            if median_pzero > identifiability_frac:
                 logger.info(
                     f"MoM for '{subset}': NB naturally explains zeros "
                     f"(P(X=0|NB)={median_pzero:.3f} > 0.05); ZI poorly "
@@ -450,13 +445,9 @@ def _mom_from_training_data(data,split,subset,indicies):
     #that cre, across all reps, has a mean of [mean_umis_mpra_bc] and a 
     #variance of [var_umis_mpra_bc].' 
     
-    
-    
     zi_stats["gross_zero_prop"]=zi_stats["n_zero"]/zi_stats["n"]
     
     #We now want to figure out how many zeros are expected from the nb portion
-    
-    
     #compute nb params
     zi_stats["p"]=zi_stats["mean_umis_mpra_bc"]/zi_stats["var_umis_mpra_bc"]
     zi_stats["r"]=zi_stats["mean_umis_mpra_bc"]**2 / (zi_stats["var_umis_mpra_bc"] - zi_stats["mean_umis_mpra_bc"])
@@ -467,8 +458,7 @@ def _mom_from_training_data(data,split,subset,indicies):
     #fill out non-valid nb cases with zero portion using poisson
     zi_stats.loc[~zi_stats["valid_nb"],"nb_zero_prop"]=np.exp(-zi_stats["mean_umis_mpra_bc"])
 
-    assert ~any(zi_stats["nb_zero_prop"].isna())
-
+    assert ~any(zi_stats["nb_zero_prop"].isna())#TODO: add a message
 
     zi_stats["zero_inflation"]=zi_stats["gross_zero_prop"]-zi_stats["nb_zero_prop"]
     zi_stats["zero_inflation"]=np.clip(zi_stats["zero_inflation"],0,1)
@@ -489,7 +479,6 @@ def _mom_from_training_data(data,split,subset,indicies):
     working_nb["beta"].loc["reference"]=np.log(working_nb["mean_umis_mpra_bc"].loc["reference"])
     
     nb_betas=working_nb["beta"]
-
     
     #now calculate theta betas
     working_nb=nb_stats.copy()
@@ -512,19 +501,11 @@ def _mom_from_training_data(data,split,subset,indicies):
 
 
 
-@unimplemented
-def skew_spread():
-    """
-    Creates a ground-truth dataframe of an scMPRA experiment
-    that is meant to test skew
-    (see readme for ground truth dataframe specification)
-    """
-    pass
-
 def recombinator(primary,secondary):
     """
     All pairs of (All pairs of primary), secondary.
     two duplicate `secondary` entries in each element.
+	TODO: see if we can move to utils
     """
     combos=itertools.combinations(primary,2)
     return [(i,j,k,k) for (i,j) in combos for k in secondary]
@@ -626,7 +607,6 @@ def activity_spread(cell_types:List[str],
     columns=["reference_cell_type","comparison_cell_type","comparison_CRE","reference_CRE"])
 
     hypothesis_set=HypothesisSet.from_dataframe(pd.concat([all_cre_vs_ref,ct_tests]))
-    
 
     return (final_gt, hypothesis_set)
 
@@ -726,21 +706,6 @@ def simple_spread(cell_types:List[str],
 
     
     return (final_ground_truth,hypothesis_set)
-
-@unimplemented
-def load_hypothesis_set(filepath):
-    """
-    Arguments
-        filepath <str>
-    Returns
-        <pd.DataFrame>
-
-    Loads a hypothesis or hypothesis+results set from disc.
-    """
-    #load table...
-    #assert table_type(table.columns)=="hypothesis" or table_type(table.columns)=="results"
-    #return table
-    pass
 
 class simple_count:
     """
@@ -1218,7 +1183,7 @@ class Bounds:
         
         return ret
 
-from pathlib import Path
+
 
 working_dir = Path(__file__).resolve().parent
 SHENDURE_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_zinb_phantom.tgz")
@@ -1233,17 +1198,17 @@ COHEN_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_zinb_phantom.
 COHEN_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_cm_nb_phantom.tgz")
 COHEN_OBSINGLE_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obsingle_nb_phantom.tgz")
 COHEN_OBSINGLE_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/cohen_obsingle_zinb_phantom.tgz")
+#cannonical
 COHEN_BOUNDS=COHEN_OBSINGLE_NB_BOUNDS
 
 SEELIG_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_zinb_phantom.tgz")
 SEELIG_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_nb_phantom.tgz")
+#cannonical
 SEELIG_BOUNDS=SEELIG_CM_NB_BOUNDS
 
 class scMPRA_data:
     """
     Wrapper around a Dask dataframe of MPRA data.
-    The primary purpose of the object is to record what operations have been performed on the data
-    (DataFrames do not support object-level metadata cleanly).
     """
     def __init__(self):
         self.data=None
@@ -1261,6 +1226,9 @@ class scMPRA_data:
         self._ortho_filter_applied=False
 
     def _ensure_consider_missing_defaults(self):
+		""""
+		TODO: why did I add this function again? Surely can just be rolled into set consider missing? or is it called someplace else too?
+		""""
         if not hasattr(self, "consider_missing_enabled"):
             self.consider_missing_enabled = False
         if not hasattr(self, "consider_missing_max_memory_gb"):
@@ -1325,6 +1293,7 @@ class scMPRA_data:
         """
         if isinstance(reporter, (str, Path)):
             reporter = pd.read_csv(str(reporter), sep='\t')
+		#TODO: define this "required" in a constant at the beginning, matching pattern
         required = {"rep_id", "cell_bc", "cre_id"}
         missing = required - set(reporter.columns)
         if missing:
@@ -1553,7 +1522,7 @@ class scMPRA_data:
         """
         If you have simulated a dataset, it will probably have some degree of 
         overtransfection (same MPRA bc transfected into the same cell multiple times).
-        This function flattens such events, as they would be observed in a real dataset.
+        This function flattens such events, recreating how they would be observed in a real dataset.
         """
         if not self.metadata.get("synthetic"):
             raise ValueError("Can't flatten overtransfection on an emperical dataset.")
@@ -1909,42 +1878,6 @@ class scMPRA_data:
         self._ortho_filter_applied = True
         self.operations.append((f"filter_low_umi_count, threshold={MIN_PTS}", dropped_combos))
 
-
-    @unimplemented
-    def round_down_zeroes():
-        """
-        TODO: implement
-        ON HOLD: not clear how much we really care about making comparisons to zeroed CREs..
-        If, later on, we find that we want to make these comparisons, come back and implement this.
-
-        This is a follow-up to "ortho_filter".
-
-        When a CRE+Cell-type combination has too few cells with non-zero observations
-        to be modeled, this could be for one of two reasons.
-        1. The CRE (in that cell-type) is simply expressed at too low a level to be detected here.
-        2. Something technical went wrong. e.g. CRE was transfected into that cell-type at a low efficiency. 
-
-        In either case, we cannot model that CRE-cell-type combination. However, recognizing the difference
-        can be important. e.g. in case 2, we can't make any statements that that CRE + cell-type is 
-        sig different from another CRE+cell-type. In case 1, we can! We just can't use the wald test.
-
-        Things that differentiate case 1 from case 2 : 
-        - If the few measurement(s) which are actually present in the data are a high number of UMIs
-            that suggests 2 over 1. If they are a low number, that suggests 1 over 2. 
-        - If the data are post transfection reporter filtering, then a large number of zeroes indicates
-        case 1
-
-        This function will use that information to call each filtered CRE as either "not detected" (1) or "dropout" (2)
-        The default is "dropout", and the presence of sufficient evidence can move a filtered combination
-        to "not detected".
-        
-        """
-        pass
-
-#        1         2         3         4         5         6         7         8
-#2345678901234567890123456789012345678901234567890123456789012345678901234567890
-    
-
 @unimplemented
 def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     """
@@ -1967,59 +1900,6 @@ def flatten_barcode_errors(df, barcode_column,*args,**kwargs):
     return ret
 
 
-@unimplemented
-def apply_deseq():
-    """
-    R quarantine zone. 
-    """
-    pass
-
-
-
-
-
-"""
-ortho
-- contains multiple experimental models for the same dataset
-- useful sets are 
-    - criss-cross
-    - criss-cross subsetted to hypothesis test...
-
-fit()
-- takes a client & model params
-- internally defines 
-- returns an experiment_model
-
-experiment_model
-- mostly just an elaborate struct : minimal code, mostly results...
-- no more SM, only tzinb
-- will contain 1x model
-- will NOT keep data
-- lazy eval
-- parameter extraction pulls triples from model
-- self-description
-	- model decisions : each is a / string. Strings compared against supported
-        - nb form
-        - zi form
-        - split by
-    - str dataset name (incl. source)
-    - metadata
-		- additional unstructured metadata in a dictionary
-
-extract_triples()
-
-triples
-
-"""
-
-#suggested formulas. 
-#SUGGESTED_NB=['reads_mpra_bc ~ C(cell_type)*C(cre_id)',
-#    'reads_mpra_bc ~ C(cell_type)',
-#    'reads_mpra_bc ~ umis_transfection_bc:C(cell_type) + umis_transfection_bc:C(cre_id) + umis_transfection_bc:C(cell_type):C(cre_id) -1']
-#SUGGESTED_ZI=['C(replicate)']
-#SUGGESTED_BREAKBY=['']
-
-
 def abort_on_failure(future,client):
     """
     Call this function with a completed future that is strictly necessary for the task at hand.
@@ -2038,9 +1918,6 @@ def abort_on_failure(future,client):
         sprint("[!] Check slave node logs for details.")
         client.shutdown()
         assert 1==2
-
-#        1         2         3         4         5         6         7         8
-#2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
 
 def _smart_matrix(data,split):
@@ -2131,7 +2008,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     mpra_map = pd_maps["mpra_map"]
     observed = pd_maps["observed"]
 
-    # ── Filter to this level ───────────────────────────────────────────
+    # Filter to this level
     if split == "cell_type":
         cell_subset = cell_map[cell_map["cell_type"] == level]
         mpra_subset = mpra_map
@@ -2139,7 +2016,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         cell_subset = cell_map
         mpra_subset = mpra_map[mpra_map["cre_id"] == level]
 
-    # ── Compute group totals: n_total per (anti_val, rep_id) ───────────
+    # Compute group totals: n_total per (anti_val, rep_id) 
     if split == "cre_id":
         # anti = cell_type; groups are (cell_type, rep_id)
         cells_per_group = (cell_subset.groupby(["rep_id", "cell_type"])
@@ -2158,7 +2035,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         anti_col = "cre_id"
     group_totals["n_total"] = group_totals["n_cells"] * group_totals["n_barcodes"]
 
-    # ── Pick reference level ─────────────────────────────────────────
+    # Pick reference level
     freq = group_totals.groupby(anti_col)["n_total"].sum()
     model_type = None  # set below
     if "reference" in freq.index:
@@ -2184,7 +2061,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         anti_to_nb_col[lev] = i + 1
     rep_to_zi_col = {rep: i for i, rep in enumerate(rep_levels)}
 
-    # ── Get relevant nonzero observations ──────────────────────────────
+    # Get relevant nonzero observations
     obs_with_cell = observed.merge(
         cell_subset[["rep_id", "cell_bc", "cell_type"]],
         on=["rep_id", "cell_bc"], how="inner")
@@ -2193,7 +2070,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         on=["rep_id", "mpra_bc"], how="inner")
     nz = obs_relevant[obs_relevant["umis_mpra_bc"] > 0]
 
-    # ── Count nonzero per group ────────────────────────────────────────
+    # Count nonzero per group
     if len(nz) > 0:
         nz_counts = (nz.groupby(["rep_id", anti_col])
                      .size().reset_index(name="n_nonzero"))
@@ -2219,7 +2096,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     else:
         group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
 
-    # ── Build compressed arrays ────────────────────────────────────────
+    # Build compressed arrays
     # Nonzero observations: individual rows, weight=1
     if len(nz) > 0:
         comp_y_nz = nz["umis_mpra_bc"].values.astype(np.int64)
@@ -2256,7 +2133,7 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
         assert abs(comp_w.sum() - expected_n) < 0.5, \
             f"Weight sum {comp_w.sum()} != expected {expected_n}"
 
-    # ── Sparse NB matrix (intercept + treatment contrast) ──────────────
+    # Sparse NB matrix (intercept + treatment contrast)
     nb_row = list(range(n_c))
     nb_col = [0] * n_c
     nb_dat = [1.0] * n_c
@@ -2268,13 +2145,13 @@ def _build_cm_fit_inputs(pd_maps, split, level, moi_correction=None):
     comp_nb = sp.csr_matrix((nb_dat, (nb_row, nb_col)),
                             shape=(n_c, n_nb_cols))
 
-    # ── Sparse ZI matrix (one-hot rep, no intercept) ───────────────────
+    # Sparse ZI matrix (one-hot rep, no intercept)
     comp_zi = sp.csr_matrix(
         ([1.0] * n_c,
          (list(range(n_c)), [int(c) for c in all_zi])),
         shape=(n_c, n_zi_cols))
 
-    # ── Column names matching formulaic conventions ────────────────────
+    # Column names matching formulaic conventions
     nb_formula = f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     zi_formula = "C(rep_id)-1"
 
@@ -2321,6 +2198,8 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels,
     Compute total observation counts (nonzero + reporter-informed zeros) per
     (split_level, anti_level, rep_id) group from a coarse reporter table.
 
+	TODO: rename function so it is clear that this is specific to coarse reporters
+
     Cells with nonzero MPRA obs but no reporter detection (-U6 +MPRA, i.e.
     orphan cells) are treated as confirmed transfections (false-negative
     reporter) and included in n_total alongside reporter-confirmed cells.
@@ -2344,22 +2223,6 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels,
                   .size().reset_index(name="n_barcodes"))
 
     # Observed barcodes per (rep, cell, CRE) from nonzero data
-    # First, recover cre_id for each nonzero obs via mpra_map
-    # nz_pdf has [split, anti, rep_id, umis_mpra_bc] but NOT mpra_bc/cre_id
-    # We need to count nonzero obs per (rep, cell, CRE). But nz_pdf doesn't
-    # have cell_bc either -- it has cell_type and cre_id depending on split.
-    #
-    # Actually, for the reporter path we need to count per (cell_bc, cre_id).
-    # Let's re-derive this from the raw nonzero data which we already have.
-    # nz_pdf has anti column (cell_type or cre_id) and split column.
-    # For by_cre: nz_pdf has cre_id (=split) and cell_type (=anti)
-    # For by_cell_type: nz_pdf has cell_type (=split) and cre_id (=anti)
-    # But we need cell_bc to join with reporter. So we need to go back to
-    # the raw data for the cell_bc-level counts.
-
-    # Count nonzero obs per (rep, cell_bc, cre_id) from the reporter detections
-    # We join reporter with cell_map to get cell_type, then count how many
-    # nonzero obs exist per detection.
 
     # Identify orphan cells: -U6 +MPRA. Treated as confirmed transfections.
     cre_col = split if split == "cre_id" else anti
@@ -2425,7 +2288,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
 
     anti = anti_split(split)
 
-    # ── Pick reference level ─────────────────────────────────────────
+    # Pick reference level
     anti_levels = sorted(total_counts[anti].unique())
     model_type = None  # set below
     if "reference" in anti_levels:
@@ -2451,7 +2314,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
         anti_to_nb_col[lev] = i + 1
     rep_to_zi_col = {rep: i for i, rep in enumerate(rep_levels)}
 
-    # ── Group totals from actual data ──────────────────────────────────
+    # Group totals from actual data
     group_totals = total_counts[[anti, "rep_id", "n_total"]].copy()
 
     if len(nz_pdf) > 0:
@@ -2470,7 +2333,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
     else:
         group_totals["n_zeros"] = group_totals["n_total"] - group_totals["n_nonzero"]
 
-    # ── Build compressed arrays ────────────────────────────────────────
+    # Build compressed arrays
     anti_col = anti
     if len(nz_pdf) > 0:
         comp_y_nz = nz_pdf["umis_mpra_bc"].values.astype(np.int64)
@@ -2499,7 +2362,7 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
     assert abs(comp_w.sum() - expected_n) < 0.5, \
         f"Weight sum {comp_w.sum()} != expected {expected_n}"
 
-    # ── Sparse NB matrix (intercept + treatment contrast) ──────────────
+    # Sparse NB matrix (intercept + treatment contrast)
     nb_row = list(range(n_c))
     nb_col = [0] * n_c
     nb_dat = [1.0] * n_c
@@ -2511,13 +2374,13 @@ def _build_obs_phantom_inputs(nz_pdf, total_counts, split, level,
     comp_nb = sp.csr_matrix((nb_dat, (nb_row, nb_col)),
                             shape=(n_c, n_nb_cols))
 
-    # ── Sparse ZI matrix (one-hot rep, no intercept) ───────────────────
+    # Sparse ZI matrix (one-hot rep, no intercept)
     comp_zi = sp.csr_matrix(
         ([1.0] * n_c,
          (list(range(n_c)), [int(c) for c in all_zi])),
         shape=(n_c, n_zi_cols))
 
-    # ── Column names matching formulaic conventions ────────────────────
+    # Column names matching formulaic conventions
     nb_formula = f"umis_mpra_bc ~ C({anti}, contr.treatment(base='{reference}'))"
     zi_formula = "C(rep_id)-1"
 
@@ -2617,9 +2480,7 @@ def _tensorzinb_fit(matricies,name,init_method="nb",init_vals=None,use_gpu=False
     return result
 
 
-# ---------------------------------------------------------------------------
 # Design-matrix shard save / load (worker-side)
-# ---------------------------------------------------------------------------
 
 def _strip_design_to_recipe(dm):
     """Strip full matrices from a design dict, keeping only recipe metadata."""
@@ -2741,7 +2602,7 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
         disable_mom = True
 
     if use_missing:
-        # ── Phantom-zero compressed CM path ────────────────────────────
+        # Phantom-zero compressed CM path
         # Gather maps to driver as pandas (observed is ~3M rows / ~300 MB).
         maps = data._get_missing_maps()
         pd_maps = {}
@@ -2790,7 +2651,7 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
             init_vals = {t: None for t in levels}
 
     elif phantom_compress:
-        # ── Reporter-informed obs phantom path ─────────────────────────
+        # Reporter-informed obs phantom path
         # Requires a coarse reporter table attached to the data object.
         # Computes reporter-informed zero counts per design-matrix group
         # from the reporter table + mpra_map, without expanding the data.
@@ -2852,7 +2713,7 @@ def standard_fit(client,data,split,disable_mom=False,fit_resources={},pre_fit_ho
             init_vals = {t: None for t in levels}
 
     else:
-        # ── Non-CM path: full expansion via formulaic ──────────────────
+        # Non-CM path: full expansion via formulaic
         # Compute raw as pandas once on the driver to avoid dask-expr boolean
         # index serialization bugs when lazy Dask objects are sent to workers.
         raw_pdf = raw.compute().reset_index(drop=True)
@@ -3339,7 +3200,7 @@ class ortho:
 
             # Drop rows where either column is NaN before regression.
             # NaN arises from anti-levels present in the model but absent
-            # from the (post-ortho-filter) data means -- e.g. a CRE with
+            # from the (post-ortho-filter) data means e.g. a CRE with
             # no observations in this cell type, or CM denominator = 0.
             mu_clean = mu_summary.dropna(subset=["mu", "mean(umis_mpra_bc)"])
             n_dropped = len(mu_summary) - len(mu_clean)
@@ -6024,7 +5885,6 @@ def _wald_row_fn(row: dict, bundle: dict):
 def _wald_make_bundle(hypotheses, models_or_counts, **kw):
     # expects an ortho object with make_wald_eval_bundle()
     return models_or_counts.make_wald_eval_bundle()
-# ---- Mann–Whitney U / Wilcoxon rank-sum -------------------------------------
 
 def _build_mwu_counts_dict(pdf):
     """
@@ -6112,7 +5972,7 @@ def _mwu_row_fn(
     def get_group(ct, cre):
         return counts.get((str(ct), str(cre)), empty)
 
-    # --- Decide comparison axis: mirror the Wald dispatcher’s rules ---
+    # Decide comparison axis: mirror the Wald dispatcher’s rules
 
     # by-cell-type => compare CREs within the same cell type
     if (ref_ct is None) or (str(ref_ct) == comp_ct):
@@ -6169,12 +6029,6 @@ def _mwu_row_fn(
         "ref_mean": s0,
         "comp_mean": s1,
     }
-# ---- Bootstrap activity measurement ------------------------------------------
-# ---- BOOTSTRAP ACTIVITY (empirical p vs controls) ----------------------------
-# ==============================
-# Bootstrap flavor (activity)
-# ==============================
-# --- bootstrap support structs ---
 
 @dataclass
 class _BootRepGroupCT:
@@ -6191,7 +6045,7 @@ class _BootBundleCT:
     by_rep: dict[str, _BootRepGroupCT]
     control_cres: tuple[str, ...]
     n_int_strategy: str                 # "as_observed" | "median_non_reference"
-# ---- worker-side helpers ----
+# worker-side helpers
 def _bootstrap_build_bundle(
     hypotheses: "HypothesisSet",
     models_or_counts,
@@ -6214,7 +6068,8 @@ def _bootstrap_build_bundle(
       - Drops any controls absent from the counts (warns).
       - Filters to only CREs referenced by the hypothesis set (comparison + control).
     """
-    # ---- Validate counts object ----
+#TODO: remove "biol rep" nomenclature, we already have perfectly good replicate naming
+    # Validate counts object
     if isinstance(models_or_counts, scMPRA_data):
         counts = models_or_counts
     elif hasattr(models_or_counts, "training_data") and isinstance(models_or_counts.training_data, scMPRA_data):
@@ -6234,7 +6089,7 @@ def _bootstrap_build_bundle(
     if missing:
         raise ValueError(f"Counts table is missing required columns: {missing}")
 
-    # ---- Choose metric column ----
+    # Choose metric column
     if "normalized_umis_mpra_bc" in df.columns:
         metric_col = "normalized_umis_mpra_bc"
     elif "umis_mpra_bc" in df.columns:
@@ -6246,17 +6101,17 @@ def _bootstrap_build_bundle(
     else:
         raise ValueError("Neither 'normalized_umis_mpra_bc' nor 'umis_mpra_bc' present in counts table.")
 
-    # ---- Controls from hypotheses ----
+    # Controls from hypotheses
     hdf = hypotheses.to_dataframe()
     controls_from_hs = sorted(set(hdf["reference_CRE"].dropna().astype(str).unique()))
     if not controls_from_hs:
         raise ValueError("No control CREs found in hypothesis set (column 'reference_CRE').")
 
-    # ---- Comparison CREs present in HS ----
+    # Comparison CREs present in HS
     compare_cres = sorted(set(hdf["comparison_CRE"].dropna().astype(str).unique()))
     all_wanted_cres = set(controls_from_hs).union(compare_cres)
 
-    # ---- Filter counts to only needed CREs (comp + controls) ----
+    # Filter counts to only needed CREs (comp + controls)
     df = df[df["cre_id"].astype(str).isin(all_wanted_cres)]
     keep_cols = ["cell_type", "cre_id", "rep_id", "cell_bc", "transfection_bc", metric_col]
     if "biol_rep" in df.columns:
@@ -6265,7 +6120,7 @@ def _bootstrap_build_bundle(
     if df.empty:
         raise ValueError("After filtering to hypothesis CREs + controls, no rows remain in counts.")
 
-    # ---- Derive/ensure biol_rep ----
+    # Derive/ensure biol_rep
     if "biol_rep" in df.columns:
         biol = df["biol_rep"].astype(str)
     elif rep_to_biol is not None:
@@ -6276,7 +6131,7 @@ def _bootstrap_build_bundle(
         biol = df["rep_id"].astype(str)
     df = df.assign(biol_rep=biol)
 
-    # ---- Validate controls presence ----
+    # Validate controls presence
     present_controls = sorted(set(df.loc[df["cre_id"].astype(str).isin(controls_from_hs), "cre_id"].astype(str).unique()))
     missing_controls = sorted(set(controls_from_hs) - set(present_controls))
     if missing_controls:
@@ -6286,7 +6141,7 @@ def _bootstrap_build_bundle(
     if not present_controls:
         raise ValueError("[bootstrap_activity] No control CREs from the hypothesis set are present in counts.")
 
-    # ---- Build compact per-integration table ----
+    # Build compact per-integration table
     # Integration unit = unique (cell_bc, transfection_bc) within (biol_rep, cell_type, cre_id)
     # Value for each integration = mean(metric_col) across those rows (normally 1:1, but defensively aggregate)
     keys = ["biol_rep", "cell_type", "cre_id", "cell_bc", "transfection_bc"]
@@ -6298,7 +6153,7 @@ def _bootstrap_build_bundle(
     # We only keep the minimal table needed for worker-side bootstraps
     integrations = g  # columns: biol_rep, cell_type, cre_id, cell_bc, transfection_bc, value
 
-    # ---- Bundle ----
+    # Bundle
     bundle = {
         "integrations": integrations,
         "metric_col": metric_col,
@@ -6617,7 +6472,6 @@ def _bootstrap_row_fn_per_ct(row: dict, bundle: dict, **kw):
         return {"test_statistic": np.nan, "p_value": np.nan, "fold_change": np.nan, "flattened": False}
 
 
-# ---- The tiny switchboard ----------------------------------------------------
 #switchboard to hole types of hypothesis tests that have been implemented so far
 TESTS = {
     "wald": {"make_bundle": _wald_make_bundle, "row_fn": _wald_row_fn, "defaults": {}},
@@ -7192,7 +7046,7 @@ class de_novo_simulation:
                     ap = average_precision_score(y_true, y_score)
                     ax.plot(recall, precision, label=f"{name} (AP={ap:.3f})")
 
-                # ----- threshold point -----
+                # threshold point
                 if score_threshold is not None:
                     y_pred = (y_score >= score_threshold).astype(int)
 
@@ -7213,7 +7067,7 @@ class de_novo_simulation:
                         precision_pt = tp / (tp + fp) if (tp + fp) > 0 else 1.0
                         ax.scatter(recall_pt, precision_pt, **point_kwargs)
 
-            # ----- baselines + labels -----
+            # baselines + labels
             if kind == "roc":
                 ax.plot([0, 1], [0, 1], linestyle="--", linewidth=1, label="chance")
                 ax.set_xlabel("False Positive Rate")
@@ -7277,7 +7131,7 @@ class de_novo_simulation:
         """
         cov_method : {"auto", "sandwich", "opg"}
         - "auto" starts at sandwich and falls back through hessian -> opg
-          (recommended). Stored in the "auto" directory.
+          (recommended).
         - See ortho.precompute_wald for more information.
         """
 
@@ -7294,7 +7148,7 @@ class de_novo_simulation:
         precompd.mkdir(exist_ok=True)
 
         # "auto" means start at sandwich and let ortho-level fallback handle
-        # the rest. For opg/sandwich, pass through directly.
+        # the rest. 
         ortho_cov_method = "sandwich" if cov_method == "auto" else cov_method
 
         #function to submit
@@ -7469,7 +7323,6 @@ class de_novo_simulation:
             # Return free heap pages to the OS. Without this, glibc holds
             # onto freed pages from the large DataFrames above, causing
             # unmanaged memory to grow monotonically across tasks.
-            import ctypes
             ctypes.CDLL("libc.so.6").malloc_trim(0)
 
             return True
@@ -7751,8 +7604,6 @@ def _simulate_transfection(experiment_bounds:Bounds,
         drawn_library=sample_from_library(library=library,
                                 size=len(cells_df))
         
-        #logger.info(f"A: drawn_library cols: {drawn_library.columns}, types: {drawn_library.dtypes}")
-        #logger.info(f"A: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
         
         #merge dataframes
         
@@ -7761,42 +7612,19 @@ def _simulate_transfection(experiment_bounds:Bounds,
                                 right_index=True,
                                 validate="one_to_one")
         
-        #logger.info(f"1 {cells_df.isna().sum().sum()}")
-        #logger.info(f"B: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
-        
         keys = ["cell_type", "cre_id"]
         
         # drop library abundance, we don't care anymore.
         cells_df=cells_df.drop(columns=["abundance"])
         cells_df = cast_string_keys(cells_df, ["cell_type", "cre_id"])
-        
-        #logger.info(f"C: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
-        #logger.info(f"C.5: cells_df cols: {ground_truth.columns}, types: {ground_truth.dtypes}")
 
         # merge in ground truth
-
-        #dump_df_pickle_debug(cells_df,prefix="permerge_cells_df")
-        #dump_df_pickle_debug(ground_truth,prefix="premerge_gt")
         
         # left: maybe by chance an MPRA bc was never transfected.
         cells_df=cells_df.merge(ground_truth,
                                 on=["cell_type","cre_id"],
                                 validate="many_to_one",
                                 how="left")
-        
-        #dump_df_pickle_debug(cells_df,prefix="postmerge")
-
-        #logger.info(f"D: cells_df cols: {cells_df.columns}, types: {cells_df.dtypes}")
-        
-        #logger.info(f"D {cells_df.isna().sum().sum()}")
-
-        #check to make sure there were no NAs introduced
-        #assert not cells_df.isna().any().any(), "DataFrame contains NA values! Check to make sure cell type & CRE names in all parameters match."
-
-        #dump_df_debug(cells_df)
-        
-        #TEMP DEBUG OVERRIDE
-        #return cells_df
         
         bad = cells_df[cells_df.isna().any(axis=1)]
         assert bad.empty, (
@@ -7899,6 +7727,7 @@ def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
 
 def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_cres,minP,n_sims,cell_type="reference"):
     """
+	TODO: see if we can move to .utils
     Notebook helper function.
     Creates a de_novo_simulation in root, with a random name.
     Assumes corresponding libraries.
@@ -7946,6 +7775,7 @@ def sum_pow(sims,hypothesis_set_name,test_type):
     Takes a list of sims and returns a minimal
     df of fold change and hypothesis reject/not reject
     to plot power curves.
+	TODO: see if we can move to .utils
     """
     results=[]
 
