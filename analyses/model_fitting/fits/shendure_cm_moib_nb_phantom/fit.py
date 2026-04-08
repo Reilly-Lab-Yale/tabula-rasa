@@ -14,7 +14,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/shendure")
 OUT_ROOT = DATA_DIR
-OUT_NAME = "shendure_cm_moib_phantom"
+OUT_NAME = "shendure_cm_moib_nb_phantom"
 SLURM_JOB_ID = os.environ.get("SLURM_JOB_ID", "unknown")
 
 

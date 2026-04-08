@@ -1,1 +1,1 @@
-Naming: `{dataset}_{obs|cm}_{zinb|nb}_{date}` — obs=consider_missing off (observed pairs only), cm=consider_missing on (all cell×CRE pairs, zeros imputed), zinb/nb=model family.
+Naming: `{dataset}_{obs|cm|cm_moib}_{nb|zinb}_phantom` -- obs=observed pairs only, cm=consider_missing (full Cartesian expansion), cm_moib=consider_missing with MOI-biased phantom zero downweighting, nb/zinb=model family. All model families are explicit in the name (no unmarked defaults).

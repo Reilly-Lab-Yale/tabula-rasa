@@ -18,7 +18,7 @@ PRESET_DIR = Path("/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/pr
 OUT_DIR = Path(__file__).parent / "output" / "seelig"
 
 ORTHOS = [
-    "seelig_cm_moib_phantom",
+    "seelig_cm_moib_nb_phantom",
     "seelig_cm_moib_zinb_phantom",
 ]
 

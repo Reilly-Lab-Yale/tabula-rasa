@@ -27,7 +27,7 @@ Restricting to the condition each dataset would actually use in practice
 
 - **Seelig (MOIB)**: NB is the right model. MOIB improves QC and LRT over
   plain CM. Zero models significant, mu parameters identical to 4 decimal places.
-  **Canonical: `SEELIG_BOUNDS` = MOIB NB** (`seelig_cm_moib_phantom`)
+  **Canonical: `SEELIG_BOUNDS` = MOIB NB** (`seelig_cm_moib_nb_phantom`)
 
 - **Cohen (obs, obsingle)**: Under CRE-coarse reporter expansion, ZINB appeared
   warranted (54% Bonferroni sig). However, coarse expansion floods zeros

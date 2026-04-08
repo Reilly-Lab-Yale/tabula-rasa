@@ -35,7 +35,7 @@ SIM_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/simulated")
 
 # Canonical phantom ortho for seelig (MOIB NB)
 ORTHO_DIR = DATA_ROOT / "seelig"
-ORTHO_NAME = "seelig_cm_moib_phantom"
+ORTHO_NAME = "seelig_cm_moib_nb_phantom"
 
 
 def sim_name(gt_idx):

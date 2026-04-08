@@ -62,7 +62,7 @@ pairs = {
     },
     "seelig_cm_moib": {
         "zinb": data_root / "seelig" / "seelig_cm_moib_zinb_phantom",
-        "nb":   data_root / "seelig" / "seelig_cm_moib_phantom",
+        "nb":   data_root / "seelig" / "seelig_cm_moib_nb_phantom",
     },
 }
 

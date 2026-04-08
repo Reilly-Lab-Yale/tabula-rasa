@@ -1237,7 +1237,7 @@ COHEN_BOUNDS=COHEN_OBSINGLE_NB_BOUNDS
 
 SEELIG_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_zinb_phantom.tgz")
 SEELIG_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_nb_phantom.tgz")
-SEELIG_CM_MOIB_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_phantom.tgz")
+SEELIG_CM_MOIB_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_nb_phantom.tgz")
 SEELIG_CM_MOIB_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_zinb_phantom.tgz")
 SEELIG_BOUNDS=SEELIG_CM_MOIB_NB_BOUNDS
 
