@@ -77,7 +77,6 @@ from .utils import generate_barcodes, sample_from_library
 from .utils import alpha_for_expected_groups, sample_crp_groups, _plot_test_bars
 from .utils import pow_curve
 
-from .performance_logging import start_taskstream_logger
 
 logger = logging.getLogger("scMPRAforge")
 
