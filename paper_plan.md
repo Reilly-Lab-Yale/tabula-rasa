@@ -205,6 +205,15 @@ that MOIB produces usable results without a reporter.
 - Number of simulation replicates: 5 is fast but noisy, 10-20 better.
 - The MOIB 1.8x mu offset for shendure may or may not affect power --
   parameter accuracy != discrimination ability. Must test empirically.
+- **Effect-size priors for contextualizing power curves**: The FC-at-80%-power
+  summary shows what effect sizes are *detectable*, but doesn't say whether
+  those effect sizes *exist* in real biology. Extracting empirical FC
+  distributions from the same datasets is circular (observed FCs are already
+  truncated by the power limitations being characterized). An external prior
+  on CRE effect sizes -- e.g. from new experimental data with known
+  ground-truth perturbations -- would let us say "X% of real effects are
+  detectable with/without reporter." PIN: Mackenzie is generating wet-lab
+  data that could provide this prior (PCR-based, pending).
 
 ### Note
 
