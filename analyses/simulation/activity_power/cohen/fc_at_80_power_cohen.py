@@ -83,22 +83,41 @@ def main():
     res = pd.DataFrame(results)
     print(res.to_string(index=False))
 
-    # --- Plot: FC at 80% power, upregulation side only ---
-    fig, ax = plt.subplots(figsize=(6, 4))
+    # --- Plot: FC at 80% power, both directions ---
+    # Bars extend from FC=1.0 outward: right for upregulation, left for
+    # downregulation.  The bar length is the distance from 1.0 to the
+    # threshold (e.g. FC 1.15 -> bar length 0.15 rightward;
+    # FC 0.85 -> bar length 0.15 leftward).
+    fig, ax = plt.subplots(figsize=(7, 4))
 
     y_pos = np.arange(len(res))
     bar_height = 0.35
 
+    # Upregulation (right of 1.0)
     ax.barh(
-        y_pos - bar_height / 2, res["reporter_up"], bar_height,
-        color="steelblue", label="+reporter",
+        y_pos - bar_height / 2,
+        res["reporter_up"] - 1.0, bar_height,
+        left=1.0, color="steelblue", label="+reporter",
     )
     ax.barh(
-        y_pos + bar_height / 2, res["deflated_up"], bar_height,
-        color="coral", label="-reporter (deflated)",
+        y_pos + bar_height / 2,
+        res["deflated_up"] - 1.0, bar_height,
+        left=1.0, color="coral", label="-reporter (deflated)",
     )
 
-    # Add > annotations for capped values
+    # Downregulation (left of 1.0)
+    ax.barh(
+        y_pos - bar_height / 2,
+        res["reporter_down"] - 1.0, bar_height,
+        left=1.0, color="steelblue",
+    )
+    ax.barh(
+        y_pos + bar_height / 2,
+        res["deflated_down"] - 1.0, bar_height,
+        left=1.0, color="coral",
+    )
+
+    # Add > / < annotations for capped values
     for i, row in res.iterrows():
         if row["reporter_up_capped"]:
             ax.text(
@@ -112,18 +131,34 @@ def main():
                 va="center", ha="left", fontsize=10, fontweight="bold",
                 color="coral",
             )
+        if row["reporter_down_capped"]:
+            ax.text(
+                row["reporter_down"] - 0.01, i - bar_height / 2, "<",
+                va="center", ha="right", fontsize=10, fontweight="bold",
+                color="steelblue",
+            )
+        if row["deflated_down_capped"]:
+            ax.text(
+                row["deflated_down"] - 0.01, i + bar_height / 2, "<",
+                va="center", ha="right", fontsize=10, fontweight="bold",
+                color="coral",
+            )
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(res["cell_type"], fontsize=9)
-    ax.set_xlabel("Fold-change at 80% power (upregulation)", fontsize=10)
+    ax.set_xlabel("Fold-change at 80% power", fontsize=10)
     ax.set_title(
         "Cohen (episomal) -- FC needed to detect activity\n"
         "+reporter vs -reporter",
         fontsize=11,
     )
-    ax.axvline(1.0, color="grey", linestyle=":", lw=0.8)
+    ax.axvline(1.0, color="black", linestyle="-", lw=0.8)
     ax.legend(fontsize=8, loc="lower right")
-    ax.set_xlim(0.9, MAX_FC + 0.1)
+    margin = 0.05
+    ax.set_xlim(
+        min(res["deflated_down"].min(), res["reporter_down"].min()) - margin,
+        max(res["deflated_up"].max(), res["reporter_up"].max()) + margin,
+    )
 
     plt.tight_layout()
     out = OUTPUT_DIR / "fc_at_80_power_cohen.svg"
