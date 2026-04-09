@@ -23,7 +23,7 @@ import json
 import itertools
 
 import scipy
-from scipy.stats import linregress, chi2, norm, mannwhitneyu
+from scipy.stats import linregress, chi2, norm, mannwhitneyu, ttest_ind, ks_2samp
 import scipy.sparse as sp
 
 import statsmodels.api as sm
@@ -6269,6 +6269,272 @@ def _mwu_row_fn(
         "ref_mean": s0,
         "comp_mean": s1,
     }
+# ---- Generic counts-test worker (used by de_novo_simulation._counts_test) ----
+
+def _counts_test_worker(tscription_future, path_scmpradat, path_output,
+                        hypothesis_set, has_reporter, row_fn, test_type,
+                        columns=None, bundle_fn=None):
+    """
+    Dask-submittable worker for count-based hypothesis tests.
+    Reads parquet, optionally drops zeros, builds bundle, runs row_fn
+    per hypothesis row, saves ResultSet.
+
+    bundle_fn : callable or None
+        Function(pdf) -> dict. Defaults to _build_mwu_counts_dict (keyed
+        by (cell_type, cre_id) -> array). Override for tests that need
+        different aggregation (e.g. pseudobulk).
+    """
+    if columns is None:
+        columns = ["cell_type", "cre_id", "umis_mpra_bc"]
+    if bundle_fn is None:
+        bundle_fn = _build_mwu_counts_dict
+    pdf = pd.read_parquet(
+        Path(path_scmpradat) / "data.parquet",
+        columns=columns,
+        engine="pyarrow",
+    )
+    if not has_reporter:
+        pdf["umis_mpra_bc"] = pd.to_numeric(
+            pdf["umis_mpra_bc"], errors="coerce"
+        ).fillna(0)
+        pdf = pdf[pdf["umis_mpra_bc"] > 0]
+    bundle = bundle_fn(pdf)
+    del pdf
+
+    df_h = hypothesis_set.to_dataframe()
+    recs = df_h.to_dict(orient="records")
+    results = [row_fn(r, bundle) for r in recs]
+
+    out = pd.concat([df_h.reset_index(drop=True),
+                     pd.DataFrame(results)], axis=1)
+    out["test_type"] = test_type
+    out["bh_p"] = _bh_adjust(out["p_value"])
+    if "flattened" in out:
+        out["flattened"] = out["flattened"].astype(bool)
+    ResultSet.from_dataframe(out).to_tsv(path_output)
+    return True
+
+# ---- T-test ------------------------------------------------------------------
+
+def _ttest_row_fn(
+    row,
+    bundle,
+    *,
+    alternative="two-sided",
+    equal_var=False,
+    pseudocount=0.01,
+):
+    """
+    Welch's t-test for the same (cell_type, cre_id) comparisons as MWU.
+    Uses the same bundle format as MWU (counts dict keyed by (ct, cre)).
+    equal_var=False gives Welch's t-test (unequal variance); True gives Student's.
+    """
+    counts = bundle["counts"]
+
+    comp_ct  = str(row["comparison_cell_type"])
+    comp_cre = str(row["comparison_CRE"])
+    ref_ct   = row.get("reference_cell_type")
+    ref_cre  = row.get("reference_CRE")
+
+    if pd.isna(ref_ct):
+        ref_ct = None
+    if pd.isna(ref_cre):
+        ref_cre = None
+
+    empty = np.empty(0, dtype=float)
+
+    def get_group(ct, cre):
+        return counts.get((str(ct), str(cre)), empty)
+
+    # Decide comparison axis (same logic as MWU)
+    if (ref_ct is None) or (str(ref_ct) == comp_ct):
+        base_cre = "reference" if ref_cre is None else str(ref_cre)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(comp_ct, base_cre)
+    elif (ref_cre is None) or (str(ref_cre) == comp_cre):
+        base_ct = "reference" if ref_ct is None else str(ref_ct)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(base_ct, comp_cre)
+    else:
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    if (g1.size < 2) or (g0.size < 2):
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    stat, p = ttest_ind(g1, g0, equal_var=equal_var, alternative=alternative)
+
+    s1 = float(np.exp(np.mean(np.log1p(g1))) - 1.0)
+    s0 = float(np.exp(np.mean(np.log1p(g0))) - 1.0)
+    fc = (s1 + pseudocount) / (s0 + pseudocount)
+
+    return {
+        "test_statistic": float(stat),
+        "p_value": float(p),
+        "fold_change": float(fc),
+        "flattened": False,
+    }
+
+# ---- Pseudobulk t-test -------------------------------------------------------
+
+def _build_pseudobulk_bundle(pdf):
+    """
+    Aggregate per-integration counts to per-replicate means, then store
+    as arrays keyed by (cell_type, cre_id).
+
+    Input pdf must have columns: cell_type, cre_id, rep_id, umis_mpra_bc.
+    Output bundle["pseudobulk"][(ct, cre)] = array of replicate-level means.
+    """
+    pdf = pdf.copy()
+    pdf["cell_type"] = pdf["cell_type"].astype(str)
+    pdf["cre_id"] = pdf["cre_id"].astype(str)
+    pdf["rep_id"] = pdf["rep_id"].astype(str)
+    pdf["umis_mpra_bc"] = pd.to_numeric(
+        pdf["umis_mpra_bc"], errors="coerce"
+    ).fillna(0).astype(float)
+
+    # Mean UMI per (cell_type, cre_id, rep_id)
+    rep_means = (
+        pdf.groupby(["cell_type", "cre_id", "rep_id"])["umis_mpra_bc"]
+        .mean()
+        .reset_index()
+    )
+    # Collect per (cell_type, cre_id) -> array of replicate means
+    grouped = (
+        rep_means.groupby(["cell_type", "cre_id"])["umis_mpra_bc"]
+        .apply(lambda s: s.to_numpy())
+    )
+    return {"pseudobulk": {key: arr for key, arr in grouped.items()}}
+
+
+def _pseudobulk_row_fn(
+    row,
+    bundle,
+    *,
+    alternative="two-sided",
+    equal_var=False,
+    pseudocount=0.01,
+):
+    """
+    Pseudobulk t-test: aggregate to replicate-level means, then Welch's
+    t-test on those means. Requires >= 2 replicates per group.
+    """
+    pb = bundle["pseudobulk"]
+
+    comp_ct  = str(row["comparison_cell_type"])
+    comp_cre = str(row["comparison_CRE"])
+    ref_ct   = row.get("reference_cell_type")
+    ref_cre  = row.get("reference_CRE")
+
+    if pd.isna(ref_ct):
+        ref_ct = None
+    if pd.isna(ref_cre):
+        ref_cre = None
+
+    empty = np.empty(0, dtype=float)
+
+    def get_group(ct, cre):
+        return pb.get((str(ct), str(cre)), empty)
+
+    if (ref_ct is None) or (str(ref_ct) == comp_ct):
+        base_cre = "reference" if ref_cre is None else str(ref_cre)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(comp_ct, base_cre)
+    elif (ref_cre is None) or (str(ref_cre) == comp_cre):
+        base_ct = "reference" if ref_ct is None else str(ref_ct)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(base_ct, comp_cre)
+    else:
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    if (g1.size < 2) or (g0.size < 2):
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    stat, p = ttest_ind(g1, g0, equal_var=equal_var, alternative=alternative)
+
+    fc = (g1.mean() + pseudocount) / (g0.mean() + pseudocount)
+
+    return {
+        "test_statistic": float(stat),
+        "p_value": float(p),
+        "fold_change": float(fc),
+        "flattened": False,
+    }
+
+# ---- KS test -----------------------------------------------------------------
+
+def _ks_row_fn(
+    row,
+    bundle,
+    *,
+    alternative="two-sided",
+    pseudocount=0.01,
+):
+    """
+    Two-sample Kolmogorov-Smirnov test. Same bundle as MWU/t-test.
+    Tests full distributional difference, not just location shift.
+    """
+    counts = bundle["counts"]
+
+    comp_ct  = str(row["comparison_cell_type"])
+    comp_cre = str(row["comparison_CRE"])
+    ref_ct   = row.get("reference_cell_type")
+    ref_cre  = row.get("reference_CRE")
+
+    if pd.isna(ref_ct):
+        ref_ct = None
+    if pd.isna(ref_cre):
+        ref_cre = None
+
+    empty = np.empty(0, dtype=float)
+
+    def get_group(ct, cre):
+        return counts.get((str(ct), str(cre)), empty)
+
+    if (ref_ct is None) or (str(ref_ct) == comp_ct):
+        base_cre = "reference" if ref_cre is None else str(ref_cre)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(comp_ct, base_cre)
+    elif (ref_cre is None) or (str(ref_cre) == comp_cre):
+        base_ct = "reference" if ref_ct is None else str(ref_ct)
+        g1 = get_group(comp_ct, comp_cre)
+        g0 = get_group(base_ct, comp_cre)
+    else:
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    if (g1.size == 0) or (g0.size == 0):
+        return {
+            "test_statistic": np.nan, "p_value": np.nan,
+            "fold_change": np.nan, "flattened": False,
+        }
+
+    stat, p = ks_2samp(g1, g0, alternative=alternative)
+
+    s1 = float(np.exp(np.mean(np.log1p(g1))) - 1.0)
+    s0 = float(np.exp(np.mean(np.log1p(g0))) - 1.0)
+    fc = (s1 + pseudocount) / (s0 + pseudocount)
+
+    return {
+        "test_statistic": float(stat),
+        "p_value": float(p),
+        "fold_change": float(fc),
+        "flattened": False,
+    }
+
 # ---- Bootstrap activity measurement ------------------------------------------
 # ---- BOOTSTRAP ACTIVITY (empirical p vs controls) ----------------------------
 # ==============================
@@ -6722,6 +6988,9 @@ def _bootstrap_row_fn_per_ct(row: dict, bundle: dict, **kw):
 TESTS = {
     "wald": {"make_bundle": _wald_make_bundle, "row_fn": _wald_row_fn, "defaults": {}},
     "mwu":  {"make_bundle": _mwu_make_bundle,  "row_fn": _mwu_row_fn,  "defaults": {"method": "auto", "alternative": "two-sided"}},
+    "ttest": {"make_bundle": _mwu_make_bundle, "row_fn": _ttest_row_fn, "defaults": {"alternative": "two-sided", "equal_var": False}},
+    "ks": {"make_bundle": _mwu_make_bundle, "row_fn": _ks_row_fn, "defaults": {"alternative": "two-sided"}},
+    "pseudobulk": {"make_bundle": _build_pseudobulk_bundle, "row_fn": _pseudobulk_row_fn, "defaults": {"alternative": "two-sided", "equal_var": False}},
     "bootstrap_activity": {"make_bundle": _bootstrap_build_bundle, "row_fn": _bootstrap_row_fn, "defaults": {
             "n_int_strategy": "median_non_reference",   # or "observed"
             "n_bootstraps": 10_000,
@@ -7616,90 +7885,106 @@ class de_novo_simulation:
                 sep="\t",
                 compression="gzip")
 
-    def mwu(self, name, has_reporter=True):
+    def _counts_test(self, name, test_type, row_fn, has_reporter=True,
+                     extra_columns=None, bundle_fn=None):
         """
-        Takes a name of a hypotheses set added previously with
-        `add_hypothesis_set` and runs mann whitney u tests.
-        NOTE: Tests are performed directly on simulated data.
-        This means that ortho filtering is not applied!
+        Generic dispatcher for count-based hypothesis tests (MWU, t-test,
+        KS, pseudobulk, etc.) on simulated data.
 
-        has_reporter : bool, default True
-            Whether the experiment has a transfection reporter. When False,
-            all zero-count observations are dropped before testing. This
-            matches what real no-reporter data looks like on disc (only
-            non-zero MPRA signal is observed). Without this, simulated data
-            gives MWU an unfair advantage: the simulation generates explicit
-            zeros for transfected-but-silent events, which a no-reporter
-            experiment would never observe.
+        Reads raw parquet counts, optionally drops zeros (has_reporter),
+        builds a bundle via bundle_fn, and applies row_fn to each
+        hypothesis row.
+
+        Parameters
+        ----------
+        name : str
+            Hypothesis set name (must already exist via add_hypothesis_set).
+        test_type : str
+            Directory name and test_type label in output (e.g. "mwu").
+        row_fn : callable
+            Function with signature row_fn(row_dict, bundle) -> result_dict.
+        has_reporter : bool
+            When False, drop zero-count observations before testing.
+        extra_columns : list[str] or None
+            Additional parquet columns to read beyond the default three
+            (cell_type, cre_id, umis_mpra_bc).
+        bundle_fn : callable or None
+            Function(pdf) -> dict. Defaults to _build_mwu_counts_dict.
         """
-        #init & load relevant hypothesis set...
-        hypod=self.testd/name
-        hypof=hypod/"hypotheses.tsv"
+        hypod = self.testd / name
+        hypof = hypod / "hypotheses.tsv"
         if not hypof.is_file():
-            raise FileNotFoundError(f"Could not find hypothesis set \'{name}\'.")
-        
-        hypotheses=HypothesisSet.from_tsv(hypof)
+            raise FileNotFoundError(f"Could not find hypothesis set '{name}'.")
 
-        testd=hypod/"mwu"
-
+        hypotheses = HypothesisSet.from_tsv(hypof)
+        testd = hypod / test_type
         testd.mkdir()
-        
-        #check to make sure previous step has at least been queued.
+
         if "transcription" not in self.futures.columns:
-            raise RuntimeError("Tried to fit perfrom mwu testing, but transcription has not yet been simulated! You probably want to run 'gamut' first.")
-        
-        #pull out the futures tracking 
-        tscription_futures=self.futures["transcription"].to_list()
-        
-        #little helper function to shuttle to workers
-        def _mwu_helper(tscription_future,
-                        path_scmpradat,
-                        path_output,
-                        hypothesis_set,
-                        has_reporter):
-            # Column-projected pandas read — only loads the 3 columns MWU
-            # needs, directly via pandas. Avoids dd.read_parquet which would
-            # submit Dask sub-tasks from inside a worker task, causing
-            # thread-starvation deadlock.
-            pdf = pd.read_parquet(
-                Path(path_scmpradat) / "data.parquet",
-                columns=["cell_type", "cre_id", "umis_mpra_bc"],
-                engine="pyarrow",
+            raise RuntimeError(
+                "Transcription has not yet been simulated. "
+                "Run 'gamut' first."
             )
-            if not has_reporter:
-                pdf["umis_mpra_bc"] = pd.to_numeric(
-                    pdf["umis_mpra_bc"], errors="coerce"
-                ).fillna(0)
-                pdf = pdf[pdf["umis_mpra_bc"] > 0]
-            bundle = _build_mwu_counts_dict(pdf)
-            del pdf
 
-            # Run MWU on each hypothesis row (pure python, no Dask)
-            df_h = hypothesis_set.to_dataframe()
-            recs = df_h.to_dict(orient="records")
-            results = [_mwu_row_fn(r, bundle) for r in recs]
+        tscription_futures = self.futures["transcription"].to_list()
+        base_cols = ["cell_type", "cre_id", "umis_mpra_bc"]
+        if extra_columns:
+            base_cols = list(dict.fromkeys(base_cols + list(extra_columns)))
 
-            out = pd.concat([df_h.reset_index(drop=True),
-                             pd.DataFrame(results)], axis=1)
-            out["test_type"] = "mwu"
-            out["bh_p"] = _bh_adjust(out["p_value"])
-            if "flattened" in out:
-                out["flattened"] = out["flattened"].astype(bool)
-            ResultSet.from_dataframe(out).to_tsv(path_output)
-
-            return True
-        
-        #submit jobs
-        for idx in range(0,self.get_state_field("n_sims")):
-            r=self.client.submit(_mwu_helper,
-                    tscription_future=tscription_futures[idx],
-                    path_scmpradat=self.scmpradatp/f"{idx}.scmpra",
-                    path_output=testd/f"{idx}_results.tsv",
-                    hypothesis_set=hypotheses,
-                    has_reporter=has_reporter)
-
+        for idx in range(0, self.get_state_field("n_sims")):
+            r = self.client.submit(
+                _counts_test_worker,
+                tscription_future=tscription_futures[idx],
+                path_scmpradat=self.scmpradatp / f"{idx}.scmpra",
+                path_output=testd / f"{idx}_results.tsv",
+                hypothesis_set=hypotheses,
+                has_reporter=has_reporter,
+                row_fn=row_fn,
+                test_type=test_type,
+                columns=base_cols,
+                bundle_fn=bundle_fn,
+            )
             self.testqueue.append(r)
-            
+
+    def mwu(self, name, has_reporter=True):
+        """Mann-Whitney U test on raw simulated counts.
+
+        has_reporter : bool
+            When False, drop zeros before testing (for no-reporter datasets).
+        """
+        self._counts_test(name, "mwu", _mwu_row_fn,
+                          has_reporter=has_reporter)
+
+    def ttest(self, name, has_reporter=True):
+        """Welch's t-test on raw simulated counts.
+
+        has_reporter : bool
+            When False, drop zeros before testing (for no-reporter datasets).
+        """
+        self._counts_test(name, "ttest", _ttest_row_fn,
+                          has_reporter=has_reporter)
+
+    def ks(self, name, has_reporter=True):
+        """Two-sample Kolmogorov-Smirnov test on raw simulated counts.
+
+        has_reporter : bool
+            When False, drop zeros before testing (for no-reporter datasets).
+        """
+        self._counts_test(name, "ks", _ks_row_fn,
+                          has_reporter=has_reporter)
+
+    def pseudobulk(self, name, has_reporter=True):
+        """Pseudobulk t-test: aggregate to per-replicate means, then
+        Welch's t-test on those means. Requires >= 2 biological replicates.
+
+        has_reporter : bool
+            When False, drop zeros before testing (for no-reporter datasets).
+        """
+        self._counts_test(name, "pseudobulk", _pseudobulk_row_fn,
+                          has_reporter=has_reporter,
+                          extra_columns=["rep_id"],
+                          bundle_fn=_build_pseudobulk_bundle)
+
     def wald(self, name, cov_method="auto", serial_orthos: bool = True):
         """
         Takes a name of a hypotheses set added previously with
