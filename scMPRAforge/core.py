@@ -1256,8 +1256,6 @@ class scMPRA_data:
         self.negative_controls=[]
         self.reference_cell_type=None
         self.consider_missing_enabled=False
-        self.consider_missing_max_memory_gb=100.0
-        self.consider_missing_peak_overhead_factor=4.0
         self.consider_missing_subset_semantics="full_replicate"
         self._consider_missing_cache=None
         self._ortho_filter_applied=False
@@ -1265,10 +1263,6 @@ class scMPRA_data:
     def _ensure_consider_missing_defaults(self):
         if not hasattr(self, "consider_missing_enabled"):
             self.consider_missing_enabled = False
-        if not hasattr(self, "consider_missing_max_memory_gb"):
-            self.consider_missing_max_memory_gb = 100.0
-        if not hasattr(self, "consider_missing_peak_overhead_factor"):
-            self.consider_missing_peak_overhead_factor = 4.0
         if not hasattr(self, "consider_missing_subset_semantics"):
             self.consider_missing_subset_semantics = "full_replicate"
         if not hasattr(self, "_consider_missing_cache"):
@@ -1281,22 +1275,11 @@ class scMPRA_data:
         ddf = self._raw_ddf()
         return (id(ddf), tuple(map(str, ddf.columns)))
 
-    def set_consider_missing(
-        self,
-        enabled: bool,
-        *,
-        max_memory_gb: float | None = None,
-        peak_overhead_factor: float | None = None,
-    ) -> None:
+    def set_consider_missing(self, enabled: bool) -> None:
         self._ensure_consider_missing_defaults()
 
         if enabled and self.table_type != "mpra_umiwise":
             raise ValueError("consider_missing policy only supports UMI-wise tables.")
-
-        if max_memory_gb is not None and max_memory_gb <= 0:
-            raise ValueError("max_memory_gb must be positive or None.")
-        if peak_overhead_factor is not None and peak_overhead_factor <= 0:
-            raise ValueError("peak_overhead_factor must be positive.")
 
         if enabled and not getattr(self, "_ortho_filter_applied", False):
             warnings.warn(
@@ -1306,10 +1289,6 @@ class scMPRA_data:
             )
 
         self.consider_missing_enabled = bool(enabled)
-        if max_memory_gb is not None:
-            self.consider_missing_max_memory_gb = float(max_memory_gb)
-        if peak_overhead_factor is not None:
-            self.consider_missing_peak_overhead_factor = float(peak_overhead_factor)
 
     def set_coarse_reporter(self, reporter):
         """
@@ -1457,42 +1436,6 @@ class scMPRA_data:
         n_mpras_total = int(mpra_subset.shape[0].compute())
         if n_cells_total == 0 or n_mpras_total == 0:
             return self._empty_missing_ddf()
-
-        n_cells = cell_subset.groupby("rep_id").size().rename("n_cells").reset_index()
-        n_mpras = mpra_subset.groupby("rep_id").size().rename("n_mpras").reset_index()
-        rep_sizes = n_cells.merge(n_mpras, on="rep_id", how="inner")
-        rep_sizes["target_rows"] = rep_sizes["n_cells"] * rep_sizes["n_mpras"]
-        expanded_rows = int(rep_sizes["target_rows"].sum().compute())
-
-        def _mean_strlen(series):
-            val = _to_pandas(series.str.len().mean())
-            if val is None or (isinstance(val, float) and np.isnan(val)):
-                return 0.0
-            return float(val)
-
-        avg_len = {
-            "rep_id": _mean_strlen(n_cells["rep_id"]),
-            "cell_bc": _mean_strlen(cell_subset["cell_bc"]),
-            "cell_type": _mean_strlen(cell_subset["cell_type"]),
-            "mpra_bc": _mean_strlen(mpra_subset["mpra_bc"]),
-            "cre_id": _mean_strlen(mpra_subset["cre_id"]),
-        }
-        per_string_overhead = 4.125
-        bytes_per_row_strings = sum(v + per_string_overhead for v in avg_len.values())
-        bytes_per_row_structural = 24.0
-        steady_bytes_est = expanded_rows * (bytes_per_row_strings + bytes_per_row_structural)
-        peak_bytes_est = steady_bytes_est * float(self.consider_missing_peak_overhead_factor)
-        peak_gb_est = peak_bytes_est / 1_000_000_000.0
-
-        if (
-            self.consider_missing_max_memory_gb is not None
-            and peak_gb_est > float(self.consider_missing_max_memory_gb)
-        ):
-            raise ValueError(
-                "consider_missing split-level expansion estimated peak memory "
-                f"{peak_gb_est:.2f} GB exceeds cap "
-                f"{self.consider_missing_max_memory_gb} GB."
-            )
 
         full = cell_subset.merge(mpra_subset, on="rep_id", how="inner")
         expanded = full.merge(observed, on=["rep_id", "cell_bc", "mpra_bc"], how="left")

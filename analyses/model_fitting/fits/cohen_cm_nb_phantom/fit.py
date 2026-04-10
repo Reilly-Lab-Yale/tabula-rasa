@@ -29,7 +29,6 @@ def main():
     cohen.set_reference_cell("Rod")
     cohen.ortho_filter()
     cohen.set_consider_missing(True)
-    cohen.consider_missing_max_memory_gb = None
     print("Data loaded and filtered.", flush=True)
 
     ortho_obj = scm.ortho()

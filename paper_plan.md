@@ -118,7 +118,7 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - Need guard upstream of sklearn call; subset-based evaluation (only score hypotheses valid in all tests)
   - Wald+MWU test results save fine, only the summary/metrics phase crashes
 - [x] MOI-based phantom zero downweighting (see section below)
-- [ ] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
+- [x] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
 - [ ] Create all figures
 - [ ] Takeshi data analysis (4th dataset)
   - [x] Re-fitting all 4 orthos (obs/CM x NB/ZINB) with corrected negative controls

@@ -43,20 +43,11 @@ def _toy_missing_pdf() -> pd.DataFrame:
 def test_consider_missing_policy_defaults_and_setter_validation():
     obj = _make_obj(_toy_missing_pdf())
     assert obj.consider_missing_enabled is False
-    assert obj.consider_missing_max_memory_gb == 100.0
-    assert obj.consider_missing_peak_overhead_factor == 4.0
     assert obj.consider_missing_subset_semantics == "full_replicate"
 
     with pytest.warns(UserWarning, match="enabled after ortho_filter"):
-        obj.set_consider_missing(True, max_memory_gb=120.0, peak_overhead_factor=3.0)
+        obj.set_consider_missing(True)
     assert obj.consider_missing_enabled is True
-    assert obj.consider_missing_max_memory_gb == 120.0
-    assert obj.consider_missing_peak_overhead_factor == 3.0
-
-    with pytest.raises(ValueError, match="max_memory_gb"):
-        obj.set_consider_missing(True, max_memory_gb=0.0)
-    with pytest.raises(ValueError, match="peak_overhead_factor"):
-        obj.set_consider_missing(True, peak_overhead_factor=0.0)
 
 
 def test_set_consider_missing_after_ortho_filter_does_not_warn():
@@ -95,7 +86,7 @@ def test_get_data_requires_split_context_when_enabled():
 
 def test_split_level_inflation_cell_type_and_cre_id():
     obj = _make_obj(_toy_missing_pdf())
-    obj.set_consider_missing(True, max_memory_gb=10.0)
+    obj.set_consider_missing(True)
 
     ct = obj.get_data(
         include_missing=True,
@@ -116,34 +107,20 @@ def test_split_level_inflation_cell_type_and_cre_id():
     assert int(cr.loc[cr["cell_bc"] == "c2", "umis_mpra_bc"].iloc[0]) == 0
 
 
-def test_split_level_inflation_hard_memory_cap():
-    obj = _make_obj(_toy_missing_pdf())
-    obj.set_consider_missing(True, max_memory_gb=1e-9)
-    with pytest.raises(ValueError, match="estimated peak memory"):
-        obj.get_data(
-            include_missing=True,
-            context={"kind": "split_level", "split": "cell_type", "level": "ctA"},
-        ).compute()
-
-
 def test_consider_missing_policy_persistence_and_legacy_defaults(tmp_path):
     obj = _make_obj(_toy_missing_pdf())
-    obj.set_consider_missing(True, max_memory_gb=123.0, peak_overhead_factor=2.5)
+    obj.set_consider_missing(True)
     out = tmp_path / "policy.scmpra"
     obj.to_parquet(str(out))
 
     loaded = scMPRA_data.from_parquet(str(out))
     assert loaded.consider_missing_enabled is True
-    assert loaded.consider_missing_max_memory_gb == 123.0
-    assert loaded.consider_missing_peak_overhead_factor == 2.5
     assert loaded.consider_missing_subset_semantics == "full_replicate"
 
     members_path = out / "members.json"
     members = json.loads(members_path.read_text())
     for k in [
         "consider_missing_enabled",
-        "consider_missing_max_memory_gb",
-        "consider_missing_peak_overhead_factor",
         "consider_missing_subset_semantics",
     ]:
         members.pop(k, None)
@@ -151,8 +128,6 @@ def test_consider_missing_policy_persistence_and_legacy_defaults(tmp_path):
 
     legacy = scMPRA_data.from_parquet(str(out))
     assert legacy.consider_missing_enabled is False
-    assert legacy.consider_missing_max_memory_gb == 100.0
-    assert legacy.consider_missing_peak_overhead_factor == 4.0
     assert legacy.consider_missing_subset_semantics == "full_replicate"
 
 
@@ -175,7 +150,7 @@ def test_hypothesis_builders_and_mwu_respect_policy():
     ).to_dataframe()
     assert len(hs_cre_raw) == 0
 
-    obj.set_consider_missing(True, max_memory_gb=10.0)
+    obj.set_consider_missing(True)
     hs_miss = make_by_celltype_hypotheses(
         comparison_cell_type="ctA",
         counts=obj,
@@ -209,7 +184,7 @@ def test_bootstrap_opt_out_warns_and_uses_raw_semantics():
         }
     )
     obj = _make_obj(pdf)
-    obj.set_consider_missing(True, max_memory_gb=10.0)
+    obj.set_consider_missing(True)
 
     hs = HypothesisSet.from_dataframe(
         pd.DataFrame(

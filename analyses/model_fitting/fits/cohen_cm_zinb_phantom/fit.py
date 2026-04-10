@@ -33,7 +33,6 @@ def main():
     cohen.set_reference_cell("Rod")
     cohen.ortho_filter()
     cohen.set_consider_missing(True)
-    cohen.consider_missing_max_memory_gb = None  # bypass dense-string estimator
     print("Data loaded and filtered.", flush=True)
 
     # ── Fit ────────────────────────────────────────────────────────────

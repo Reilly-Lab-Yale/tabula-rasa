@@ -96,8 +96,6 @@ Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The
 
 The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes `_get_missing_maps()` validation. It contains the full CRE-coarse reporter-informed zeros, which are a strict subset of what `consider_missing` would produce.
 
-**Memory cap note**: `_inflate_missing_split_level` estimates ~8,750 GB for Cohen CM cell-type slices, but this assumes dense string-per-row representation. The actual data is 99.8% sparse zeros. Cohen CM fits must set `consider_missing_max_memory_gb = None` to bypass the cap. The estimator should eventually be updated to account for sparse encoding.
-
 ## Terminology: zero expansion modes
 
 | Term | Verb form | Meaning |
