@@ -1620,7 +1620,7 @@ class scMPRA_data:
         """
         assert self.table_type=="mpra_umiwise"
 
-        unique_mpra_barcodes_per_cell = self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        unique_mpra_barcodes_per_cell = self.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique()
         unique_mpra_barcodes_per_cell = _to_pandas(unique_mpra_barcodes_per_cell)
         return simple_count(data=unique_mpra_barcodes_per_cell)
         
