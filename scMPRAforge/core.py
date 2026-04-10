@@ -7952,7 +7952,8 @@ class de_novo_simulation:
         has_reporter : bool
             When False, drop zeros before testing (for no-reporter datasets).
         """
-        self._counts_test(name, "mwu", _mwu_row_fn,
+        tt = "mwu" if has_reporter else "mwu_deflated"
+        self._counts_test(name, tt, _mwu_row_fn,
                           has_reporter=has_reporter)
 
     def ttest(self, name, has_reporter=True):
@@ -7961,7 +7962,8 @@ class de_novo_simulation:
         has_reporter : bool
             When False, drop zeros before testing (for no-reporter datasets).
         """
-        self._counts_test(name, "ttest", _ttest_row_fn,
+        tt = "ttest" if has_reporter else "ttest_deflated"
+        self._counts_test(name, tt, _ttest_row_fn,
                           has_reporter=has_reporter)
 
     def ks(self, name, has_reporter=True):
@@ -7970,7 +7972,8 @@ class de_novo_simulation:
         has_reporter : bool
             When False, drop zeros before testing (for no-reporter datasets).
         """
-        self._counts_test(name, "ks", _ks_row_fn,
+        tt = "ks" if has_reporter else "ks_deflated"
+        self._counts_test(name, tt, _ks_row_fn,
                           has_reporter=has_reporter)
 
     def pseudobulk(self, name, has_reporter=True):
@@ -7980,7 +7983,8 @@ class de_novo_simulation:
         has_reporter : bool
             When False, drop zeros before testing (for no-reporter datasets).
         """
-        self._counts_test(name, "pseudobulk", _pseudobulk_row_fn,
+        tt = "pseudobulk" if has_reporter else "pseudobulk_deflated"
+        self._counts_test(name, tt, _pseudobulk_row_fn,
                           has_reporter=has_reporter,
                           extra_columns=["rep_id"],
                           bundle_fn=_build_pseudobulk_bundle)

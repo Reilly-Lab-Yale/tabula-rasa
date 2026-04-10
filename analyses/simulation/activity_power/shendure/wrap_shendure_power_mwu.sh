@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=cohen_pow
+#SBATCH --job-name=shendure_pow
 #SBATCH --partition=priority
 #SBATCH --account=prio_skr2
 #SBATCH --time=14:00:00
@@ -10,5 +10,5 @@
 module load miniconda
 conda activate tz
 
-python cohen_power_ttest_all_cell_types.py all
+python shendure_power_ttest_all_cell_types.py all
 echo "EXITING SHELL"
