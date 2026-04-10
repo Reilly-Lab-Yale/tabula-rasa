@@ -1,7 +1,19 @@
-# scMPRAforge — CLAUDE.md
+# scMPRAforge -- CLAUDE.md
 
 See also: `paper_plan.md` in repo root for analysis tasks, figure plan, model
 selection results, and dream/v2 feature ideas.
+
+## Core lock
+
+`core.lock` at repo root holds `true` or `false`. A PreToolUse hook blocks
+Edit/Write/NotebookEdit to anything under `scMPRAforge/` (including
+`presets/`) when the lock is `true`. Purpose: let peripheral analysis work
+proceed without risking changes to the core package.
+
+If you hit the lock: STOP. Do not flip `core.lock` to false. Do not route
+around it via Bash (`sed`, `cp`, `tee`, redirect). Tell the user the edit is
+blocked and ask whether to unlock. The lock reflects an explicit user decision
+about what is safe to touch right now.
 
 ## What this project is
 
