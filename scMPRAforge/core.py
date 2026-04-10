@@ -8326,7 +8326,7 @@ def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_c
 
     # simulate libraries
     libraries=[simulate_library(CREs=gt_df["cre_id"],
-                 library_model=SHENDURE_BOUNDS.library_model)
+                 library_model=bound.library_model)
                  for i in range(n_sims)]
     
     #initalize the simulated replicate
