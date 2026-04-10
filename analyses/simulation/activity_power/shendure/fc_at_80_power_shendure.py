@@ -31,8 +31,8 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Must match the simulation script's activity range.
 MINP = scm.SHENDURE_BOUNDS.reference_activity
-MAX_ACTIVITY = 2.59 * MINP
-MAX_FC = MAX_ACTIVITY / MINP  # ~2.59
+MAX_ACTIVITY = 4.0 * MINP
+MAX_FC = MAX_ACTIVITY / MINP  # 4.0
 
 
 def fc_at_80(df, ct, n_bins=200):
