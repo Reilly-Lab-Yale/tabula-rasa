@@ -29,11 +29,10 @@ import scMPRAforge as scm
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# MAX_ACTIVITY in the simulation script is 0.05; MINP is reference_activity.
-# FC = activity / MINP, so the sim range is [MIN_ACTIVITY/MINP, 0.05/MINP].
-MAX_ACTIVITY = 0.05
+# Must match the simulation script's activity range.
 MINP = scm.SHENDURE_BOUNDS.reference_activity
-MAX_FC = MAX_ACTIVITY / MINP
+MAX_ACTIVITY = 2.59 * MINP
+MAX_FC = MAX_ACTIVITY / MINP  # ~2.59
 
 
 def fc_at_80(df, ct, n_bins=200):

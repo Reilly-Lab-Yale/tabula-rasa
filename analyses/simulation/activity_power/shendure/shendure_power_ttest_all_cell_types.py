@@ -60,7 +60,7 @@ DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-SIM_DATE = "2026-04-08"
+SIM_DATE = "2026-04-09"
 SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_shendure_pow"
 
 # Load per-cell-type n_cres from the canonical phantom ortho parameters
@@ -74,9 +74,12 @@ CELL_TYPES = sorted(_params.nb.keys())
 N_CRES_PER_CT = {ct: len(_params.nb[ct]) for ct in CELL_TYPES}
 del _params
 
-MAX_ACTIVITY = 0.05
-MIN_ACTIVITY = scm.SHENDURE_BOUNDS.min_mpra_umi
+# The old notebook (minP=0.019) used MAX_ACTIVITY=0.05 giving FC~2.59.
+# Bounds have since changed (minP=0.041), so scale MAX_ACTIVITY to preserve
+# the same FC range.
 MINP = scm.SHENDURE_BOUNDS.reference_activity
+MAX_ACTIVITY = 2.59 * MINP
+MIN_ACTIVITY = scm.SHENDURE_BOUNDS.min_mpra_umi
 N_LIBRARY_REPS = 100
 N_SIMS = 5
 
