@@ -1,7 +1,19 @@
-# scMPRAforge — CLAUDE.md
+# scMPRAforge -- CLAUDE.md
 
 See also: `paper_plan.md` in repo root for analysis tasks, figure plan, model
 selection results, and dream/v2 feature ideas.
+
+## Core lock
+
+`core.lock` at repo root holds `true` or `false`. A PreToolUse hook blocks
+Edit/Write/NotebookEdit to anything under `scMPRAforge/` (including
+`presets/`) when the lock is `true`. Purpose: let peripheral analysis work
+proceed without risking changes to the core package.
+
+If you hit the lock: STOP. Do not flip `core.lock` to false. Do not route
+around it via Bash (`sed`, `cp`, `tee`, redirect). Tell the user the edit is
+blocked and ask whether to unlock. The lock reflects an explicit user decision
+about what is safe to touch right now.
 
 ## What this project is
 
@@ -83,8 +95,6 @@ Cohen's transfection reporter (U6) operates at CRE-level, not barcode-level. The
 2. Performs CRE-coarse reporter-informed expansion: expands U6-only (cell, CRE) detections to all barcodes of that CRE (replacing a single dummy row with real barcode-level zeros)
 
 The output `retina_single_counting_u6.scmpra/` has no dummy barcodes and passes `_get_missing_maps()` validation. It contains the full CRE-coarse reporter-informed zeros, which are a strict subset of what `consider_missing` would produce.
-
-**Memory cap note**: `_inflate_missing_split_level` estimates ~8,750 GB for Cohen CM cell-type slices, but this assumes dense string-per-row representation. The actual data is 99.8% sparse zeros. Cohen CM fits must set `consider_missing_max_memory_gb = None` to bypass the cap. The estimator should eventually be updated to account for sparse encoding.
 
 ## Terminology: zero expansion modes
 
