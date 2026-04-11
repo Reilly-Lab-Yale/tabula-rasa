@@ -1,0 +1,127 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775924259.288424  566943 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775924261.527965  566943 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Dashboard: http://10.18.22.68:8787/status
+
+============================================================
+Processing takeshi_obs_nb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-04-11 12:17:47,571 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e initialized by task ('shuffle-transfer-377e2262ae42370fa480007731178f1e', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:48,176 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e deactivated due to stimulus 'task-finished-1775924268.1761131'
+2026-04-11 12:17:49,572 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c3fe941e255388425f0b8ed39a16f5f7 initialized by task ('shuffle-transfer-c3fe941e255388425f0b8ed39a16f5f7', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:49,606 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c3fe941e255388425f0b8ed39a16f5f7 deactivated due to stimulus 'task-finished-1775924269.6059318'
+2026-04-11 12:17:50,749 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 7ad4c042867898dc2a8bb7d188972c1b initialized by task ('shuffle-transfer-7ad4c042867898dc2a8bb7d188972c1b', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:50,775 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 7ad4c042867898dc2a8bb7d188972c1b deactivated due to stimulus 'task-finished-1775924270.7742448'
+2026-04-11 12:17:51,924 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9e1593965560f5b4774192bce2afd393 initialized by task ('shuffle-transfer-9e1593965560f5b4774192bce2afd393', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:51,951 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9e1593965560f5b4774192bce2afd393 deactivated due to stimulus 'task-finished-1775924271.9514956'
+2026-04-11 12:17:53,501 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e initialized by task ('shuffle-transfer-377e2262ae42370fa480007731178f1e', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:54,066 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e deactivated due to stimulus 'task-finished-1775924274.0655177'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.001582
+  max_mpra_umi: 1.583675
+  by_cell_type_theta: 0.036436
+  by_cre_theta: 0.699826
+  reference_activity: 0.011637
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: False
+  nb_only: True
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom_library.svg
+
+============================================================
+Processing takeshi_obs_zinb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-04-11 12:17:58,477 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle cfdd4438990d20d72dca1fc618d96135 initialized by task ('shuffle-transfer-cfdd4438990d20d72dca1fc618d96135', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:17:59,046 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle cfdd4438990d20d72dca1fc618d96135 deactivated due to stimulus 'task-finished-1775924279.045568'
+2026-04-11 12:18:00,486 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fa789a36305c5f7201532df10806a308 initialized by task ('shuffle-transfer-fa789a36305c5f7201532df10806a308', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:00,518 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fa789a36305c5f7201532df10806a308 deactivated due to stimulus 'task-finished-1775924280.5183997'
+2026-04-11 12:18:01,731 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle a0937edd519b981150fe74fe7e94a2f4 initialized by task ('shuffle-transfer-a0937edd519b981150fe74fe7e94a2f4', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:01,759 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle a0937edd519b981150fe74fe7e94a2f4 deactivated due to stimulus 'task-finished-1775924281.758386'
+2026-04-11 12:18:03,186 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 30088c50bf68a9cfb3726f48eb6c4296 initialized by task ('shuffle-transfer-30088c50bf68a9cfb3726f48eb6c4296', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:03,215 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 30088c50bf68a9cfb3726f48eb6c4296 deactivated due to stimulus 'task-finished-1775924283.2154584'
+2026-04-11 12:18:04,805 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle cfdd4438990d20d72dca1fc618d96135 initialized by task ('shuffle-transfer-cfdd4438990d20d72dca1fc618d96135', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:05,365 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle cfdd4438990d20d72dca1fc618d96135 deactivated due to stimulus 'task-finished-1775924285.3647184'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.001595
+  max_mpra_umi: 1.597480
+  by_cell_type_theta: 0.036742
+  by_cre_theta: 0.700464
+  reference_activity: 0.011742
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: False
+  nb_only: False
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom_library.svg
+
+============================================================
+Processing takeshi_cm_nb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-04-11 12:18:09,031 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d initialized by task ('shuffle-transfer-dab9faa1d82a748abef3a7811690996d', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:09,601 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d deactivated due to stimulus 'task-finished-1775924289.600457'
+2026-04-11 12:18:10,997 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 317d3bf9429ec604217cde909ba5f64b initialized by task ('shuffle-transfer-317d3bf9429ec604217cde909ba5f64b', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:11,033 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 317d3bf9429ec604217cde909ba5f64b deactivated due to stimulus 'task-finished-1775924291.033057'
+2026-04-11 12:18:12,499 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fadf627b88922d610e0dd0c1428dd2cc initialized by task ('shuffle-transfer-fadf627b88922d610e0dd0c1428dd2cc', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:12,526 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fadf627b88922d610e0dd0c1428dd2cc deactivated due to stimulus 'task-finished-1775924292.5258663'
+2026-04-11 12:18:13,737 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0b0844ed7ea6c893b7edcaeade1ec044 initialized by task ('shuffle-transfer-0b0844ed7ea6c893b7edcaeade1ec044', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:13,765 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0b0844ed7ea6c893b7edcaeade1ec044 deactivated due to stimulus 'task-finished-1775924293.765277'
+2026-04-11 12:18:15,338 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d initialized by task ('shuffle-transfer-dab9faa1d82a748abef3a7811690996d', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:15,884 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d deactivated due to stimulus 'task-finished-1775924295.8843563'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.000001
+  max_mpra_umi: 0.011216
+  by_cell_type_theta: 0.000170
+  by_cre_theta: 0.483354
+  reference_activity: 0.000068
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: True
+  nb_only: True
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom_library.svg
+
+============================================================
+Processing takeshi_cm_zinb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-04-11 12:18:20,292 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af initialized by task ('shuffle-transfer-72f45f110e2b1a5bc5a2472d4ac5e0af', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:20,840 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af deactivated due to stimulus 'task-finished-1775924300.839566'
+2026-04-11 12:18:22,233 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 51f02611b11cdc9a3d2a7bd9d9b04cd4 initialized by task ('shuffle-transfer-51f02611b11cdc9a3d2a7bd9d9b04cd4', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:22,263 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 51f02611b11cdc9a3d2a7bd9d9b04cd4 deactivated due to stimulus 'task-finished-1775924302.2632012'
+2026-04-11 12:18:23,525 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 35f1c5c252362802bb1762995fa8fd24 initialized by task ('shuffle-transfer-35f1c5c252362802bb1762995fa8fd24', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:23,553 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 35f1c5c252362802bb1762995fa8fd24 deactivated due to stimulus 'task-finished-1775924303.5523434'
+2026-04-11 12:18:24,721 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b05723f9ab0b50c97f941ff5e8fefd1 initialized by task ('shuffle-transfer-9b05723f9ab0b50c97f941ff5e8fefd1', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:24,750 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b05723f9ab0b50c97f941ff5e8fefd1 deactivated due to stimulus 'task-finished-1775924304.750248'
+2026-04-11 12:18:26,275 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af initialized by task ('shuffle-transfer-72f45f110e2b1a5bc5a2472d4ac5e0af', 1) executed on worker inproc://10.18.22.68/566943/4
+2026-04-11 12:18:26,833 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af deactivated due to stimulus 'task-finished-1775924306.8330483'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.000001
+  max_mpra_umi: 0.011381
+  by_cell_type_theta: 0.000171
+  by_cre_theta: 0.597196
+  reference_activity: 0.000075
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: True
+  nb_only: False
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom_library.svg
+
+Done.
