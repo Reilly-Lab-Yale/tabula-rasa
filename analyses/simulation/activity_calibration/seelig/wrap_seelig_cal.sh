@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=cohen_cal
+#SBATCH --job-name=seelig_cal
 #SBATCH --partition=priority
 #SBATCH --account=prio_skr2
 #SBATCH --time=14:00:00
@@ -11,5 +11,5 @@
 module load miniconda
 conda activate tz
 
-python cohen_calibration_ttest_all_cell_types.py all
+python seelig_calibration_ttest_all_cell_types.py all
 echo "EXITING SHELL"

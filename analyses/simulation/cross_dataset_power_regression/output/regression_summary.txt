@@ -1,0 +1,43 @@
+Cross-dataset power regression
+============================================================
+
+Response: log10(FC at which Welch t-test power crosses 0.5)
+n = 16 (dataset x cell_type)
+
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:             log10_fc50   R-squared:                       0.945
+Model:                            OLS   Adj. R-squared:                  0.925
+Method:                 Least Squares   F-statistic:                     47.28
+Date:                Fri, 10 Apr 2026   Prob (F-statistic):           7.29e-07
+Time:                        19:41:38   Log-Likelihood:                 41.370
+No. Observations:                  16   AIC:                            -72.74
+Df Residuals:                      11   BIC:                            -68.88
+Df Model:                           4                                         
+Covariance Type:            nonrobust                                         
+=====================================================================================
+                        coef    std err          t      P>|t|      [0.025      0.975]
+-------------------------------------------------------------------------------------
+const                 0.6142      0.160      3.849      0.003       0.263       0.965
+log10_n_cells        -0.0700      0.014     -4.875      0.000      -0.102      -0.038
+log10_n_cres          0.0404      0.028      1.424      0.182      -0.022       0.103
+log10_bcs_per_cre    -0.0704      0.010     -6.787      0.000      -0.093      -0.048
+log10_moi_median     -0.1546      0.069     -2.230      0.048      -0.307      -0.002
+==============================================================================
+Omnibus:                        1.657   Durbin-Watson:                   2.930
+Prob(Omnibus):                  0.437   Jarque-Bera (JB):                1.349
+Skew:                           0.614   Prob(JB):                        0.509
+Kurtosis:                       2.284   Cond. No.                         160.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+
+Partial R^2 (variance explained uniquely by each predictor):
+  log10_n_cells             +0.6836
+  log10_n_cres              +0.1556
+  log10_bcs_per_cre         +0.8073
+  log10_moi_median          +0.3113
+
+Total R^2:    0.9450
+Adj. R^2:     0.9250

@@ -1563,7 +1563,7 @@ class scMPRA_data:
         """
         assert self.table_type=="mpra_umiwise"
 
-        unique_mpra_barcodes_per_cell = self.data.groupby("cell_bc")["mpra_bc"].nunique()
+        unique_mpra_barcodes_per_cell = self.data.groupby(["rep_id","cell_bc"])["mpra_bc"].nunique()
         unique_mpra_barcodes_per_cell = _to_pandas(unique_mpra_barcodes_per_cell)
         return simple_count(data=unique_mpra_barcodes_per_cell)
         
@@ -8269,7 +8269,7 @@ def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_c
 
     # simulate libraries
     libraries=[simulate_library(CREs=gt_df["cre_id"],
-                 library_model=SHENDURE_BOUNDS.library_model)
+                 library_model=bound.library_model)
                  for i in range(n_sims)]
     
     #initalize the simulated replicate
