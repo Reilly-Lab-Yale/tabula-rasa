@@ -136,7 +136,7 @@ def phase_simulate(client):
                 root=ct_dir,
                 n_sims=N_SIMS,
                 client=client,
-                flatten_overtransfection=False,
+                flatten_overtransfection=True,
                 bound=bound_ct,
                 n_cres=N_CRES_PER_CT[cell_type],
                 min=MIN_ACTIVITY,
