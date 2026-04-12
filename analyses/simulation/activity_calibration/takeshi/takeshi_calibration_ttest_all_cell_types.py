@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """
-Takeshi t-test power -- all cell types
+Takeshi Welch t-test null calibration -- all cell types.
 
-Assesses Welch's t-test power (TPR) as a function of CRE_oi strength relative
-to `minP`, for every cell type in the Takeshi dataset (HepG2, K562, SKNSH).
-
-Takeshi has a barcode-level oBC transfection reporter (like Shendure), so
-both the +reporter (obs condition) and the deflated (-reporter, drop-zeros)
-condition are evaluated. Reference cell type is HepG2.
-
-Bounds come from `scm.TAKESHI_BOUNDS` (canonical = takeshi_obs_nb_phantom).
+Mirrors `takeshi_power_ttest_all_cell_types.py` in scope and infra
+(N_LIBRARY_REPS=156, N_SIMS=5, per-CT sims, both +reporter and -reporter).
+Difference: mu = minP for ALL CREs, so every comparison is a true null.
+Output is a per-CT p-value distribution (histogram + QQ) plus FPR@0.05 and
+KS statistic vs Uniform(0,1), each with bootstrap 95% CIs.
 
 Usage:
-    python takeshi_power_ttest_all_cell_types.py [phase]
+    python takeshi_calibration_ttest_all_cell_types.py [phase]
 
 Phases:
     simulate  -- generate simulations and run t-test (both conditions)
-    plot      -- aggregate results and produce SVG
+    plot      -- aggregate results and produce SVG + summary parquet
     all       -- run both phases sequentially (default)
 """
 
@@ -24,6 +21,7 @@ import sys
 import os
 import pickle
 import math
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +29,8 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import uniform, kstest
 
 _repo_root = Path(__file__).resolve().parents[4]
 if str(_repo_root) not in sys.path:
@@ -45,28 +45,25 @@ from dask_jobqueue import SLURMCluster
 # ---------------------------------------------------------------------------
 
 DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
-SCRATCH_ROOT = Path("/nfs/roberts/scratch/pi_skr2/mcn26")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 SIM_DATE = "2026-04-11"
-SIM_DIR = SCRATCH_ROOT / "simulated" / f"{SIM_DATE}_takeshi_pow"
+SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_takeshi_cal"
 
-# Per-cell-type n_cres from the canonical phantom ortho parameters
-# (canonical = takeshi_obs_nb_phantom, matches scm.TAKESHI_BOUNDS).
 ORTHO_DIR = DATA_ROOT / "takeshi" / "takeshi_obs_nb_phantom"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
-
 CELL_TYPES = sorted(_params.nb.keys())
 N_CRES_PER_CT = {ct: len(_params.nb[ct]) for ct in CELL_TYPES}
 del _params
 
 MINP = scm.TAKESHI_BOUNDS.reference_activity
-MAX_ACTIVITY = 4.0 * MINP
-MIN_ACTIVITY = scm.TAKESHI_BOUNDS.min_mpra_umi
 N_LIBRARY_REPS = 156
 N_SIMS = 5
+N_BOOTSTRAP = 1000
+HIST_BINS = 25
+QQ_N_QUANTILES = 2000
 
 
 # ---------------------------------------------------------------------------
@@ -74,11 +71,10 @@ N_SIMS = 5
 # ---------------------------------------------------------------------------
 
 def phase_simulate(client):
-    print(f"minP={MINP:.6f}, min={MIN_ACTIVITY:.6f}, max={MAX_ACTIVITY}")
+    print(f"minP={MINP:.6f} (all CREs at minP for null calibration)")
     print(f"Cell types: {len(CELL_TYPES)}, library reps: {N_LIBRARY_REPS}, "
           f"sims per rep: {N_SIMS}")
     print()
-
     for ct in CELL_TYPES:
         cells = scm.TAKESHI_BOUNDS.cells_per_cell_type.get(ct, "N/A")
         print(f"  {ct}: n_cres={N_CRES_PER_CT[ct]}, cells={cells}")
@@ -93,6 +89,7 @@ def phase_simulate(client):
             scm.TAKESHI_BOUNDS.cells_per_cell_type.loc[[cell_type]]
         )
         ct_dir = SIM_DIR / cell_type
+        n_cres = N_CRES_PER_CT[cell_type]
 
         sims_ct = []
         if ct_dir.exists():
@@ -111,18 +108,28 @@ def phase_simulate(client):
         n_remaining = N_LIBRARY_REPS - len(sims_ct)
         print(f"  Running {n_remaining} fresh sims.", flush=True)
         for i in range(n_remaining):
-            _, sim = scm.one_library_replicate(
-                root=ct_dir,
-                n_sims=N_SIMS,
+            names = [f"synthcre_{j}" for j in range(n_cres - 1)] + ["reference"]
+            gt_df = pd.DataFrame({"cre_id": names, "mu": MINP,
+                                  "cell_type": cell_type})
+            libraries = [
+                scm.simulate_library(
+                    CREs=pd.Series(names),
+                    library_model=scm.TAKESHI_BOUNDS.library_model,
+                )
+                for _ in range(N_SIMS)
+            ]
+            sim = scm.de_novo_simulation(
+                location=ct_dir,
+                name=f"sim_{uuid.uuid4().hex[:8]}",
                 client=client,
+                libraries=libraries,
+                library_mapping="corresponding",
                 flatten_overtransfection=True,
-                bound=bound_ct,
-                n_cres=N_CRES_PER_CT[cell_type],
-                min=MIN_ACTIVITY,
-                max=MAX_ACTIVITY,
-                minP=MINP,
-                cell_type=cell_type,
+                n_sims=N_SIMS,
+                experiment_bounds=bound_ct,
+                ground_truth=gt_df,
             )
+            sim.gamut()
             sims_ct.append(sim)
 
         all_sims[cell_type] = sims_ct
@@ -133,7 +140,7 @@ def phase_simulate(client):
             sim.save()
     print("\nAll sims saved.", flush=True)
 
-    # --- t-test: +reporter (obs condition) ---
+    # --- t-test: +reporter ---
     for cell_type, sims in all_sims.items():
         print(f"t-test (+reporter): {cell_type}", flush=True)
         hs = None
@@ -157,7 +164,7 @@ def phase_simulate(client):
             sim.save()
     print("t-test (+reporter) done and saved.", flush=True)
 
-    # --- t-test: deflated (drop zeros, simulates no-reporter experiment) ---
+    # --- t-test: deflated ---
     for cell_type, sims in all_sims.items():
         print(f"t-test (deflated): {cell_type}", flush=True)
         hs = None
@@ -192,6 +199,50 @@ def phase_simulate(client):
 # Phase: plot
 # ---------------------------------------------------------------------------
 
+def _collect_pvals(sims, test_type):
+    """Return concatenated p-value array (all CREs, all sims)."""
+    arrs = []
+    for sim in sims:
+        for i in range(sim.get_state_field("n_sims")):
+            m = sim._merge_in_ground_truth(
+                hypothesis_set_name="hs_all_ct",
+                test_type=test_type,
+                index=i,
+            )
+            arrs.append(m["p_value"].values)
+    if not arrs:
+        return np.array([])
+    v = np.concatenate(arrs)
+    return v[np.isfinite(v)]
+
+
+def _bootstrap_ci(pvals, n_boot=N_BOOTSTRAP, alpha=0.05, seed=0):
+    rng = np.random.default_rng(seed)
+    n = len(pvals)
+    if n < 2:
+        nan = float("nan")
+        return dict(n=n, fpr=nan, fpr_lo=nan, fpr_hi=nan,
+                    ks_d=nan, ks_d_lo=nan, ks_d_hi=nan, ks_p=nan)
+    fpr = float(np.mean(pvals < alpha))
+    ks_d, ks_p = kstest(pvals, "uniform")
+    fpr_boot = np.empty(n_boot)
+    ks_d_boot = np.empty(n_boot)
+    for b in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        sample = pvals[idx]
+        fpr_boot[b] = np.mean(sample < alpha)
+        ks_d_boot[b] = kstest(sample, "uniform").statistic
+    return dict(
+        n=n, fpr=fpr,
+        fpr_lo=float(np.percentile(fpr_boot, 2.5)),
+        fpr_hi=float(np.percentile(fpr_boot, 97.5)),
+        ks_d=float(ks_d),
+        ks_d_lo=float(np.percentile(ks_d_boot, 2.5)),
+        ks_d_hi=float(np.percentile(ks_d_boot, 97.5)),
+        ks_p=float(ks_p),
+    )
+
+
 def phase_plot(client):
     all_sims = {}
     for cell_type in CELL_TYPES:
@@ -211,95 +262,97 @@ def phase_plot(client):
         all_sims[cell_type] = sims_ct
         print(f"  {cell_type}: loaded {len(sims_ct)} sims", flush=True)
 
-    all_mergy_reporter = {
-        ct: scm.sum_pow(sims, hypothesis_set_name="hs_all_ct", test_type="ttest")
-        for ct, sims in all_sims.items()
-    }
-    all_mergy_deflated = {
-        ct: scm.sum_pow(
-            sims, hypothesis_set_name="hs_all_ct", test_type="ttest_deflated"
-        )
-        for ct, sims in all_sims.items()
-    }
+    pvals_reporter = {ct: _collect_pvals(sims, "ttest")
+                      for ct, sims in all_sims.items()}
+    pvals_deflated = {ct: _collect_pvals(sims, "ttest_deflated")
+                      for ct, sims in all_sims.items()}
 
-    for label, mergy_dict in [
-        ("reporter", all_mergy_reporter),
-        ("deflated", all_mergy_deflated),
-    ]:
+    for label, d in [("reporter", pvals_reporter), ("deflated", pvals_deflated)]:
         rows = []
-        for ct, df in mergy_dict.items():
-            df = df.copy()
-            df["cell_type"] = ct
-            rows.append(df)
-        combined = pd.concat(rows, ignore_index=True)
-        out_path = OUTPUT_DIR / f"takeshi_power_df_{label}.parquet"
-        combined.to_parquet(out_path)
+        for ct, v in d.items():
+            rows.append(pd.DataFrame({"cell_type": ct, "p_value": v}))
+        out_path = OUTPUT_DIR / f"takeshi_null_pvals_{label}.parquet"
+        pd.concat(rows, ignore_index=True).to_parquet(out_path)
         print(f"Saved: {out_path}", flush=True)
 
-    def _pow_curve_data(mergy, n_bins=100):
-        df = mergy.copy()
-        df["fc"] = pd.cut(df["fc"], bins=n_bins)
-        binned = (
-            df.groupby("fc", observed=True)["reject_null"]
-            .mean()
-            .reset_index(name="reject_frac")
-        )
-        binned["bin_center"] = binned["fc"].apply(lambda x: x.mid)
-        return binned
+    summary_rows = []
+    for cond_label, d in [("reporter", pvals_reporter),
+                          ("deflated", pvals_deflated)]:
+        for ct, v in d.items():
+            stats = _bootstrap_ci(v)
+            stats["cell_type"] = ct
+            stats["condition"] = cond_label
+            summary_rows.append(stats)
+    summary = pd.DataFrame(summary_rows)
+    cols = ["cell_type", "condition", "n", "fpr", "fpr_lo", "fpr_hi",
+            "ks_d", "ks_d_lo", "ks_d_hi", "ks_p"]
+    summary = summary[cols]
+    summary_path = OUTPUT_DIR / "takeshi_null_summary.parquet"
+    summary.to_parquet(summary_path)
+    print(f"Saved: {summary_path}", flush=True)
+    print(summary.to_string(index=False), flush=True)
 
-    ncols = min(3, len(CELL_TYPES))
-    nrows = math.ceil(len(CELL_TYPES) / ncols)
-    fig, axes = plt.subplots(
-        nrows, ncols, figsize=(5 * ncols, 4 * nrows), sharey=True
-    )
-    if len(CELL_TYPES) == 1:
-        axes = np.array([axes])
-    axes = np.array(axes).flatten()
+    nrows = len(CELL_TYPES)
+    fig, axes = plt.subplots(nrows, 4, figsize=(16, 3 * nrows))
+    if nrows == 1:
+        axes = axes[np.newaxis, :]
 
-    for i, cell_type in enumerate(CELL_TYPES):
-        ct_display = "HepG2" if cell_type == "reference" else cell_type
-        ax = axes[i]
+    for i, ct in enumerate(CELL_TYPES):
+        ct_display = "HepG2" if ct == "reference" else ct
+        cells = scm.TAKESHI_BOUNDS.cells_per_cell_type.get(ct, "?")
 
-        binned_rep = _pow_curve_data(all_mergy_reporter[cell_type])
-        ax.plot(
-            binned_rep["bin_center"], binned_rep["reject_frac"],
-            color="steelblue", marker="o", markersize=2, linewidth=1,
-            label="+reporter",
-        )
+        for j, (cond_label, cond_pretty, color_cond, d) in enumerate([
+            ("reporter", "+reporter", "steelblue", pvals_reporter),
+            ("deflated", "-reporter (deflated)", "coral", pvals_deflated),
+        ]):
+            v = d[ct]
+            row = summary[(summary.cell_type == ct)
+                          & (summary.condition == cond_label)].iloc[0]
 
-        binned_def = _pow_curve_data(all_mergy_deflated[cell_type])
-        ax.plot(
-            binned_def["bin_center"], binned_def["reject_frac"],
-            color="coral", marker="s", markersize=2, linewidth=1,
-            label="-reporter (deflated)",
-        )
+            ax_h = axes[i, j * 2]
+            if len(v) > 0:
+                ax_h.hist(v, bins=HIST_BINS, density=True,
+                          edgecolor="black", linewidth=0.3, alpha=0.7,
+                          color=color_cond)
+            ax_h.axhline(1.0, color="red", linestyle="--", lw=1)
+            ax_h.set_title(f"{ct_display} -- {cond_pretty}", fontsize=9)
+            ax_h.set_xlabel("p-value", fontsize=8)
+            if j == 0:
+                ax_h.set_ylabel("Density", fontsize=8)
+            ax_h.tick_params(labelsize=7)
+            ax_h.set_xlim(0, 1)
+            ax_h.text(
+                0.97, 0.93,
+                f"FPR@.05={row.fpr:.3f} [{row.fpr_lo:.3f},{row.fpr_hi:.3f}]\n"
+                f"KS-D={row.ks_d:.3f} [{row.ks_d_lo:.3f},{row.ks_d_hi:.3f}]\n"
+                f"KS-p={row.ks_p:.2g}\n"
+                f"n={row.n}, cells={cells}",
+                transform=ax_h.transAxes, ha="right", va="top", fontsize=6,
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.85),
+            )
 
-        ax.axhline(0.8, color="black", linestyle="--", lw=0.8)
-        ax.axvline(1.0, color="grey", linestyle=":", lw=0.8)
-        ax.set_title(ct_display, fontsize=10)
-        ax.set_xlabel("FC (activity / minP)", fontsize=8)
-        ax.set_ylabel("Power (TPR)", fontsize=8)
-        ax.set_ylim(0, 1)
-        cells = scm.TAKESHI_BOUNDS.cells_per_cell_type.get(cell_type, "?")
-        ax.text(
-            0.97, 0.05,
-            f"n_cres={N_CRES_PER_CT[cell_type]}, cells={cells}",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=7, color="grey",
-        )
-        if i == 0:
-            ax.legend(fontsize=7, loc="upper left")
-
-    for j in range(len(CELL_TYPES), len(axes)):
-        axes[j].set_visible(False)
+            ax_q = axes[i, j * 2 + 1]
+            n = len(v)
+            if n > 0:
+                n_q = min(QQ_N_QUANTILES, n)
+                qs = np.linspace(0, 1, n_q + 2)[1:-1]
+                obs = np.quantile(v, qs)
+                ax_q.scatter(qs, obs, s=2, alpha=0.7, color=color_cond)
+            ax_q.plot([0, 1], [0, 1], "r--", lw=1)
+            ax_q.set_title(f"{ct_display} -- {cond_pretty} QQ", fontsize=9)
+            ax_q.set_xlabel("Expected (Uniform)", fontsize=8)
+            ax_q.tick_params(labelsize=7)
+            ax_q.set_xlim(0, 1)
+            ax_q.set_ylim(0, 1)
+            ax_q.set_aspect("equal")
 
     fig.suptitle(
-        "Welch's t-test Power by Cell Type -- Takeshi\n"
-        "+reporter (obs condition) vs -reporter (zero-deflated)",
-        fontsize=12,
+        "Takeshi (piggyBac) -- Welch t-test null calibration\n"
+        "+reporter vs -reporter (deflated)",
+        fontsize=12, y=1.005,
     )
     plt.tight_layout()
-    svg_path = OUTPUT_DIR / "takeshi_power_ttest_reporter_comparison.svg"
+    svg_path = OUTPUT_DIR / "takeshi_calibration_ttest_reporter_comparison.svg"
     fig.savefig(svg_path, format="svg", bbox_inches="tight")
     print(f"Saved: {svg_path}", flush=True)
 
@@ -322,7 +375,7 @@ if __name__ == "__main__":
             job_extra_directives=[
                 "-p priority",
                 "--account=prio_skr2",
-                "--job-name=takeshi_pow_worker",
+                "--job-name=takeshi_cal_worker",
                 "--time=8:00:00",
                 "--exclude=a1132u18n02",
                 "--output=worker_%j.out",
@@ -355,17 +408,13 @@ if __name__ == "__main__":
         return cluster, client
 
     if phase == "all":
-        print(f"\n{'='*60}", flush=True)
-        print("Phase: simulate", flush=True)
-        print(f"{'='*60}", flush=True)
+        print(f"\n{'='*60}\nPhase: simulate\n{'='*60}", flush=True)
         cluster, client = _make_slurm_client()
         phase_simulate(client)
         client.close()
         cluster.close()
 
-        print(f"\n{'='*60}", flush=True)
-        print("Phase: plot", flush=True)
-        print(f"{'='*60}", flush=True)
+        print(f"\n{'='*60}\nPhase: plot\n{'='*60}", flush=True)
         cluster, client = _make_local_client()
         phase_plot(client)
         client.close()
@@ -384,10 +433,7 @@ if __name__ == "__main__":
         cluster.close()
 
     else:
-        print(
-            f"Unknown phase: {phase!r}. "
-            f"Choose from: simulate, plot, or all"
-        )
+        print(f"Unknown phase: {phase!r}. Choose simulate, plot, or all")
         sys.exit(1)
 
     print("\nDone.", flush=True)
