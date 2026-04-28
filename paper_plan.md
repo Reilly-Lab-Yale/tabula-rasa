@@ -1,3 +1,6 @@
+(need to add bulk to seelig 5x5)
+(seelig wald is probably under-reporting : MOIB not implemented for it)
+
 # Paper Plan
 
 ## Style note
