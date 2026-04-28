@@ -241,6 +241,8 @@ def table_type(column_names):
     ret = 'malformed'
     matches = 0
 
+    #TODO: we are currently defining column sets here, when the established pattern was to use constants: fix.
+    #TODO: Why do we have both strict and non-strict? Is non-strict actually being used anywhere.
     # Read-wise MPRA (use the names used elsewhere in the codebase)
     if {'cell_bc','rep_id','cre_id','cell_type','mpra_bc','umi','reads'} <= cols:
         ret = 'mpra_readwise'; matches += 1
@@ -343,6 +345,7 @@ def _extract_square(s):
     Utility function which extracts the contents of [T. ] or [ ] brackets from  string `s`
     Assumes one pair of brackets
     If no brackets are found, returns `s` untouched.
+    TODO: See if we can move to .util
     """
     tm = re.search(r"\[T\.(.*?)\]", s)
     m = re.search(r"\[(.*?)\]", s)
@@ -358,6 +361,7 @@ def _matricies_to_order(matricies):
     """
     Helper function. Extracts column index order from matricies for use elsewhere.
     Replaces `Intercept` with `reference`.
+    TODO: See if we can move to .util
     """
     zi_names=matricies["zi_regressor_names"] if "zi_regressor_names" in matricies else list(matricies["zi_regressors"].columns)
     zi_idx=[_extract_square(s) if s !="Intercept" else "reference" for s in zi_names]
@@ -467,7 +471,7 @@ def _mom_from_training_data(data,split,subset,indicies):
     #fill out non-valid nb cases with zero portion using poisson
     zi_stats.loc[~zi_stats["valid_nb"],"nb_zero_prop"]=np.exp(-zi_stats["mean_umis_mpra_bc"])
 
-    assert ~any(zi_stats["nb_zero_prop"].isna())
+    assert ~any(zi_stats["nb_zero_prop"].isna())  #TODO: add a message
 
 
     zi_stats["zero_inflation"]=zi_stats["gross_zero_prop"]-zi_stats["nb_zero_prop"]
@@ -525,6 +529,7 @@ def recombinator(primary,secondary):
     """
     All pairs of (All pairs of primary), secondary.
     two duplicate `secondary` entries in each element.
+    TODO: see if we can move to utils
     """
     combos=itertools.combinations(primary,2)
     return [(i,j,k,k) for (i,j) in combos for k in secondary]
@@ -1264,6 +1269,9 @@ class scMPRA_data:
         self._ortho_filter_applied=False
 
     def _ensure_consider_missing_defaults(self):
+        """
+        TODO: why did I add this function again? Surely can just be rolled into set consider missing? or is it called someplace else too?
+        """
         if not hasattr(self, "consider_missing_enabled"):
             self.consider_missing_enabled = False
         if not hasattr(self, "consider_missing_subset_semantics"):
@@ -1309,6 +1317,7 @@ class scMPRA_data:
         """
         if isinstance(reporter, (str, Path)):
             reporter = pd.read_csv(str(reporter), sep='\t')
+        #TODO: define this "required" in a constant at the beginning, matching pattern
         required = {"rep_id", "cell_bc", "cre_id"}
         missing = required - set(reporter.columns)
         if missing:
@@ -2303,6 +2312,8 @@ def _reporter_zero_counts(nz_pdf, reporter, mpra_map, cell_map, split, levels,
     """
     Compute total observation counts (nonzero + reporter-informed zeros) per
     (split_level, anti_level, rep_id) group from a coarse reporter table.
+
+    TODO: rename function so it is clear that this is specific to coarse reporters
 
     Cells with nonzero MPRA obs but no reporter detection (-U6 +MPRA, i.e.
     orphan cells) are treated as confirmed transfections (false-negative
@@ -6525,6 +6536,8 @@ def _bootstrap_build_bundle(
       - Chooses metric column automatically.
       - Drops any controls absent from the counts (warns).
       - Filters to only CREs referenced by the hypothesis set (comparison + control).
+
+    TODO: remove "biol rep" nomenclature, we already have perfectly good replicate naming
     """
     # ---- Validate counts object ----
     if isinstance(models_or_counts, scMPRA_data):
@@ -8250,6 +8263,7 @@ def volcano(results: "ResultSet", title = None, bh_thresh=0.05, fc_thresh=1.0):
 
 def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_cres,minP,n_sims,cell_type="reference"):
     """
+    TODO: see if we can move to .utils
     Notebook helper function.
     Creates a de_novo_simulation in root, with a random name.
     Assumes corresponding libraries.
@@ -8297,6 +8311,7 @@ def sum_pow(sims,hypothesis_set_name,test_type):
     Takes a list of sims and returns a minimal
     df of fold change and hypothesis reject/not reject
     to plot power curves.
+    TODO: see if we can move to .utils
     """
     results=[]
 
