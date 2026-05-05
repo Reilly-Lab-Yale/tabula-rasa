@@ -1,6 +1,3 @@
-(need to add bulk to seelig 5x5)
-(seelig wald is probably under-reporting : MOIB not implemented for it)
-
 # Paper Plan
 
 ## Style note
@@ -122,6 +119,10 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - Wald+MWU test results save fine, only the summary/metrics phase crashes
 - [x] MOI-based phantom zero downweighting (see section below)
 - [x] Strip out consider_missing memory heuristics in core.py (no longer needed with phantom efficiency gains)
+- [ ] Add bulk to seelig 5x5
+- [ ] Wire MOIB into Wald (currently not implemented for CM phantom weights in
+  `precompute_wald` -- seelig Wald results are not trustworthy until this lands;
+  treat current seelig Wald numbers as placeholder)
 - [ ] Create all figures
 - [ ] Takeshi data analysis (4th dataset)
   - [x] Re-fitting all 4 orthos (obs/CM x NB/ZINB) with corrected negative controls
@@ -132,18 +133,6 @@ Remember to collect runtime statistics for all tasks with nontrivial compute.
   - Current: TF1 tf.hessians + tf.map_fn per-obs scores, CPU-only (~1s/model cohen, ~0.04s shendure)
   - Target: tf.GradientTape.jacobian for vectorized per-obs scores on GPU, est. 10-50x speedup
   - Enables dense simulation power sweeps at scale
-
----
-
-## Known bugs blocking progress
-
-### ~~Bounds.from_ortho() fails on seelig_ortho_20260320~~ FIXED
-
-Fixed in this session. Multiple issues in `from_ortho()`:
-`float(current.max())` on DataFrame, missing `ret.` prefix, None ZI for NB-only.
-All resolved with `_resolve_scalar`/`_resolve_df` helpers. Also fixed
-`simple_count` NB convergence failure on near-constant data (seelig library:
-95% of CREs have exactly 5 barcodes) -- falls back to `fixed_count` mode.
 
 ---
 
@@ -216,13 +205,6 @@ that MOIB produces usable results without a reporter.
   ground-truth perturbations -- would let us say "X% of real effects are
   detectable with/without reporter." PIN: Mackenzie is generating wet-lab
   data that could provide this prior (PCR-based, pending).
-
-### Note
-
-Priority elevated from "maybe v2" to "soon after MOIB validation". If
-seelig MOIB works, this analysis follows directly. Could serve as Fig 5.
-
----
 
 ## Figures
 
@@ -308,105 +290,16 @@ Model convergence diagnostics across fits. Infrastructure exists (`run_qc.py`,
 
 ---
 
-## MOI-based phantom zero downweighting
-
-### Problem
-
-CM (consider_missing) expansion creates a phantom zero for every unobserved
-(cell, barcode) pair. Most of these are structural zeros from non-transfection,
-not expression zeros. When fitting NB (no ZI component), the model absorbs
-structural zeros into a deflated mu. The LRT correctly reports that ZINB is
-unnecessary -- the NB's own zero mass at low mu explains the zeros -- but the
-mu is now unconditional (incorporates P(not transfected)).
-
-This causes a 124x sparsity gap in seelig simulations: the simulation handles
-transfection explicitly (via MOI-based sampling), then uses the deflated CM mu
-as a per-event rate, double-counting the transfection sparsity. 44% of
-simulated CREs fall below MIN_PTS vs 0% in real data.
-
-Empirical validation: P(transfected) predicted from MOI (74/6646 = 0.011)
-predicts 756K transfected pairs; observed nonzero count is 760K. Match to <1%.
-Expression-conditional zero rate is effectively 0% for seelig.
-
-### Proposed fix
-
-Use the MOI to compute the expected number of structural zeros per phantom
-group and subtract them from phantom weights before NB fitting:
-
-```
-P_transfected = 1 - (1 - 1/n_barcodes)^MOI   (per barcode per cell)
-n_transfected = n_total * P_transfected
-corrected_phantom_weight = max(0, n_transfected - n_nonzero)
-```
-
-The NB then fits to expression zeros only, yielding conditional mu (given
-transfection). Simulation uses conditional mu directly with zi=0.
-
-### Interaction with reporter conditions
-
-| Condition | Reporter | MOI downweight? | Rationale |
-|-----------|----------|-----------------|-----------|
-| CM | None (seelig) | Yes | All zeros are structural + expression; MOI separates them |
-| CM | Any (shendure, cohen) | Yes | Same logic; reporter unused in CM path |
-| obs | Fine (shendure oBC) | No | Reporter already confirms transfection; zeros are expression zeros |
-| obs | Coarse (cohen U6) | TBD | Coarse expansion inflates within-CRE barcode-level structural zeros; obsingle sidesteps this |
-
-### Testable prediction
-
-obs-condition mu and MOI-downweighted CM mu should converge for the same
-dataset. Shendure has both conditions fitted, so:
-shendure_obs_nb mu ~ shendure_cm_nb_moi_corrected mu (per CRE, per cell type).
-
-### Wald test implications
-
-1. Seelig sim CREs that drop below MIN_PTS (44% NA rate) should recover -- the
-   conditional NB produces far fewer zeros per transfected event
-2. SEs computed at conditional mu (correct scale) should be better calibrated
-3. May help Cohen Wald high-variance behavior (GT0=0.89 vs draws 1-4=0.58-0.65)
-
-### Code changes required
-
-**Must change (3 sites):**
-1. `_build_cm_fit_inputs` (core.py ~2107): accept MOI + n_barcodes params,
-   replace `n_zeros = n_total - n_nonzero` with
-   `n_zeros = max(0, n_total * P_transfected - n_nonzero)`, update weight
-   assertion (weights no longer sum to Cartesian product size)
-2. `standard_fit` (core.py ~2679): compute MOI via `data.describe_transfection()`
-   and n_barcodes from mpra_map, pass to `_build_cm_fit_inputs`
-3. `precompute_wald` (core.py ~3327): same -- pass MOI when reconstructing CM
-   design matrices at ~3446
-
-**Does NOT change:**
-- Reporter-informed paths (`_build_obs_phantom_inputs`, `_reporter_zero_counts`)
-- Bounds extraction (`from_ortho` -- extracted mu is now conditional, which is
-  correct for simulation)
-- Simulation code (already NB-only with zi=0; conditional mu is the right input)
-- TensorZINB fitter (just receives weights)
-- `_inflate_missing_split_level` / `get_data` (correction is at phantom weight
-  level, not data expansion level)
-
-**Note:** `describe_transfection()` counts observed unique barcodes per cell
-(post-collision). For high-collision datasets (seelig ~7.6%), consider using
-the collision-corrected MOI from `from_ortho` instead. For seelig the practical
-difference is small.
-
-### Minimal validation analyses
-
-1. **Shendure convergence test**: fit shendure CM NB with MOI downweighting,
-   compare by_cre and by_cell_type mu to existing shendure obs NB mu.
-   Expect strong correlation (r > 0.95). This is the primary correctness test.
-2. **Seelig refit**: fit seelig CM NB with MOI downweighting, verify mu shifts
-   from ~0.006 to ~0.5-1.0 range. Verify QC r-values remain good.
-3. **Seelig simulation sanity**: re-extract bounds from MOI-corrected seelig
-   ortho, run 1 GT draw x 1 rep, verify MIN_PTS dropout rate matches real data
-   (~0% instead of 44%).
-4. **Seelig 5x5 activity PRC**: re-run full 5x5 with corrected bounds, compare
-   Wald NA rate and AUROC to current results. Expect Wald NA ~ 0% and improved
-   AUROC.
-
----
-
 ## Caveats
+
+- **MOIB not wired into Wald yet.** `precompute_wald` reconstructs CM design
+  matrices without applying MOI-based phantom downweighting, so Wald on
+  CM-fitted orthos uses unconditional (deflated) mu and inflated phantom
+  weights. This breaks seelig Wald specifically (CM is mandatory there).
+  Treat current seelig Wald p-values, AUROCs, and power numbers as
+  placeholders -- they are not real results and must be regenerated after
+  MOIB is plumbed through `precompute_wald`. Shendure/cohen Wald (obs
+  condition) is unaffected.
 
 - **Wald SE computation requires GPU.** The TF2 GradientTape implementation
   (which replaced TF1 graph mode to fix a memory leak after ~400 models) has
