@@ -7259,38 +7259,52 @@ class de_novo_simulation:
         
         def _simulate_transfection_helper(experiment_bounds,
                     ground_truth,
-                    library,
+                    library_path,
                     pth):
             """
-            Little wrappper for _simulate_transfection
-            which handles output to disc and returns a `True` boolean when writing is done
+            Little wrappper for _simulate_transfection which handles output
+            to disc and returns a `True` boolean when writing is done.
+
+            library_path : str. Worker loads the per-sim library DataFrame
+            directly from shared NFS rather than receiving it as a pickled
+            kwarg. Driver-side pd.read_csv used to ship a ~13 MB DataFrame
+            through the scheduler graph per submit; with many concurrent
+            samples in flight this overwhelmed the scheduler (2026-05-05
+            pilot cascaded with scheduler-connection-lost errors).
             """
+            library=pd.read_csv(library_path,sep="\t",compression="gzip",index_col=0)
             transfected=_simulate_transfection(
                     experiment_bounds=experiment_bounds,
                     ground_truth=ground_truth,
-                    library=lib)
-            
+                    library=library)
+
             transfected.to_csv(pth,
                     sep="\t",
                     compression="gzip")
-            
+
             return True
 
-        transfection_tracker=[]
-        
-        for idx in range(0,n_sims):
-            #load the corresponding library
-            lib=pd.read_csv(self.libp/f"{idx}.tsv.gz",sep="\t",compression='gzip',index_col=0)
+        # Scatter once: bound ~360 KB, ground_truth ~75 KB. Without this
+        # each of the n_sims task graphs ships its own copy. Negligible
+        # alone, but bundled with the library-path fix above keeps the
+        # per-graph cost down to a few KB.
+        bound_fut = self.client.scatter(experiment_bounds, broadcast=False)
+        gt_fut    = self.client.scatter(ground_truth, broadcast=False)
 
-            #submit a job to simulate transfection using the helper function
+        transfection_tracker=[]
+
+        for idx in range(0,n_sims):
+            #submit a job to simulate transfection using the helper function.
+            #Library is loaded inside the helper (worker-side) from
+            #library_path, avoiding a ~13 MB ship through the scheduler.
             ret=self.client.submit(_simulate_transfection_helper,
-                experiment_bounds=experiment_bounds,
-                ground_truth=ground_truth,
-                library=lib,
+                experiment_bounds=bound_fut,
+                ground_truth=gt_fut,
+                library_path=str(self.libp/f"{idx}.tsv.gz"),
                 pth=self.descripd/f"{idx}.tsv.gz")
-            
+
             transfection_tracker.append(ret)
-        
+
         self.futures["transfection"]=transfection_tracker
 
     def set_state_field(self,field,value):
@@ -7792,7 +7806,20 @@ class de_novo_simulation:
             if consider_missing:
                 scd.set_consider_missing(enabled=True)
 
-            scd.to_parquet(path)
+            # Force synchronous (in-process) dask scheduler for the duration
+            # of to_parquet. scMPRA_data.to_parquet wraps the pandas DataFrame
+            # in dd.from_pandas and calls ddf.to_parquet, which uses whatever
+            # scheduler is currently configured. Inside a dask worker the
+            # default is the distributed Client connected to the cluster
+            # scheduler, so the partition writes get recursively submitted
+            # back to the same scheduler. With many concurrent transcription
+            # tasks each pushing ~hundreds of MiB of nested graph work, the
+            # scheduler heartbeat stalls and the run cascades with
+            # scheduler-connection-lost (observed 2026-05-05 pilot). Forcing
+            # scheduler='synchronous' makes the partition writes happen
+            # locally on this worker without touching the cluster scheduler.
+            with dask.config.set(scheduler="synchronous"):
+                scd.to_parquet(path)
 
             # Return free heap pages to the OS. Without this, glibc holds
             # onto freed pages from the large DataFrames above, causing

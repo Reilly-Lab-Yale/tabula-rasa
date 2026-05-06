@@ -1,0 +1,69 @@
+{
+  "mode": "full",
+  "n_lhs": 1000,
+  "n_library_reps": 5,
+  "n_sims": 5,
+  "n_workers": 50,
+  "worker_mem": "48G",
+  "seed": 20260505,
+  "axis_bounds": {
+    "n_cells": [
+      500.0,
+      50000.0,
+      true
+    ],
+    "n_cres": [
+      50.0,
+      2000.0,
+      true
+    ],
+    "bcs_per_cre": [
+      3.0,
+      500.0,
+      true
+    ],
+    "moi": [
+      0.5,
+      30.0,
+      true
+    ],
+    "lib_alpha_nb": [
+      0.02,
+      2.0,
+      true
+    ],
+    "minP": [
+      0.02,
+      2.0,
+      true
+    ],
+    "activity_max_mult": [
+      2.0,
+      8.0,
+      false
+    ]
+  },
+  "cell_type": "reference",
+  "sim_root": "/nfs/roberts/scratch/pi_skr2/mcn26/synthetic_factorial_sims/2026-05-05_synthetic_factorial",
+  "empirical": {
+    "shendure-Pluripotent": {
+      "n_cells": 8201,
+      "n_cres": 207,
+      "bcs_per_cre": 136.06,
+      "moi": 18.01,
+      "lib_alpha_nb": 0.2241,
+      "minP": 0.0414,
+      "activity_max_mult": null
+    },
+    "cohen-Rod": {
+      "n_cells": 18633,
+      "n_cres": 116,
+      "bcs_per_cre": 17244.5,
+      "moi": 149.15,
+      "lib_alpha_nb": 1.3873,
+      "minP": 0.9363,
+      "activity_max_mult": null
+    }
+  },
+  "sim_date": "2026-05-05"
+}
