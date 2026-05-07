@@ -1,6 +1,6 @@
 {
-  "mode": "full",
-  "n_lhs": 1000,
+  "mode": "topup3",
+  "n_lhs": 120,
   "n_library_reps": 5,
   "n_sims": 5,
   "n_workers": 50,
@@ -44,7 +44,7 @@
     ]
   },
   "cell_type": "reference",
-  "sim_root": "/nfs/roberts/scratch/pi_skr2/mcn26/synthetic_factorial_sims/2026-05-05_synthetic_factorial",
+  "sim_root": "/nfs/roberts/scratch/pi_skr2/mcn26/synthetic_factorial_sims/2026-05-05_synthetic_factorial_topup3",
   "empirical": {
     "shendure-Pluripotent": {
       "n_cells": 8201,

@@ -148,6 +148,21 @@ TOPUP_AXIS_BOUNDS = {
     "minP":              (0.02,  2.0,   True),
     "activity_max_mult": (2.0,   8.0,   False),
 }
+
+# Second top-up bounds. Extends moi, minP, and activity_max_mult to cover
+# takeshi-HepG2 (moi=266, minP=0.0116, activity_max_mult=37). Same
+# expansion incidentally closes outstanding gaps on activity_max_mult for
+# shendure (99) and cohen (1.11). Other axes use the FULL combined range
+# from prior sweeps so topup3 samples span the 7-D space broadly.
+TOPUP3_AXIS_BOUNDS = {
+    "n_cells":           (5.0e2, 5.0e4, True),
+    "n_cres":            (5.0e1, 2.0e3, True),
+    "bcs_per_cre":       (3.0,   5.0e4, True),
+    "moi":               (2.0e2, 3.5e2, True),    # extends past takeshi=266
+    "lib_alpha_nb":      (0.02,  2.0,   True),
+    "minP":              (3.0e-3, 2.0e-2, True),  # extends below takeshi=0.0116
+    "activity_max_mult": (1.0,   1.2e2, True),    # log; covers cohen 1.11 to shendure 99
+}
 AXIS_NAMES = list(AXIS_BOUNDS.keys())
 
 # Sample / rep / sim / worker budget per mode. Default is "full"; the wrapper
@@ -159,6 +174,7 @@ MODES = {
     "pilot": dict(n_lhs=30,   n_library_reps=3, n_sims=5, n_workers=20, worker_mem="48G", n_slices=3),
     "full":  dict(n_lhs=1000, n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
     "topup": dict(n_lhs=100,  n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
+    "topup3": dict(n_lhs=120, n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
 }
 
 # Mutable globals -- set in main() based on chosen mode. Defaults match "full"
@@ -209,6 +225,28 @@ EMPIRICAL = {
         n_cells=18633, n_cres=116, bcs_per_cre=17244.5, moi=149.15,
         lib_alpha_nb=1.3873, minP=0.9363, activity_max_mult=1.11,
     ),
+    # Takeshi-HepG2 (the canonical "reference" CT, HepG2). Unpublished as
+    # of 2026-05-07; the with_takeshi figure variant is supplemental, and
+    # the methods-paper version uses no_takeshi (DEFAULT_ANCHORS below).
+    # activity_max_mult is p95(mu)/minP per the same convention as the
+    # other anchors; takeshi-HepG2's library has a moderate dynamic range
+    # (37x), between cohen (1.11) and shendure (99).
+    "takeshi-HepG2": dict(
+        n_cells=1690, n_cres=149, bcs_per_cre=394.07, moi=265.91,
+        lib_alpha_nb=1.7174, minP=0.0116, activity_max_mult=37.22,
+    ),
+}
+
+# Methods-paper figures use only shendure + cohen overlays. with_takeshi
+# variants (supplemental) overlay all three. Anchor names index into
+# EMPIRICAL above.
+DEFAULT_ANCHORS = ["shendure-Pluripotent", "cohen-Rod"]
+ALL_ANCHORS = list(EMPIRICAL.keys())
+
+EMPIRICAL_COLORS = {
+    "shendure-Pluripotent": "darkorange",
+    "cohen-Rod":            "purple",
+    "takeshi-HepG2":        "teal",
 }
 
 
@@ -529,47 +567,113 @@ def _loess_band(x, y, n_grid=100, frac=0.4, n_boot=200, seed=42):
 def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float,float]",
                                 ylabel: str, title: str, out_path: Path,
                                 hline: "float | None" = None,
-                                invert_y: bool = False):
-    """Render the 7-axis marginals figure for a chosen power metric column."""
-    fig, axes = plt.subplots(3, 3, figsize=(13, 11))
+                                invert_y: bool = False,
+                                force_linear_x: bool = False,
+                                anchors: "list[str] | None" = None):
+    """Render the 7-axis marginals figure for a chosen power metric column.
+
+    For axes that have log_scale=True in AXIS_BOUNDS, the LOESS smoother
+    runs in log10-space (otherwise the smoother is dominated by the dense
+    end of the distribution), but the matplotlib axis itself is set to
+    'log' so tick labels show the raw values (e.g. 100, 1000, 10000) rather
+    than log10 values (2, 3, 4). This is much more readable than the prior
+    "log10 axis_name" labelling.
+
+    force_linear_x=True overrides the per-axis log scale and sets all
+    panels to linear x. The smoother *still runs in log space* for axes
+    that span >1 decade (otherwise the smoother is a noisy mess concentrated
+    at the dense end), but the curve is drawn back on the linear scale.
+    Useful when reviewers want a "true scale" view alongside the log view.
+    """
+    if anchors is None:
+        anchors = DEFAULT_ANCHORS
+    # constrained_layout handles log tick labels better than tight_layout,
+    # which tends to compress panels when the log "10^N" formatting takes
+    # extra vertical space. Wider figsize gives each panel more breathing
+    # room horizontally for log tick labels.
+    fig, axes = plt.subplots(3, 3, figsize=(15, 12), constrained_layout=True)
     axes = axes.ravel()
-    empirical_colors = {"shendure-Pluripotent": "darkorange",
-                        "cohen-Rod": "purple"}
     for ax_i, axis in enumerate(AXIS_NAMES):
         ax = axes[ax_i]
         x = df[axis].values.astype(float)
         y = df[metric].values.astype(float)
         log_scale = AXIS_BOUNDS[axis][2]
-        x_plot = np.log10(x) if log_scale else x
-        # Drop NaN y values from the LOESS input but keep them in scatter
-        # (matplotlib already handles NaN).
-        ax.scatter(x_plot, y, s=8, alpha=0.4, color="steelblue")
-        valid = np.isfinite(y) & np.isfinite(x_plot)
+        # Always plot raw x; pick xscale via matplotlib so tick labels are
+        # actual values rather than log10 of values.
+        display_log = log_scale and not force_linear_x
+        # LOESS input remains log-spaced for any axis whose data span >1
+        # decade, since the smoother is sensitive to bunched-up x. Use
+        # log10(x) for the smoother input regardless of display.
+        x_smooth = np.log10(x) if log_scale else x
+        ax.scatter(x, y, s=8, alpha=0.4, color="steelblue")
+        valid = np.isfinite(y) & np.isfinite(x_smooth)
         if valid.sum() >= 20:
             try:
-                xg, yhat, lo, hi = _loess_band(x_plot[valid], y[valid])
-                ax.plot(xg, yhat, color="firebrick", lw=2)
-                ax.fill_between(xg, lo, hi, color="firebrick", alpha=0.2)
+                xg, yhat, lo, hi = _loess_band(x_smooth[valid], y[valid])
+                xg_disp = (10.0 ** xg) if log_scale else xg
+                ax.plot(xg_disp, yhat, color="firebrick", lw=2)
+                ax.fill_between(xg_disp, lo, hi, color="firebrick", alpha=0.2)
             except Exception as e:
                 print(f"  smoother failed for {axis}/{metric}: {e}", flush=True)
-        # Empirical overlays.
-        cur_lo, cur_hi = ax.get_xlim()
-        for name, coord in EMPIRICAL.items():
+        # Empirical overlays at raw-x positions for the requested anchor list.
+        # Compute xlim from DATA + anchors directly, not from ax.get_xlim().
+        # ax.get_xlim() is called while the axis is still on a default linear
+        # scale, so its left edge can be ~0 (matplotlib's default margin
+        # below positive data). When we later set_xscale('log'), log(0) -> -inf
+        # and the panel ends up showing a multi-decade empty region on the
+        # left with data crammed at the right.
+        x_finite = x[np.isfinite(x)]
+        if len(x_finite) > 0:
+            cur_lo, cur_hi = float(x_finite.min()), float(x_finite.max())
+        else:
+            cur_lo, cur_hi = ax.get_xlim()
+        # Stagger label y so multi-anchor overlays at similar x don't overlap.
+        drawn = []
+        for name in anchors:
+            coord = EMPIRICAL.get(name)
+            if coord is None:
+                continue
             v = coord.get(axis)
             if v is None:
                 continue
-            xv = np.log10(v) if log_scale else v
+            xv = float(v)
             cur_lo = min(cur_lo, xv)
             cur_hi = max(cur_hi, xv)
-            color = empirical_colors.get(name, "black")
+            color = EMPIRICAL_COLORS.get(name, "black")
             ax.axvline(xv, color=color, linestyle="--", lw=1.0, alpha=0.8)
-            ax.text(xv, 1.02, name.split("-")[0][:4],
+            ypos = 1.02
+            for xprev, _ in drawn:
+                if abs(xv - xprev) < 1e-9:
+                    ypos = 1.07
+            ax.text(xv, ypos, name.split("-")[0][:4],
                     fontsize=7, ha="center", color=color,
                     transform=ax.get_xaxis_transform())
-        span = cur_hi - cur_lo
-        if span > 0:
-            ax.set_xlim(cur_lo - 0.03 * span, cur_hi + 0.03 * span)
-        ax.set_xlabel(("log10 " if log_scale else "") + axis)
+            drawn.append((xv, name))
+        # Pad x-range a touch on either side; in log display, pad in log
+        # space (multiplicative); in linear, additive.
+        if display_log and cur_lo > 0 and cur_hi > 0:
+            log_span = np.log10(cur_hi) - np.log10(cur_lo)
+            if log_span > 0:
+                ax.set_xlim(cur_lo / (10 ** (0.03 * log_span)),
+                            cur_hi * (10 ** (0.03 * log_span)))
+        else:
+            span = cur_hi - cur_lo
+            if span > 0:
+                ax.set_xlim(cur_lo - 0.03 * span, cur_hi + 0.03 * span)
+        if display_log:
+            ax.set_xscale("log")
+            # Use default LogFormatterMathtext (renders 10^N) -- ScalarFormatter
+            # on log axes was producing crammed/overlapping major ticks at the
+            # right edge. Default formatter spaces ticks at every decade and
+            # renders cleanly. We also subdue minor tick labels.
+            from matplotlib.ticker import (LogLocator, LogFormatterMathtext,
+                                            NullFormatter)
+            ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=10))
+            ax.xaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
+            ax.xaxis.set_minor_formatter(NullFormatter())
+        else:
+            ax.set_xscale("linear")
+        ax.set_xlabel(axis)
         ax.set_ylabel(ylabel)
         if ylim is not None:
             ax.set_ylim(*ylim)
@@ -579,8 +683,8 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
             ax.axhline(hline, color="grey", lw=0.5, ls="--")
     for j in range(len(AXIS_NAMES), len(axes)):
         axes[j].axis("off")
-    fig.suptitle(title)
-    plt.tight_layout()
+    fig.suptitle(title + ("  [linear-x]" if force_linear_x else ""))
+    # constrained_layout was set in subplots(); skip plt.tight_layout
     fig.savefig(out_path, format="svg", bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out_path}", flush=True)
@@ -608,39 +712,64 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
         ("fc_at_p50",      None,   "FC at 50% power (lower=better)", None, True,
          "_fc50", "FC at 50% power (minimum detectable effect; NaN if never reached)"),
     ]
+    # Render two anchor variants: no_takeshi (methods paper) and
+    # with_takeshi (supplemental, includes the 3rd anchor).
+    anchor_variants = [
+        ("_no_takeshi",   DEFAULT_ANCHORS,
+         "shendure + cohen overlays"),
+        ("_with_takeshi", ALL_ANCHORS,
+         "shendure + cohen + takeshi overlays"),
+    ]
     for metric, ylim, ylabel, hline, invert, fsuf, tsuf in metric_specs:
-        out_path = OUT / f"marginals{fsuf}{suffix}.svg"
-        _plot_marginals_for_metric(df, metric=metric, ylim=ylim, ylabel=ylabel,
-                                   title=f"Synthetic factorial: marginal {tsuf} (LOESS w/ 95% boot band)",
-                                   out_path=out_path, hline=hline, invert_y=invert)
+        for asuf, alist, asubtitle in anchor_variants:
+            for linx_suf, linx in [("", False), ("_linearx", True)]:
+                out_path = OUT / f"marginals{fsuf}{suffix}{asuf}{linx_suf}.svg"
+                _plot_marginals_for_metric(
+                    df, metric=metric, ylim=ylim, ylabel=ylabel,
+                    title=f"Synthetic factorial ({asubtitle}): {tsuf}",
+                    out_path=out_path, hline=hline, invert_y=invert,
+                    force_linear_x=linx, anchors=alist)
 
     # Combined plot: when running in topup mode, fuse with the original full
     # sweep's samples_power.parquet so the marginals span the full
     # bcs_per_cre and moi range covered by the union. Both DataFrames must
     # have the same metric columns -- they will because both were aggregated
     # by the same _power_metrics function.
-    if mode == "topup":
-        full_pp = OUT / "samples_power.parquet"
-        if full_pp.exists():
-            full_df = pd.read_parquet(full_pp)
-            # sanity: sample_ids should be disjoint by prefix (s vs t)
-            shared = set(full_df["sample_id"]) & set(df["sample_id"])
-            if shared:
-                print(f"WARNING: {len(shared)} overlapping sample_ids; "
-                      "skipping combined plot to avoid double-counting", flush=True)
+    if mode in ("topup", "topup3"):
+        # Combine prior parquets with the just-aggregated `df`. Sample-id
+        # prefixes are disjoint by construction (s/t/u for full/topup/topup3).
+        prior_paths = [OUT / "samples_power.parquet"]
+        if mode == "topup3":
+            prior_paths.append(OUT / "samples_power_topup.parquet")
+        prior_dfs = []
+        labels = []
+        for p in prior_paths:
+            if p.exists():
+                prior_dfs.append(pd.read_parquet(p))
+                labels.append(p.stem.replace("samples_power", "").lstrip("_") or "full")
             else:
-                combined = pd.concat([full_df, df], ignore_index=True)
-                combined.to_parquet(OUT / "samples_power_combined.parquet")
-                print(f"\nCombined plot: {len(full_df)} (full) + {len(df)} (topup) "
-                      f"= {len(combined)} samples", flush=True)
-                for metric, ylim, ylabel, hline, invert, fsuf, tsuf in metric_specs:
-                    out_path = OUT / f"marginals{fsuf}_combined.svg"
-                    _plot_marginals_for_metric(
-                        combined, metric=metric, ylim=ylim, ylabel=ylabel,
-                        title=f"Combined factorial (full + topup): {tsuf} (LOESS w/ 95% boot band)",
-                        out_path=out_path, hline=hline, invert_y=invert)
-        else:
-            print(f"NOTE: {full_pp} not found, skipping combined plot", flush=True)
+                print(f"NOTE: {p} not found, skipping in combined plot", flush=True)
+        if prior_dfs:
+            combined = pd.concat(prior_dfs + [df], ignore_index=True)
+            shared = (combined["sample_id"].duplicated()).any()
+            if shared:
+                print("WARNING: duplicated sample_ids in combined; check prefixes",
+                      flush=True)
+            combined.to_parquet(OUT / "samples_power_combined.parquet")
+            this_label = "topup3" if mode == "topup3" else "topup"
+            sources = " + ".join(labels + [this_label])
+            sizes = " + ".join([str(len(d)) for d in prior_dfs] + [str(len(df))])
+            print(f"\nCombined plot: {sizes} ({sources}) = {len(combined)} samples",
+                  flush=True)
+            for metric, ylim, ylabel, hline, invert, fsuf, tsuf in metric_specs:
+                for asuf, alist, asubtitle in anchor_variants:
+                    for linx_suf, linx in [("", False), ("_linearx", True)]:
+                        out_path = OUT / f"marginals{fsuf}_combined{asuf}{linx_suf}.svg"
+                        _plot_marginals_for_metric(
+                            combined, metric=metric, ylim=ylim, ylabel=ylabel,
+                            title=f"Combined factorial ({sources}, {asubtitle}): {tsuf}",
+                            out_path=out_path, hline=hline, invert_y=invert,
+                            force_linear_x=linx, anchors=alist)
 
     # Pairwise heatmaps for top axes by smoother range (= biggest LOESS swing)
     ranges = {}
@@ -751,6 +880,10 @@ def get_samples() -> pd.DataFrame:
     if CURRENT_MODE == "topup":
         df = draw_lhs(N_LHS, seed=20260506, bounds=TOPUP_AXIS_BOUNDS,
                       sample_id_prefix="t")
+    elif CURRENT_MODE == "topup3":
+        # 'u' prefix keeps sample_ids disjoint from 's' (full) and 't' (topup).
+        df = draw_lhs(N_LHS, seed=20260507, bounds=TOPUP3_AXIS_BOUNDS,
+                      sample_id_prefix="u")
     else:
         df = draw_lhs(N_LHS, seed=SEED)
     df.to_parquet(SAMPLES_PATH)
