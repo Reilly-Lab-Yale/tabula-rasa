@@ -26,7 +26,7 @@ MWU is the canonical test.
 
 Usage:
     python synthetic_factorial.py <phase> [mode] [slice n_slices]
-        phase:    samples | simulate | plot | all
+        phase:    samples | simulate | plot | replot | all
         mode:     smoke | pilot | full   (default: full)
         slice:    0..n_slices-1   (default: 0; only meaningful for simulate)
         n_slices: total slice count (default: from MODES[mode]["n_slices"])
@@ -36,6 +36,9 @@ Usage:
                 independent sbatch job with its own dask scheduler+workers.
                 Slice i processes rows where (idx % n_slices) == i.
     plot     -- aggregate all slices' outputs and produce SVGs.
+    replot   -- re-render SVGs from the cached samples_power<mode>.parquet
+                without walking scratch or starting a dask client. Fails if
+                the cache is missing.
     all      -- samples then simulate (slice 0 only) then plot. Useful only
                 when n_slices=1 (smoke). For pilot/full use launch.sh.
 
@@ -925,6 +928,20 @@ if __name__ == "__main__":
     # Parse optional slice/n_slices args (positional, after mode)
     slice_idx = int(sys.argv[3]) if len(sys.argv) > 3 else 0
     n_slices_arg = int(sys.argv[4]) if len(sys.argv) > 4 else N_SLICES
+
+    if phase == "replot":
+        suffix = "" if mode == "full" else f"_{mode}"
+        cache_path = OUT / f"samples_power{suffix}.parquet"
+        if not cache_path.exists():
+            print(f"replot: cache not found at {cache_path}; "
+                  f"run `plot` first to aggregate from scratch.", flush=True)
+            sys.exit(1)
+        print(f"\n{'='*60}\nPhase: replot ({mode}) from {cache_path.name}\n{'='*60}",
+              flush=True)
+        df_pow = pd.read_parquet(cache_path)
+        phase_plot(df_pow, mode)
+        print("\nDone.", flush=True)
+        sys.exit(0)
 
     if phase == "samples":
         # Materialize the samples table and exit. Used by launch.sh to ensure
