@@ -1,0 +1,822 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-05-08T15:50:44.450751
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds
+  Main jobs : 11169322, 11169323, 11169324, 11169325, 11169326
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 11169322  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 11169322
+   User/Account: mcn26/prio_skr2
+       Job Name: shendure_bounds
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 24GB (6GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri May 8, 2026 at 3:36 PM
+       Run Time: 00:01:16
+     Time Limit: 01:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||                                       16%]
+  CPU memory usage [||                                              4%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u37n04: 00:00:51/00:05:04 (efficiency=16.9%)
+
+  CPU memory usage per node - used/allocated
+      a1130u37n04: 1017.9MB/24GB (254.5MB/6GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 16.9%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/11169322
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u37n04": {
+      "cpus": 4,
+      "total_memory": 25769803776,
+      "total_time": 51.5,
+      "used_memory": 1067380736
+    }
+  },
+  "total_time": 76
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+11169322|shendure_bounds|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u37n04|1|4|24G|2026-05-08T15:36:35|2026-05-08T15:36:38|2026-05-08T15:37:54|00:01:16|01:00:00|00:53.039|00:50.334|00:02.704|00:05:04||||||||||0:0
+11169322.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u37n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:37:54|00:01:16||00:53.039|00:50.334|00:02.704|00:05:04|1937856K|1937856K|1821876K|1821876K|1726.07M|299.08M|1726.07M|299.08M|1|0:0
+11169322.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u37n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:37:54|00:01:16||00:00:00|00:00:00|00:00:00|00:05:04|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 11169323  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 11169323
+   User/Account: mcn26/prio_skr2
+       Job Name: cohen_bounds
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 24GB (6GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri May 8, 2026 at 3:36 PM
+       Run Time: 00:03:36
+     Time Limit: 01:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||                                      19%]
+  CPU memory usage [|||                                             6%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u37n04: 00:02:50/00:14:24 (efficiency=19.8%)
+
+  CPU memory usage per node - used/allocated
+      a1130u37n04: 1.4GB/24GB (351.7MB/6GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 19.8%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/11169323
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u37n04": {
+      "cpus": 4,
+      "total_memory": 25769803776,
+      "total_time": 170.9,
+      "used_memory": 1475031040
+    }
+  },
+  "total_time": 216
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+11169323|cohen_bounds|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u37n04|1|4|24G|2026-05-08T15:36:35|2026-05-08T15:36:38|2026-05-08T15:40:14|00:03:36|01:00:00|03:11.454|03:00.897|00:10.557|00:14:24||||||||||0:0
+11169323.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u37n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:40:14|00:03:36||03:11.453|03:00.896|00:10.557|00:14:24|2701668K|2701668K|2400240K|2400240K|11893.62M|4103.90M|11893.62M|4103.90M|1|0:0
+11169323.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u37n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:40:14|00:03:36||00:00:00|00:00:00|00:00:00|00:14:24|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 11169324  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 11169324
+   User/Account: mcn26/prio_skr2
+       Job Name: seelig_bounds
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 24GB (6GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri May 8, 2026 at 3:36 PM
+       Run Time: 00:01:27
+     Time Limit: 01:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||                                         13%]
+  CPU memory usage [||                                              5%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u05n03: 00:00:48/00:05:48 (efficiency=13.9%)
+
+  CPU memory usage per node - used/allocated
+      a1130u05n03: 1.1GB/24GB (283.1MB/6GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 13.9%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/11169324
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u05n03": {
+      "cpus": 4,
+      "total_memory": 25769803776,
+      "total_time": 48.3,
+      "used_memory": 1187397632
+    }
+  },
+  "total_time": 87
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+11169324|seelig_bounds|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u05n03|1|4|24G|2026-05-08T15:36:35|2026-05-08T15:36:38|2026-05-08T15:38:05|00:01:27|01:00:00|00:55.657|00:51.982|00:03.674|00:05:48||||||||||0:0
+11169324.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u05n03|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:38:05|00:01:27||00:55.656|00:51.981|00:03.674|00:05:48|2820220K|2820220K|2154292K|2154292K|374.68M|85.42M|374.68M|85.42M|1|0:0
+11169324.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u05n03|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:38:05|00:01:27||00:00:00|00:00:00|00:00:00|00:05:48|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 11169325  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 11169325
+   User/Account: mcn26/prio_skr2
+       Job Name: seelig_moib_bounds
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 24GB (6GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri May 8, 2026 at 3:36 PM
+       Run Time: 00:01:41
+     Time Limit: 01:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||                                       17%]
+  CPU memory usage [||                                              5%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u05n04: 00:01:10/00:06:44 (efficiency=17.4%)
+
+  CPU memory usage per node - used/allocated
+      a1130u05n04: 1.3GB/24GB (321.3MB/6GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 17.4%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/11169325
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u05n04": {
+      "cpus": 4,
+      "total_memory": 25769803776,
+      "total_time": 70.3,
+      "used_memory": 1347649536
+    }
+  },
+  "total_time": 101
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+11169325|seelig_moib_bounds|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u05n04|1|4|24G|2026-05-08T15:36:35|2026-05-08T15:36:38|2026-05-08T15:38:19|00:01:41|01:00:00|01:18.706|01:12.728|00:05.978|00:06:44||||||||||0:0
+11169325.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u05n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:38:19|00:01:41||01:18.705|01:12.727|00:05.978|00:06:44|2780128K|2780128K|2564848K|2564848K|567.47M|127.11M|567.47M|127.11M|1|0:0
+11169325.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u05n04|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:38:19|00:01:41||00:00.001|00:00:00|00:00:00|00:06:44|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Job 11169326  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 11169326
+   User/Account: mcn26/prio_skr2
+       Job Name: takeshi_bounds
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 24GB (6GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri May 8, 2026 at 3:36 PM
+       Run Time: 00:01:03
+     Time Limit: 01:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||                                         13%]
+  CPU memory usage [||                                              4%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u42n01: 00:00:33/00:04:12 (efficiency=13.5%)
+
+  CPU memory usage per node - used/allocated
+      a1132u42n01: 893.4MB/24GB (223.3MB/6GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 13.5%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/11169326
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u42n01": {
+      "cpus": 4,
+      "total_memory": 25769803776,
+      "total_time": 33.9,
+      "used_memory": 936755200
+    }
+  },
+  "total_time": 63
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+11169326|takeshi_bounds|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u42n01|1|4|24G|2026-05-08T15:36:35|2026-05-08T15:36:38|2026-05-08T15:37:41|00:01:03|01:00:00|00:41.239|00:37.154|00:04.085|00:04:12||||||||||0:0
+11169326.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u42n01|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:37:41|00:01:03||00:41.239|00:37.154|00:04.084|00:04:12|2319116K|2319116K|2052620K|2052620K|980.83M|736.00M|980.83M|736.00M|1|0:0
+11169326.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u42n01|1|4||2026-05-08T15:36:38|2026-05-08T15:36:38|2026-05-08T15:37:41|00:01:03||00:00:00|00:00:00|00:00:00|00:04:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u05n03 ───────────────────────────────────────────────────────────────
+NodeName=a1130u05n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=52 CPUEfctv=64 CPUTot=64 CPULoad=35.46
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u05n03 NodeHostName=a1130u05n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=674960 FreeMem=709513 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,week,scavenge 
+   BootTime=2026-04-19T07:20:12 SlurmdStartTime=2026-05-06T13:31:08
+   LastBusyTime=2026-04-19T10:25:21 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=52,mem=674960M
+   CurrentWatts=864 AveWatts=707
+   
+
+
+
+── a1130u05n04 ───────────────────────────────────────────────────────────────
+NodeName=a1130u05n04 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=50 CPUEfctv=64 CPUTot=64 CPULoad=97.00
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u05n04 NodeHostName=a1130u05n04 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=989184 FreeMem=823308 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,week,scavenge 
+   BootTime=2026-04-23T10:20:25 SlurmdStartTime=2026-05-06T13:31:08
+   LastBusyTime=2026-04-23T10:22:10 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=50,mem=966G
+   CurrentWatts=720 AveWatts=649
+   
+
+
+
+── a1130u37n04 ───────────────────────────────────────────────────────────────
+NodeName=a1130u37n04 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=55 CPUEfctv=64 CPUTot=64 CPULoad=84.64
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u37n04 NodeHostName=a1130u37n04 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=934032 FreeMem=688676 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,week,scavenge 
+   BootTime=2026-04-19T07:20:01 SlurmdStartTime=2026-05-06T13:31:08
+   LastBusyTime=2026-04-19T10:26:01 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=55,mem=934032M
+   CurrentWatts=776 AveWatts=725
+   
+
+
+
+── a1132u42n01 ───────────────────────────────────────────────────────────────
+NodeName=a1132u42n01 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=46 CPUEfctv=64 CPUTot=64 CPULoad=27.15
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u42n01 NodeHostName=a1132u42n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=4111341 AllocMem=4071424 FreeMem=3189346 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11022 Owner=N/A MCS_label=N/A
+   Partitions=priority,bigmem,scavenge 
+   BootTime=2026-04-19T07:19:57 SlurmdStartTime=2026-05-06T13:31:09
+   LastBusyTime=2026-04-30T22:31:27 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=4111341M,billing=269
+   AllocTRES=cpu=46,mem=3976G
+   CurrentWatts=594 AveWatts=557
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-11169322.out  (127 lines total) ─────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269009.179520 2898844 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269015.740457 2898844 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Dashboard: http://10.18.22.58:8787/status
+
+============================================================
+Processing shendure_obs_zinb_phantom
+============================================================
+  by_cre: 208 models
+  by_cell_type: 10 models
+2026-05-08 15:37:07,879 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c19852f59530c0c0e2b2f879a182d658 initialized by task ('shuffle-transfer-c19852f59530c0c0e2b2f879a182d658', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:08,047 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c19852f59530c0c0e2b2f879a182d658 deactivated due to stimulus 'task-finished-1778269028.0473046'
+2026-05-08 15:37:10,148 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 080ed17f76ac2b3d1327d13619e61b3f initialized by task ('shuffle-transfer-080ed17f76ac2b3d1327d13619e61b3f', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:10,175 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 080ed17f76ac2b3d1327d13619e61b3f deactivated due to stimulus 'task-finished-1778269030.1748657'
+2026-05-08 15:37:11,861 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle e9a1f47083b35644ad78c2c5204f4b30 initialized by task ('shuffle-transfer-e9a1f47083b35644ad78c2c5204f4b30', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:11,887 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle e9a1f47083b35644ad78c2c5204f4b30 deactivated due to stimulus 'task-finished-1778269031.88724'
+2026-05-08 15:37:13,541 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle b773cf4bb7f85a4f4c8f009d6ee8c26a initialized by task ('shuffle-transfer-b773cf4bb7f85a4f4c8f009d6ee8c26a', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:13,563 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle b773cf4bb7f85a4f4c8f009d6ee8c26a deactivated due to stimulus 'task-finished-1778269033.5632448'
+2026-05-08 15:37:15,437 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c19852f59530c0c0e2b2f879a182d658 initialized by task ('shuffle-transfer-c19852f59530c0c0e2b2f879a182d658', 1) executed on worker inproc://10.18.22.58/2898844/4
+[last 50 lines]
+2026-05-08 15:37:38,754 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b85d421d83c8a3b3d6cc20b4ef02d0a initialized by task ('shuffle-transfer-9b85d421d83c8a3b3d6cc20b4ef02d0a', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:38,776 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b85d421d83c8a3b3d6cc20b4ef02d0a deactivated due to stimulus 'task-finished-1778269058.7756567'
+2026-05-08 15:37:40,899 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c8f6e8313317dfbbf764a77b760e1e93 initialized by task ('shuffle-transfer-c8f6e8313317dfbbf764a77b760e1e93', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:41,043 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c8f6e8313317dfbbf764a77b760e1e93 deactivated due to stimulus 'task-finished-1778269061.0432498'
+scMPRAforge: INFO: Computed a total of 414.7088384600356 estimated collision events, out of a total of 781874.70883846, or 0.05304031883524153%
+  min_mpra_umi: 0.000000
+  max_mpra_umi: 1.915688
+  by_cell_type_theta: 0.000752
+  by_cre_theta: 0.302379
+  reference_activity: 0.000932
+  rep_ids: ['reference', 'NeuroectodermBrain', 'Mesoderm', 'ExEndodermParietal', 'SurfaceEctoderm', 'EpiblastPrimitiveStreak', 'ExEndodermVisceral', 'NeuroectodermRostral', 'Haematoendothelial', 'Cardiomyocytes']
+  consider_missing: True
+  nb_only: False
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/shendure_cm_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/shendure/shendure_cm_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/shendure/shendure_cm_zinb_phantom_library.svg
+
+============================================================
+Processing shendure_cm_nb_phantom
+============================================================
+  by_cre: 208 models
+  by_cell_type: 10 models
+2026-05-08 15:37:45,696 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 5003a5bd2e00f9167446e9e350df5359 initialized by task ('shuffle-transfer-5003a5bd2e00f9167446e9e350df5359', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:45,838 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 5003a5bd2e00f9167446e9e350df5359 deactivated due to stimulus 'task-finished-1778269065.8381314'
+2026-05-08 15:37:47,891 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 52c6c338434e8ec36267feb910eb09dd initialized by task ('shuffle-transfer-52c6c338434e8ec36267feb910eb09dd', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:47,917 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 52c6c338434e8ec36267feb910eb09dd deactivated due to stimulus 'task-finished-1778269067.9166236'
+2026-05-08 15:37:49,539 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 428ae6a4e9ed03c51c3212a89317967e initialized by task ('shuffle-transfer-428ae6a4e9ed03c51c3212a89317967e', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:49,564 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 428ae6a4e9ed03c51c3212a89317967e deactivated due to stimulus 'task-finished-1778269069.564022'
+2026-05-08 15:37:51,174 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cb12a244eefd59b6ffecede5db429c9 initialized by task ('shuffle-transfer-1cb12a244eefd59b6ffecede5db429c9', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:51,197 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1cb12a244eefd59b6ffecede5db429c9 deactivated due to stimulus 'task-finished-1778269071.1969516'
+2026-05-08 15:37:53,009 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 5003a5bd2e00f9167446e9e350df5359 initialized by task ('shuffle-transfer-5003a5bd2e00f9167446e9e350df5359', 1) executed on worker inproc://10.18.22.58/2898844/4
+2026-05-08 15:37:53,149 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 5003a5bd2e00f9167446e9e350df5359 deactivated due to stimulus 'task-finished-1778269073.1494377'
+scMPRAforge: INFO: Computed a total of 414.7088384600356 estimated collision events, out of a total of 781874.70883846, or 0.05304031883524153%
+  min_mpra_umi: 0.000000
+  max_mpra_umi: 0.768532
+  by_cell_type_theta: 0.000313
+  by_cre_theta: 1.009530
+  reference_activity: 0.000354
+  rep_ids: ['reference', 'NeuroectodermBrain', 'Mesoderm', 'ExEndodermParietal', 'SurfaceEctoderm', 'EpiblastPrimitiveStreak', 'ExEndodermVisceral', 'NeuroectodermRostral', 'Haematoendothelial', 'Cardiomyocytes']
+  consider_missing: True
+  nb_only: True
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/shendure_cm_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/shendure/shendure_cm_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/shendure/shendure_cm_nb_phantom_library.svg
+
+Done.
+
+── slurm-11169323.out  (191 lines total) ─────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269009.179521 2898845 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269015.740459 2898845 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/node.py:188: UserWarning: Port 8787 is already in use.
+Perhaps you already have a cluster running?
+Hosting the HTTP server on port 42813 instead
+  warnings.warn(
+Dashboard: http://10.18.22.58:42813/status
+
+============================================================
+Processing cohen_obs_zinb_phantom_20260401
+============================================================
+  by_cre: 114 models
+  by_cell_type: 4 models
+2026-05-08 15:37:09,215 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d430b8563e991cbebd46dc1294e797a7 initialized by task ('shuffle-transfer-d430b8563e991cbebd46dc1294e797a7', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:37:11,026 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d430b8563e991cbebd46dc1294e797a7 deactivated due to stimulus 'task-finished-1778269031.026432'
+2026-05-08 15:37:15,735 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1946cce05de122dddd06998a7bb40719 initialized by task ('shuffle-transfer-1946cce05de122dddd06998a7bb40719', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:37:16,831 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 1946cce05de122dddd06998a7bb40719 deactivated due to stimulus 'task-finished-1778269036.8312805'
+2026-05-08 15:37:21,123 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 7f05cf817b6a4f821915bf59f671fb63 initialized by task ('shuffle-transfer-7f05cf817b6a4f821915bf59f671fb63', 6) executed on worker inproc://10.18.22.58/2898845/4
+[last 50 lines]
+2026-05-08 15:39:33,472 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 88e909be0791a7be637e5d0c1cf2ff6b initialized by task ('shuffle-transfer-88e909be0791a7be637e5d0c1cf2ff6b', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:39:34,820 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 88e909be0791a7be637e5d0c1cf2ff6b deactivated due to stimulus 'task-finished-1778269174.819764'
+2026-05-08 15:39:39,428 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d49134e9ad258303b8fb39a708e47643 initialized by task ('shuffle-transfer-d49134e9ad258303b8fb39a708e47643', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:39:41,576 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d49134e9ad258303b8fb39a708e47643 deactivated due to stimulus 'task-finished-1778269181.5762303'
+scMPRAforge: INFO: Computed a total of 2179.177281479351 estimated collision events, out of a total of 3190732.1772814794, or 0.06829709171441715%
+  min_mpra_umi: 0.019317
+  max_mpra_umi: 1.391867
+  by_cell_type_theta: 781.108063
+  by_cre_theta: 627.638151
+  reference_activity: 0.936273
+  rep_ids: ['reference', 'Bipolar', 'Mueller Glia', 'Interneuron']
+  consider_missing: False
+  nb_only: True
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/cohen_obsingle_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/cohen/cohen_obsingle_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/cohen/cohen_obsingle_nb_phantom_library.svg
+
+============================================================
+Processing cohen_obsingle_zinb_phantom
+============================================================
+  by_cre: 114 models
+  by_cell_type: 4 models
+2026-05-08 15:39:48,026 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9c0918cf77a58d636394da75f6da9f70 initialized by task ('shuffle-transfer-9c0918cf77a58d636394da75f6da9f70', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:39:49,868 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9c0918cf77a58d636394da75f6da9f70 deactivated due to stimulus 'task-finished-1778269189.8675702'
+2026-05-08 15:39:54,636 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 17eac88cd43c6894e842701cb9fd63f6 initialized by task ('shuffle-transfer-17eac88cd43c6894e842701cb9fd63f6', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:39:55,755 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 17eac88cd43c6894e842701cb9fd63f6 deactivated due to stimulus 'task-finished-1778269195.7545955'
+2026-05-08 15:40:00,046 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 55964a29782e755ba0bf03c158eb6927 initialized by task ('shuffle-transfer-55964a29782e755ba0bf03c158eb6927', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:40:00,263 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 55964a29782e755ba0bf03c158eb6927 deactivated due to stimulus 'task-finished-1778269200.2611692'
+2026-05-08 15:40:04,716 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle b956826212215a1112e942818db3b401 initialized by task ('shuffle-transfer-b956826212215a1112e942818db3b401', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:40:06,120 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle b956826212215a1112e942818db3b401 deactivated due to stimulus 'task-finished-1778269206.1201074'
+2026-05-08 15:40:10,601 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9c0918cf77a58d636394da75f6da9f70 initialized by task ('shuffle-transfer-9c0918cf77a58d636394da75f6da9f70', 6) executed on worker inproc://10.18.22.58/2898845/4
+2026-05-08 15:40:12,383 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9c0918cf77a58d636394da75f6da9f70 deactivated due to stimulus 'task-finished-1778269212.3831766'
+scMPRAforge: INFO: Computed a total of 2179.177281479351 estimated collision events, out of a total of 3190732.1772814794, or 0.06829709171441715%
+  min_mpra_umi: 0.000252
+  max_mpra_umi: 1.414275
+  by_cell_type_theta: 2550.161255
+  by_cre_theta: 2208.143732
+  reference_activity: 0.948770
+  rep_ids: ['reference', 'Bipolar', 'Mueller Glia', 'Interneuron']
+  consider_missing: False
+  nb_only: False
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/cohen_obsingle_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/cohen/cohen_obsingle_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/cohen/cohen_obsingle_zinb_phantom_library.svg
+
+Done.
+
+── slurm-11169324.out  (85 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269008.602635 4085473 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269015.741272 4085473 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Dashboard: http://10.18.22.12:8787/status
+
+============================================================
+Processing seelig_cm_zinb_phantom
+============================================================
+  by_cre: 1344 models
+  by_cell_type: 2 models
+2026-05-08 15:37:26,838 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle eafd294d779795ec1f5164f95367905c initialized by task ('shuffle-transfer-eafd294d779795ec1f5164f95367905c', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:26,991 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle eafd294d779795ec1f5164f95367905c deactivated due to stimulus 'task-finished-1778269046.9906588'
+2026-05-08 15:37:29,182 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 2b8dc1c53e5b7d713f9de9108ddb70bc initialized by task ('shuffle-transfer-2b8dc1c53e5b7d713f9de9108ddb70bc', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:29,198 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 2b8dc1c53e5b7d713f9de9108ddb70bc deactivated due to stimulus 'task-finished-1778269049.198115'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/statsmodels/base/model.py:607: ConvergenceWarning: Maximum Likelihood optimization failed to converge. Check mle_retvals
+  warnings.warn("Maximum Likelihood optimization failed to "
+scMPRAforge: WARNING: NB fit failed to converge (alpha ~ 0). Data has near-zero overdispersion; setting fixed_count=5 (median).
+2026-05-08 15:37:31,229 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle e94c1a005aa5e24933ff22bd49deb295 initialized by task ('shuffle-transfer-e94c1a005aa5e24933ff22bd49deb295', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:31,244 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle e94c1a005aa5e24933ff22bd49deb295 deactivated due to stimulus 'task-finished-1778269051.2428067'
+[last 50 lines]
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/seelig_cm_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_zinb_phantom_library.svg
+
+============================================================
+Processing seelig_cm_nb_phantom
+============================================================
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 26.22 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 26.22 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+  by_cre: 1344 models
+  by_cell_type: 2 models
+2026-05-08 15:37:55,307 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6030b01ceaee2b16d3966017d783a03c initialized by task ('shuffle-transfer-6030b01ceaee2b16d3966017d783a03c', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:55,451 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6030b01ceaee2b16d3966017d783a03c deactivated due to stimulus 'task-finished-1778269075.4511576'
+2026-05-08 15:37:57,533 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle bf4dc255627f1ae72389c0b0790b27af initialized by task ('shuffle-transfer-bf4dc255627f1ae72389c0b0790b27af', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:57,547 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle bf4dc255627f1ae72389c0b0790b27af deactivated due to stimulus 'task-finished-1778269077.5470626'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/statsmodels/base/model.py:607: ConvergenceWarning: Maximum Likelihood optimization failed to converge. Check mle_retvals
+  warnings.warn("Maximum Likelihood optimization failed to "
+scMPRAforge: WARNING: NB fit failed to converge (alpha ~ 0). Data has near-zero overdispersion; setting fixed_count=5 (median).
+2026-05-08 15:37:59,526 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle bd9d030de619dc5c3fdd304a16d9f6f5 initialized by task ('shuffle-transfer-bd9d030de619dc5c3fdd304a16d9f6f5', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:37:59,541 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle bd9d030de619dc5c3fdd304a16d9f6f5 deactivated due to stimulus 'task-finished-1778269079.541036'
+2026-05-08 15:38:01,480 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 56fa8eea02d2af5e1944c2c237182286 initialized by task ('shuffle-transfer-56fa8eea02d2af5e1944c2c237182286', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:38:01,501 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 56fa8eea02d2af5e1944c2c237182286 deactivated due to stimulus 'task-finished-1778269081.500005'
+2026-05-08 15:38:03,648 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6030b01ceaee2b16d3966017d783a03c initialized by task ('shuffle-transfer-6030b01ceaee2b16d3966017d783a03c', 0) executed on worker inproc://10.18.22.12/4085473/4
+2026-05-08 15:38:03,792 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 6030b01ceaee2b16d3966017d783a03c deactivated due to stimulus 'task-finished-1778269083.7915952'
+scMPRAforge: INFO: Computed a total of 62835.1727974267 estimated collision events, out of a total of 823270.1727974267, or 7.632387868968488%
+  min_mpra_umi: 0.000015
+  max_mpra_umi: 0.859142
+  by_cell_type_theta: 0.021579
+  by_cre_theta: 0.114469
+  reference_activity: 0.008990
+  rep_ids: ['reference', 'K562']
+  consider_missing: True
+  nb_only: True
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/seelig_cm_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_nb_phantom_library.svg
+
+Done.
+
+── slurm-11169325.out  (97 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269008.152422 2298038 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269015.108345 2298038 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Dashboard: http://10.18.22.13:8787/status
+
+============================================================
+Processing seelig_cm_moib_nb_phantom
+============================================================
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 20.99 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 26.22 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+[last 50 lines]
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/seelig_cm_moib_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_moib_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_moib_nb_phantom_library.svg
+
+============================================================
+Processing seelig_cm_moib_zinb_phantom
+============================================================
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 22.00 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 19.70 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+  by_cre: 1344 models
+  by_cell_type: 2 models
+2026-05-08 15:38:06,473 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d4c545f41213a9a20d5170b8fda89405 initialized by task ('shuffle-transfer-d4c545f41213a9a20d5170b8fda89405', 0) executed on worker inproc://10.18.22.13/2298038/4
+2026-05-08 15:38:06,705 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d4c545f41213a9a20d5170b8fda89405 deactivated due to stimulus 'task-finished-1778269086.7051313'
+2026-05-08 15:38:09,195 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fc90732736e540cbbd5deb62931181ef initialized by task ('shuffle-transfer-fc90732736e540cbbd5deb62931181ef', 0) executed on worker inproc://10.18.22.13/2298038/4
+2026-05-08 15:38:09,215 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle fc90732736e540cbbd5deb62931181ef deactivated due to stimulus 'task-finished-1778269089.214755'
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/statsmodels/base/model.py:607: ConvergenceWarning: Maximum Likelihood optimization failed to converge. Check mle_retvals
+  warnings.warn("Maximum Likelihood optimization failed to "
+scMPRAforge: WARNING: NB fit failed to converge (alpha ~ 0). Data has near-zero overdispersion; setting fixed_count=5 (median).
+2026-05-08 15:38:11,533 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4f216254e2e311f29239b46e89a2cc36 initialized by task ('shuffle-transfer-4f216254e2e311f29239b46e89a2cc36', 0) executed on worker inproc://10.18.22.13/2298038/4
+2026-05-08 15:38:11,553 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 4f216254e2e311f29239b46e89a2cc36 deactivated due to stimulus 'task-finished-1778269091.5527012'
+2026-05-08 15:38:13,838 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0bcb543b1ea320812954f7243aef54a9 initialized by task ('shuffle-transfer-0bcb543b1ea320812954f7243aef54a9', 0) executed on worker inproc://10.18.22.13/2298038/4
+2026-05-08 15:38:13,856 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0bcb543b1ea320812954f7243aef54a9 deactivated due to stimulus 'task-finished-1778269093.855769'
+2026-05-08 15:38:16,442 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d4c545f41213a9a20d5170b8fda89405 initialized by task ('shuffle-transfer-d4c545f41213a9a20d5170b8fda89405', 0) executed on worker inproc://10.18.22.13/2298038/4
+2026-05-08 15:38:16,674 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle d4c545f41213a9a20d5170b8fda89405 deactivated due to stimulus 'task-finished-1778269096.6734498'
+scMPRAforge: INFO: Computed a total of 62835.1727974267 estimated collision events, out of a total of 823270.1727974267, or 7.632387868968488%
+  min_mpra_umi: 0.000029
+  max_mpra_umi: 7.253051
+  by_cell_type_theta: 1.627724
+  by_cre_theta: 24.607854
+  reference_activity: 0.213863
+  rep_ids: ['reference', 'K562']
+  consider_missing: True
+  nb_only: False
+  n_negative_controls: 2
+  zi type: Series, is None: False
+  Saved preset: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/presets/seelig_cm_moib_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_moib_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/seelig/seelig_cm_moib_zinb_phantom_library.svg
+
+Done.
+
+── slurm-11169326.out  (127 lines total) ─────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269007.523723 2439608 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778269014.795217 2439608 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Dashboard: http://10.18.22.114:8787/status
+
+============================================================
+Processing takeshi_obs_nb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-05-08 15:37:05,024 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e initialized by task ('shuffle-transfer-377e2262ae42370fa480007731178f1e', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:05,385 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e deactivated due to stimulus 'task-finished-1778269025.3844001'
+2026-05-08 15:37:06,591 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c3fe941e255388425f0b8ed39a16f5f7 initialized by task ('shuffle-transfer-c3fe941e255388425f0b8ed39a16f5f7', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:06,618 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle c3fe941e255388425f0b8ed39a16f5f7 deactivated due to stimulus 'task-finished-1778269026.6179607'
+2026-05-08 15:37:07,604 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 7ad4c042867898dc2a8bb7d188972c1b initialized by task ('shuffle-transfer-7ad4c042867898dc2a8bb7d188972c1b', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:07,632 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 7ad4c042867898dc2a8bb7d188972c1b deactivated due to stimulus 'task-finished-1778269027.6310036'
+2026-05-08 15:37:08,637 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9e1593965560f5b4774192bce2afd393 initialized by task ('shuffle-transfer-9e1593965560f5b4774192bce2afd393', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:08,663 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9e1593965560f5b4774192bce2afd393 deactivated due to stimulus 'task-finished-1778269028.6614988'
+2026-05-08 15:37:10,040 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 377e2262ae42370fa480007731178f1e initialized by task ('shuffle-transfer-377e2262ae42370fa480007731178f1e', 1) executed on worker inproc://10.18.22.114/2439608/4
+[last 50 lines]
+2026-05-08 15:37:28,114 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0b0844ed7ea6c893b7edcaeade1ec044 initialized by task ('shuffle-transfer-0b0844ed7ea6c893b7edcaeade1ec044', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:28,151 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 0b0844ed7ea6c893b7edcaeade1ec044 deactivated due to stimulus 'task-finished-1778269048.1515446'
+2026-05-08 15:37:29,636 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d initialized by task ('shuffle-transfer-dab9faa1d82a748abef3a7811690996d', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:30,017 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle dab9faa1d82a748abef3a7811690996d deactivated due to stimulus 'task-finished-1778269050.017374'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.000001
+  max_mpra_umi: 0.011216
+  by_cell_type_theta: 0.000170
+  by_cre_theta: 0.483354
+  reference_activity: 0.000068
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: True
+  nb_only: True
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_nb_phantom_library.svg
+
+============================================================
+Processing takeshi_cm_zinb_phantom
+============================================================
+  by_cre: 150 models
+  by_cell_type: 3 models
+2026-05-08 15:37:34,345 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af initialized by task ('shuffle-transfer-72f45f110e2b1a5bc5a2472d4ac5e0af', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:34,728 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af deactivated due to stimulus 'task-finished-1778269054.7280629'
+2026-05-08 15:37:35,975 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 51f02611b11cdc9a3d2a7bd9d9b04cd4 initialized by task ('shuffle-transfer-51f02611b11cdc9a3d2a7bd9d9b04cd4', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:36,004 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 51f02611b11cdc9a3d2a7bd9d9b04cd4 deactivated due to stimulus 'task-finished-1778269056.0043302'
+2026-05-08 15:37:37,063 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 35f1c5c252362802bb1762995fa8fd24 initialized by task ('shuffle-transfer-35f1c5c252362802bb1762995fa8fd24', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:37,089 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 35f1c5c252362802bb1762995fa8fd24 deactivated due to stimulus 'task-finished-1778269057.0875063'
+2026-05-08 15:37:38,143 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b05723f9ab0b50c97f941ff5e8fefd1 initialized by task ('shuffle-transfer-9b05723f9ab0b50c97f941ff5e8fefd1', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:38,167 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 9b05723f9ab0b50c97f941ff5e8fefd1 deactivated due to stimulus 'task-finished-1778269058.1670773'
+2026-05-08 15:37:39,633 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af initialized by task ('shuffle-transfer-72f45f110e2b1a5bc5a2472d4ac5e0af', 1) executed on worker inproc://10.18.22.114/2439608/4
+2026-05-08 15:37:40,014 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 72f45f110e2b1a5bc5a2472d4ac5e0af deactivated due to stimulus 'task-finished-1778269060.0143316'
+scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision events, out of a total of 1438525.4317320501, or 0.9594847214783951%
+  min_mpra_umi: 0.000001
+  max_mpra_umi: 0.011381
+  by_cell_type_theta: 0.000171
+  by_cre_theta: 0.597196
+  reference_activity: 0.000075
+  rep_ids: ['reference', 'K562', 'SKNSH']
+  consider_missing: True
+  nb_only: False
+  n_negative_controls: 20
+  zi type: Series, is None: False
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_cm_zinb_phantom_library.svg
+
+Done.

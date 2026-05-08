@@ -6,7 +6,12 @@
 #need to also import core and util dependencies here
 import pandas as pd
 import seaborn as sns
+import matplotlib as _mpl
 import matplotlib.pyplot as plt
+# editable text in vector outputs (SVG/PDF/PS) -- glyphs as <text>, not paths
+_mpl.rcParams["svg.fonttype"] = "none"
+_mpl.rcParams["pdf.fonttype"] = 42
+_mpl.rcParams["ps.fonttype"] = 42
 import logging
 import umi_tools
 import patsy

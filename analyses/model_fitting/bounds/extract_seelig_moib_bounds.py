@@ -60,8 +60,7 @@ def main():
 
         # Transfection model plot
         fig, ax = plt.subplots(figsize=(8, 5))
-        plt.sca(ax)
-        bounds.plot_transfection()
+        bounds.plot_transfection(ax=ax)
         ax.set_title(f"{short} -- transfection model")
         fig.tight_layout()
         svg_path = OUT_DIR / f"{short}_transfection.svg"
@@ -71,8 +70,7 @@ def main():
 
         # Library model plot
         fig, ax = plt.subplots(figsize=(8, 5))
-        plt.sca(ax)
-        bounds.library_model.plot()
+        bounds.library_model.plot(ax=ax)
         ax.set_title(f"{short} -- library model")
         fig.tight_layout()
         svg_path = OUT_DIR / f"{short}_library.svg"

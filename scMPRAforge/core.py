@@ -815,7 +815,7 @@ class simple_count:
             return np.full(size, int(self.fixed_count), dtype=int)
         return scipy.stats.nbinom.rvs(self.r,self.p,size=size,random_state=rng)
     
-    def plot(self, max_bins: int = 25, binwidth: int | None = None):
+    def plot(self, max_bins: int = 25, binwidth: int | None = None, ax=None):
         """
         Plot a histogram of the data with *integer-aligned coarse bins* and overlay
         NB and Poisson fits aggregated to the same bins.
@@ -829,6 +829,10 @@ class simple_count:
         binwidth : int | None
             If provided, forces that integer bin width (w). If None, a width is
             computed from `max_bins`.
+        ax : matplotlib.axes.Axes | None
+            If provided, draw into this axes and let the caller own the figure
+            (no tight_layout, no plt.show). If None, create a new figure and
+            call plt.show().
         """
         # Prepare data and model PMFs over integer support
         data = np.asarray(self.data, dtype=int)
@@ -866,7 +870,9 @@ class simple_count:
         x_pois, y_pois = _bin_sums_for_pmf(k, pmf_pois, dmin, w, nbins)
 
         # Plot
-        fig, ax = plt.subplots()
+        owns_fig = ax is None
+        if owns_fig:
+            fig, ax = plt.subplots()
         sns.histplot(
             data,
             bins=edges,
@@ -883,8 +889,9 @@ class simple_count:
         ax.set_xlabel('Count')
         ax.set_ylabel('Probability')
         ax.legend()
-        plt.tight_layout()
-        plt.show()
+        if owns_fig:
+            plt.tight_layout()
+            plt.show()
 
     def adjust_nb(self,new_nb):
         self.original_fit=False

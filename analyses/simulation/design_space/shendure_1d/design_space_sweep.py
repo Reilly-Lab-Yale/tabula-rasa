@@ -339,11 +339,18 @@ def _aggregate(axis: str, client, test_type: str = "ttest") -> pd.DataFrame:
 
 def phase_plot(axis: str, client, test_type: str = "ttest"):
     suffix = f"_{test_type}" if test_type != "ttest" else ""
-    combined = _aggregate(axis, client, test_type=test_type)
     sweep_out = SWEEPS_DIR / axis
     sweep_out.mkdir(exist_ok=True)
-    combined.to_parquet(sweep_out / f"power_df{suffix}.parquet")
-    print(f"Saved: {sweep_out / f'power_df{suffix}.parquet'}", flush=True)
+    # Prefer the cached aggregate (raw sims may be in cold storage; see
+    # /nfs/roberts/scratch/.../design_space_sims/MOVED.txt).
+    cached = sweep_out / f"power_df{suffix}.parquet"
+    if cached.exists():
+        print(f"Loading cached aggregate: {cached}", flush=True)
+        combined = pd.read_parquet(cached)
+    else:
+        combined = _aggregate(axis, client, test_type=test_type)
+        combined.to_parquet(cached)
+        print(f"Saved: {cached}", flush=True)
 
     # Power curves per grid point
     fig, ax = plt.subplots(figsize=(6, 4))
