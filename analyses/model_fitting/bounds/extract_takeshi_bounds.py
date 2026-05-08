@@ -13,7 +13,6 @@ sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
 
 import matplotlib
 matplotlib.use("Agg")
-matplotlib.rcParams["svg.fonttype"] = "none"
 import matplotlib.pyplot as plt
 
 from dask.distributed import Client, LocalCluster
