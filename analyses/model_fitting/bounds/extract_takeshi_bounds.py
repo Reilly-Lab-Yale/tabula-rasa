@@ -13,6 +13,7 @@ sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams["svg.fonttype"] = "none"
 import matplotlib.pyplot as plt
 
 from dask.distributed import Client, LocalCluster
@@ -66,8 +67,7 @@ def main():
         print(f"  Saved bounds: {tgz_path}", flush=True)
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        plt.sca(ax)
-        bounds.plot_transfection()
+        bounds.plot_transfection(ax=ax)
         ax.set_title(f"{short} -- transfection model")
         fig.tight_layout()
         svg_path = OUT_DIR / f"{short}_transfection.svg"
@@ -76,8 +76,7 @@ def main():
         print(f"  Saved: {svg_path}", flush=True)
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        plt.sca(ax)
-        bounds.library_model.plot()
+        bounds.library_model.plot(ax=ax)
         ax.set_title(f"{short} -- library model")
         fig.tight_layout()
         svg_path = OUT_DIR / f"{short}_library.svg"
