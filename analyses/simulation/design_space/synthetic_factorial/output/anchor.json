@@ -63,6 +63,15 @@
       "lib_alpha_nb": 1.3873,
       "minP": 0.9363,
       "activity_max_mult": 1.11
+    },
+    "takeshi-HepG2": {
+      "n_cells": 1690,
+      "n_cres": 149,
+      "bcs_per_cre": 394.07,
+      "moi": 265.91,
+      "lib_alpha_nb": 1.7174,
+      "minP": 0.0116,
+      "activity_max_mult": 37.22
     }
   },
   "sim_date": "2026-05-05"
