@@ -15,6 +15,22 @@
 
 -- Pearson r (mu vs mean UMI) ------------------------------------------
 
-  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0
-  by_cre: mean r=0.998  min=0.938  max=1.000  n(r<0.8)=0
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=0
+    NaN anti-levels dropped before regression: 618/2080 across all models
+  by_cre: mean r=0.917  min=-1.000  max=1.000  n(r<0.8)=13  n_nan_r=1
+    NaN anti-levels dropped before regression: 618/2080 across all models
+    Low-r levels (r < 0.8):
+      r=-1.000  Lamc1_chr1_12188
+      r=-1.000  Lamb1_chr12_2206
+      r=-0.138  Cdk5r1_chr11_12595
+      r=0.052  Gata4_chr14_5762
+      r=0.273  Lamb1_chr12_2203
+      r=0.687  Lamb1_chr12_2182
+      r=0.708  Foxa2_chr2_13806
+      r=0.728  Bend5_chr4_8175
+      r=0.750  Lamb1_chr12_2207
+      r=0.769  Sparc_chr11_7233
+      r=0.785  Bend5_chr4_8168
+      r=0.791  Sox17_chr1_59
+      r=0.795  Sparc_chr11_7180
 

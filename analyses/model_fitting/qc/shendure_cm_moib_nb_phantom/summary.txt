@@ -1,0 +1,24 @@
+========================================================================
+  shendure_cm_moib_nb_phantom -- Model QC Summary
+  Model type: NB-only
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 10/10 converged
+  by_cre: 208/208 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0000  max=377.9698  median=0.0590
+  by_cre: min=0.0000  max=380.1051  median=0.0589
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=0
+    NaN anti-levels dropped before regression: 618/2080 across all models
+  by_cre: mean r=0.993  min=-0.295  max=1.000  n(r<0.8)=1  n_nan_r=1
+    NaN anti-levels dropped before regression: 618/2080 across all models
+    Low-r levels (r < 0.8):
+      r=-0.295  Cdk5r1_chr11_12595
+

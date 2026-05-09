@@ -15,12 +15,15 @@
 
 -- Pearson r (mu vs mean UMI) ------------------------------------------
 
-  by_cell_type: mean r=nan  min=nan  max=nan  n(r<0.8)=3
+  by_cell_type: mean r=0.096  min=-0.039  max=0.222  n(r<0.8)=4  n_nan_r=0
+    NaN anti-levels dropped before regression: 1/453 across all models
     Low-r levels (r < 0.8):
       r=-0.039  Bipolar
       r=0.016  reference
+      r=0.184  Mueller Glia
       r=0.222  Interneuron
-  by_cre: mean r=nan  min=nan  max=nan  n(r<0.8)=90
+  by_cre: mean r=0.220  min=-0.922  max=0.986  n(r<0.8)=90  n_nan_r=1
+    NaN anti-levels dropped before regression: 1/453 across all models
     Low-r levels (r < 0.8):
       r=-0.922  swap_crx2_to_gggcttag_reverse
       r=-0.922  tail_conserve1_169_to_174

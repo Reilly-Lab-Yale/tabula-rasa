@@ -224,51 +224,66 @@ def phase_simulate(client):
 # ---------------------------------------------------------------------------
 
 def phase_plot(client):
-    # Reload all sims from disk
-    all_sims = {}
-    for cell_type in CELL_TYPES:
-        ct_dir = SIM_DIR / cell_type
-        sims_ct = []
-        if ct_dir.exists():
-            for d in sorted(ct_dir.iterdir()):
-                if not d.is_dir():
-                    continue
-                tt_dir = d / "tests" / "hs_all_ct" / "ttest"
-                if tt_dir.exists() and any(tt_dir.iterdir()):
-                    sims_ct.append(
-                        scm.de_novo_simulation(
-                            location=ct_dir, name=d.name, client=client
+    # Prefer cached aggregates (raw sims may have lost their tests/ subtree;
+    # the parquets are the canonical record for re-rendering).
+    cached_rep = OUTPUT_DIR / "power_df_reporter.parquet"
+    cached_def = OUTPUT_DIR / "power_df_deflated.parquet"
+    if cached_rep.exists() and cached_def.exists():
+        print(f"Loading cached aggregates: {cached_rep}, {cached_def}", flush=True)
+        rep_combined = pd.read_parquet(cached_rep)
+        def_combined = pd.read_parquet(cached_def)
+        all_mergy_reporter = {
+            ct: g.drop(columns="cell_type") for ct, g in rep_combined.groupby("cell_type")
+        }
+        all_mergy_deflated = {
+            ct: g.drop(columns="cell_type") for ct, g in def_combined.groupby("cell_type")
+        }
+    else:
+        # Reload all sims from disk
+        all_sims = {}
+        for cell_type in CELL_TYPES:
+            ct_dir = SIM_DIR / cell_type
+            sims_ct = []
+            if ct_dir.exists():
+                for d in sorted(ct_dir.iterdir()):
+                    if not d.is_dir():
+                        continue
+                    tt_dir = d / "tests" / "hs_all_ct" / "ttest"
+                    if tt_dir.exists() and any(tt_dir.iterdir()):
+                        sims_ct.append(
+                            scm.de_novo_simulation(
+                                location=ct_dir, name=d.name, client=client
+                            )
                         )
-                    )
-        all_sims[cell_type] = sims_ct
-        print(f"  {cell_type}: loaded {len(sims_ct)} sims", flush=True)
+            all_sims[cell_type] = sims_ct
+            print(f"  {cell_type}: loaded {len(sims_ct)} sims", flush=True)
 
-    # Aggregate results for both conditions
-    all_mergy_reporter = {
-        ct: scm.sum_pow(sims, hypothesis_set_name="hs_all_ct", test_type="ttest")
-        for ct, sims in all_sims.items()
-    }
-    all_mergy_deflated = {
-        ct: scm.sum_pow(
-            sims, hypothesis_set_name="hs_all_ct", test_type="ttest_deflated"
-        )
-        for ct, sims in all_sims.items()
-    }
+        # Aggregate results for both conditions
+        all_mergy_reporter = {
+            ct: scm.sum_pow(sims, hypothesis_set_name="hs_all_ct", test_type="ttest")
+            for ct, sims in all_sims.items()
+        }
+        all_mergy_deflated = {
+            ct: scm.sum_pow(
+                sims, hypothesis_set_name="hs_all_ct", test_type="ttest_deflated"
+            )
+            for ct, sims in all_sims.items()
+        }
 
-    # Save aggregated dataframes
-    for label, mergy_dict in [
-        ("reporter", all_mergy_reporter),
-        ("deflated", all_mergy_deflated),
-    ]:
-        rows = []
-        for ct, df in mergy_dict.items():
-            df = df.copy()
-            df["cell_type"] = ct
-            rows.append(df)
-        combined = pd.concat(rows, ignore_index=True)
-        out_path = OUTPUT_DIR / f"power_df_{label}.parquet"
-        combined.to_parquet(out_path)
-        print(f"Saved: {out_path}", flush=True)
+        # Save aggregated dataframes
+        for label, mergy_dict in [
+            ("reporter", all_mergy_reporter),
+            ("deflated", all_mergy_deflated),
+        ]:
+            rows = []
+            for ct, df in mergy_dict.items():
+                df = df.copy()
+                df["cell_type"] = ct
+                rows.append(df)
+            combined = pd.concat(rows, ignore_index=True)
+            out_path = OUTPUT_DIR / f"power_df_{label}.parquet"
+            combined.to_parquet(out_path)
+            print(f"Saved: {out_path}", flush=True)
 
     # --- Plot: overlay +reporter and deflated on each subplot ---
     def _pow_curve_data(mergy, n_bins=100):

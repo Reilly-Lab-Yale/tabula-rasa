@@ -70,7 +70,7 @@ DATA_ROOT = Path(cfg["data_root"])
 ORTHO_NAME = args.ortho
 CELL_TYPE_LABELS = cfg["cell_type_labels"]
 
-WORK_DIR = Path(__file__).resolve().parent / "qc" / ORTHO_NAME
+WORK_DIR = Path(__file__).resolve().parent / ORTHO_NAME
 PLOT_DIR = WORK_DIR / "plots"
 PLOT_DIR.mkdir(parents=True, exist_ok=True)
 SUMMARY_PATH = WORK_DIR / "summary.txt"
