@@ -1,14 +1,15 @@
 """FPR@0.05 summary bar charts per dataset.
 
-Two single-panel views, each chosen via --axis:
-- axis=reporter: +reporter vs -reporter (deflated) bars per cell type.
-  Test held fixed at MWU (canonical test).
-- axis=test:     t-test vs MWU bars per cell type. Condition held fixed at
-  +reporter (default condition).
+Two two-panel views, each chosen via --axis:
+- axis=reporter: panels=tests (t-test, MWU). Within each panel, +reporter vs
+  -reporter (deflated) bars per cell type. Shows that t-test miscalibration
+  is concentrated in the -reporter condition.
+- axis=test:     panels=conditions (+reporter, -reporter). Within each
+  panel, t-test vs MWU bars per cell type.
 
 Reads the cached null-pvals parquets ({ds}_null_pvals_{[mwu_]}{cond}.parquet).
-Seelig has no transfection reporter, so axis=test is skipped for seelig and
-axis=reporter would be a single bar (also skipped).
+Seelig has no transfection reporter; its axis=reporter figure is skipped,
+and its axis=test figure has only the -reporter panel.
 
 Usage:
     python fpr_bars.py --dataset shendure --axis reporter
@@ -85,45 +86,63 @@ def _draw_panel(ax, cts, ref_display, groups, title):
 
 
 def _figure_axis_reporter(dataset, ref_display):
-    """Single panel: +reporter vs -reporter (deflated) bars; test fixed at MWU."""
-    test = "mwu"
-    groups = []
-    fpr_dicts = []
-    for cond in ("reporter", "deflated"):
-        p = _pvals_path(dataset, test, cond)
-        if not p.exists():
-            continue
-        fd = _fpr_per_ct(p)
-        fpr_dicts.append(fd)
-        groups.append((REPORTER_COLOR[cond], REPORTER_LABEL[cond], fd))
-    if len(groups) < 2:
+    """Panels=tests; within each, +reporter vs -reporter (deflated) bars."""
+    panels = []  # (panel_title, groups, fpr_dicts)
+    for test in ("ttest", "mwu"):
+        groups = []
+        fpr_dicts = []
+        for cond in ("reporter", "deflated"):
+            p = _pvals_path(dataset, test, cond)
+            if not p.exists():
+                continue
+            fd = _fpr_per_ct(p)
+            fpr_dicts.append(fd)
+            groups.append((REPORTER_COLOR[cond], REPORTER_LABEL[cond], fd))
+        if len(groups) >= 2:
+            panels.append((TEST_LABEL[test], groups, fpr_dicts))
+    if not panels:
         return None
-    cts = _ordered_cts(fpr_dicts)
-    fig, ax = plt.subplots(figsize=(max(5, len(cts) * 0.55), 3.8))
-    _draw_panel(ax, cts, ref_display, groups,
-                f"{dataset} -- null FPR by cell type: +reporter vs -reporter (MWU)")
+    all_dicts = [fd for _, _, fds in panels for fd in fds]
+    cts = _ordered_cts(all_dicts)
+    fig, axes = plt.subplots(len(panels), 1,
+                             figsize=(max(5, len(cts) * 0.55), 3.5 * len(panels)),
+                             sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    for ax, (panel_title, groups, _) in zip(axes, panels):
+        _draw_panel(ax, cts, ref_display, groups, panel_title)
+    fig.suptitle(f"{dataset} -- null FPR by cell type: +reporter vs -reporter",
+                 fontsize=11, y=1.005)
     plt.tight_layout()
     return fig
 
 
 def _figure_axis_test(dataset, ref_display):
-    """Single panel: t-test vs MWU bars; condition is +reporter, falling
-    back to deflated for datasets without a transfection reporter (seelig)."""
+    """Panels=conditions; within each, t-test vs MWU bars."""
+    panels = []
     for cond in ("reporter", "deflated"):
-        if all(_pvals_path(dataset, t, cond).exists() for t in ("ttest", "mwu")):
-            break
-    else:
+        groups = []
+        fpr_dicts = []
+        for test in ("ttest", "mwu"):
+            p = _pvals_path(dataset, test, cond)
+            if not p.exists():
+                continue
+            fd = _fpr_per_ct(p)
+            fpr_dicts.append(fd)
+            groups.append((TEST_COLOR[test], TEST_LABEL[test], fd))
+        if len(groups) >= 2:
+            panels.append((REPORTER_LABEL[cond], groups, fpr_dicts))
+    if not panels:
         return None
-    groups = []
-    fpr_dicts = []
-    for test in ("ttest", "mwu"):
-        fd = _fpr_per_ct(_pvals_path(dataset, test, cond))
-        fpr_dicts.append(fd)
-        groups.append((TEST_COLOR[test], TEST_LABEL[test], fd))
-    cts = _ordered_cts(fpr_dicts)
-    fig, ax = plt.subplots(figsize=(max(5, len(cts) * 0.55), 3.8))
-    _draw_panel(ax, cts, ref_display, groups,
-                f"{dataset} -- null FPR by cell type: t-test vs MWU ({REPORTER_LABEL[cond]})")
+    all_dicts = [fd for _, _, fds in panels for fd in fds]
+    cts = _ordered_cts(all_dicts)
+    fig, axes = plt.subplots(len(panels), 1,
+                             figsize=(max(5, len(cts) * 0.55), 3.5 * len(panels)),
+                             sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    for ax, (panel_title, groups, _) in zip(axes, panels):
+        _draw_panel(ax, cts, ref_display, groups, panel_title)
+    fig.suptitle(f"{dataset} -- null FPR by cell type: t-test vs MWU",
+                 fontsize=11, y=1.005)
     plt.tight_layout()
     return fig
 
