@@ -4,7 +4,7 @@
   "n_library_reps": 5,
   "n_sims": 5,
   "n_workers": 50,
-  "worker_mem": "48G",
+  "worker_mem": "128G",
   "seed": 20260505,
   "axis_bounds": {
     "n_cells": [

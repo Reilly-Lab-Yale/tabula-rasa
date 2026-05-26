@@ -47,22 +47,31 @@
   "sim_root": "/nfs/roberts/scratch/pi_skr2/mcn26/synthetic_factorial_sims/2026-05-05_synthetic_factorial_smoke",
   "empirical": {
     "shendure-Pluripotent": {
-      "n_cells": 8200,
+      "n_cells": 8201,
       "n_cres": 207,
-      "bcs_per_cre": 136.0,
-      "moi": 18.0,
-      "lib_alpha_nb": null,
+      "bcs_per_cre": 136.06,
+      "moi": 18.01,
+      "lib_alpha_nb": 0.2241,
       "minP": 0.0414,
-      "activity_max_mult": 4.0
+      "activity_max_mult": 99.21
     },
     "cohen-Rod": {
-      "n_cells": null,
-      "n_cres": null,
-      "bcs_per_cre": null,
-      "moi": null,
-      "lib_alpha_nb": null,
+      "n_cells": 18633,
+      "n_cres": 116,
+      "bcs_per_cre": 17244.5,
+      "moi": 149.15,
+      "lib_alpha_nb": 1.3873,
       "minP": 0.9363,
-      "activity_max_mult": 4.0
+      "activity_max_mult": 1.11
+    },
+    "takeshi-HepG2": {
+      "n_cells": 1690,
+      "n_cres": 149,
+      "bcs_per_cre": 394.07,
+      "moi": 265.91,
+      "lib_alpha_nb": 1.7174,
+      "minP": 0.0116,
+      "activity_max_mult": 37.22
     }
   },
   "sim_date": "2026-05-05"

@@ -61,6 +61,7 @@ import json
 import gc
 import pickle
 import copy
+import shutil
 import traceback
 from pathlib import Path
 
@@ -166,6 +167,25 @@ TOPUP3_AXIS_BOUNDS = {
     "minP":              (3.0e-3, 2.0e-2, True),  # extends below takeshi=0.0116
     "activity_max_mult": (1.0,   1.2e2, True),    # log; covers cohen 1.11 to shendure 99
 }
+
+# Brute-force union over the full + topup + topup3 ranges. One independent
+# LHS sweep over the combined box restores axis independence in the
+# combined dataset (the existing full+topup+topup3 patchwork has induced
+# cross-axis correlation -- e.g. high-moi samples are necessarily from
+# topup and therefore carry topup's high-bcs draws). This is the design
+# the methods paper actually wants for the headline marginal plots.
+# activity_max_mult is log-scaled here (vs linear in full) because the
+# union range spans two orders of magnitude.
+UNION_AXIS_BOUNDS = {
+    "n_cells":           (5.0e2, 5.0e4, True),
+    "n_cres":            (5.0e1, 2.0e3, True),
+    "bcs_per_cre":       (3.0,   5.0e4, True),
+    "moi":               (0.5,   3.5e2, True),
+    "lib_alpha_nb":      (0.02,  2.0,   True),
+    "minP":              (3.0e-3, 2.0,  True),
+    "activity_max_mult": (1.0,   1.2e2, True),    # log over full union
+}
+
 AXIS_NAMES = list(AXIS_BOUNDS.keys())
 
 # Sample / rep / sim / worker budget per mode. Default is "full"; the wrapper
@@ -173,11 +193,22 @@ AXIS_NAMES = list(AXIS_BOUNDS.keys())
 # n_workers is per-slice (each slice has its own dask cluster).
 # Total worker pool = n_slices * n_workers.
 MODES = {
-    "smoke": dict(n_lhs=4,    n_library_reps=2, n_sims=2, n_workers=4,  worker_mem="16G", n_slices=1),
-    "pilot": dict(n_lhs=30,   n_library_reps=3, n_sims=5, n_workers=20, worker_mem="48G", n_slices=3),
-    "full":  dict(n_lhs=1000, n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
-    "topup": dict(n_lhs=100,  n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
-    "topup3": dict(n_lhs=120, n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G", n_slices=10),
+    "smoke": dict(n_lhs=4,    n_library_reps=2, n_sims=2, n_workers=4,  worker_mem="16G",  n_slices=1),
+    "pilot": dict(n_lhs=30,   n_library_reps=3, n_sims=5, n_workers=20, worker_mem="48G",  n_slices=3),
+    "full":  dict(n_lhs=1000, n_library_reps=5, n_sims=5, n_workers=50, worker_mem="48G",  n_slices=10),
+    "topup": dict(n_lhs=100,  n_library_reps=5, n_sims=5, n_workers=50, worker_mem="128G", n_slices=10),
+    "topup3":dict(n_lhs=120,  n_library_reps=5, n_sims=5, n_workers=50, worker_mem="128G", n_slices=10),
+    # Brute-force LHS over the full union of axis ranges. n_lhs=5000 gives
+    # ~5x the density of the original full sweep across a ~10x larger box.
+    # worker_mem=128G to handle the heavy-tail corner without OOM (see
+    # TODO.md 2026-05-10 incident).
+    # n_workers=5 (not 50): n_sims=5 is the real intra-rep parallelism,
+    # more workers per driver are wasted AND when many drivers run in
+    # parallel as a job array they overwhelm YCRC's per-hour sbatch rate
+    # limit (200/hr/user) with worker submissions. With 100 concurrent
+    # array tasks x 5 workers each = 500 worker sbatches total over the
+    # run, vs 100 x 50 = 5000 which hit the limit hard on 2026-05-11.
+    "union": dict(n_lhs=5000, n_library_reps=5, n_sims=5, n_workers=5,  worker_mem="128G", n_slices=50),
 }
 
 # Mutable globals -- set in main() based on chosen mode. Defaults match "full"
@@ -350,6 +381,13 @@ def _run_one_sample(row: pd.Series, client) -> None:
     """
     sid = row["sample_id"]
     pt_dir = _sample_dir(sid)
+    # Skip if already cached + pruned: cached_results.parquet is the
+    # ground-truth marker that this sample's reps were all completed and
+    # the raw sim_<hash> dirs were collapsed. _count_done can't see that
+    # state because it looks for tests/hs_act/mwu which gets pruned.
+    if (pt_dir / "cached_results.parquet").exists():
+        print(f"SKIP   {sid} (cached)", flush=True)
+        return
     pt_dir.mkdir(parents=True, exist_ok=True)
     n_cres = int(row["n_cres"])
     minP = float(row["minP"])
@@ -395,7 +433,20 @@ def _run_one_sample(row: pd.Series, client) -> None:
         sim.save()
         del sim
         gc.collect()
-    print(f"DONE   {sid}", flush=True)
+
+    # Cache + prune inline. Scratch is tight (pi_skr2 group quota is 89%
+    # full as of 2026-05-10), so each completed sample collapses its
+    # ~10-15 GB of raw sim dirs to a ~10 KB cached_results.parquet
+    # before the next sample starts. Without inline pruning peak disk
+    # would be n_samples x ~10 GB, which exceeds available scratch.
+    if _cache_sample(pt_dir, sid, client):
+        try:
+            freed = _prune_sample(pt_dir)
+            print(f"DONE   {sid}  pruned {freed/1e9:.1f} GB", flush=True)
+        except Exception as e:
+            print(f"DONE   {sid}  prune skipped: {type(e).__name__}: {e}", flush=True)
+    else:
+        print(f"DONE   {sid}  cache failed; not pruning", flush=True)
 
 
 def _slice_samples(samples: pd.DataFrame, slice_idx: int, n_slices: int) -> pd.DataFrame:
@@ -498,9 +549,97 @@ def _power_metrics(cat: pd.DataFrame) -> dict:
     return out
 
 
+def _cache_sample(pt_dir: Path, sample_id: str, client,
+                   test_type: str = "mwu",
+                   hypothesis_set: str = "hs_act") -> bool:
+    """Walk the sim_<hash> dirs of one sample, merge ground truth with
+    test results, and write a single <pt_dir>/cached_results.parquet.
+
+    Columns: sample_id, sim_id, rep_idx, reject_null, fc,
+             comparison_truth, reference_truth.
+
+    No-op if the cache already exists. Returns True on success (cache
+    present afterward), False if no valid sim dirs were found.
+    """
+    cache_path = pt_dir / "cached_results.parquet"
+    if cache_path.exists():
+        return True
+    if not pt_dir.exists():
+        return False
+    rows = []
+    for d in sorted(pt_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        res_dir = d / "tests" / hypothesis_set / test_type
+        if not (res_dir.exists() and any(res_dir.iterdir())):
+            continue
+        try:
+            sim = scm.de_novo_simulation(location=pt_dir, name=d.name, client=client)
+            n_sims = sim.get_state_field("n_sims")
+        except Exception:
+            continue
+        for i in range(n_sims):
+            try:
+                m = sim._merge_in_ground_truth(
+                    hypothesis_set_name=hypothesis_set, test_type=test_type, index=i)
+            except Exception:
+                continue
+            m["sample_id"] = sample_id
+            m["sim_id"] = d.name
+            m["rep_idx"] = i
+            m["comparison_truth"] = m["comparison_truth"].astype(float)
+            m["reference_truth"] = m["reference_truth"].astype(float)
+            m["fc"] = m["comparison_truth"] / m["reference_truth"]
+            rows.append(m[["sample_id", "sim_id", "rep_idx",
+                            "reject_null", "fc",
+                            "comparison_truth", "reference_truth"]].copy())
+    if not rows:
+        return False
+    pd.concat(rows, ignore_index=True).to_parquet(cache_path)
+    return True
+
+
+def _prune_sample(pt_dir: Path) -> int:
+    """Delete everything in pt_dir except cached_results.parquet.
+
+    Refuses to prune if no cache exists -- the cache is the only thing
+    that lets _aggregate run later. Returns approximate bytes freed.
+    """
+    cache_path = pt_dir / "cached_results.parquet"
+    if not cache_path.exists():
+        raise RuntimeError(f"refusing to prune {pt_dir}: no cached_results.parquet")
+    freed = 0
+    for item in pt_dir.iterdir():
+        if item.name == "cached_results.parquet":
+            continue
+        if item.is_dir():
+            for root, _, files in os.walk(item):
+                for f in files:
+                    try:
+                        freed += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+            shutil.rmtree(item, ignore_errors=True)
+        else:
+            try:
+                freed += item.stat().st_size
+            except OSError:
+                pass
+            try:
+                item.unlink()
+            except OSError:
+                pass
+    return freed
+
+
 def _aggregate(samples: pd.DataFrame, client, test_type: str = "mwu") -> pd.DataFrame:
     """Walk scratch, per sample compute several power summaries, return one
-    row per sample."""
+    row per sample.
+
+    Prefers <pt_dir>/cached_results.parquet (cheap read) when present;
+    falls back to walking the sim_<hash> dirs for samples that haven't
+    been cached + pruned yet.
+    """
     rows = []
     skipped = 0
     for _, row in samples.iterrows():
@@ -508,43 +647,56 @@ def _aggregate(samples: pd.DataFrame, client, test_type: str = "mwu") -> pd.Data
         pt_dir = _sample_dir(sid)
         if not pt_dir.exists():
             continue
-        sim_dirs = [d for d in sorted(pt_dir.iterdir()) if d.is_dir()]
-        per_sample = []
-        for d in sim_dirs:
-            res_dir = d / "tests" / "hs_act" / test_type
-            if not (res_dir.exists() and any(res_dir.iterdir())):
-                continue
-            required = [
-                d / "ground_truth.tsv.gz",
-                d / "futures.tsv.gz",
-                d / "state.parquet",
-            ] + [res_dir / f"{i}_results.tsv" for i in range(N_SIMS)]
-            if not all(p.exists() for p in required):
-                skipped += 1
-                continue
+        cache_path = pt_dir / "cached_results.parquet"
+        if cache_path.exists():
             try:
-                sim = scm.de_novo_simulation(location=pt_dir, name=d.name, client=client)
-                reps = sim.get_state_field("n_sims")
-                for i in range(reps):
-                    mergy = sim._merge_in_ground_truth(
-                        hypothesis_set_name="hs_act", test_type=test_type, index=i
-                    )
-                    mergy["comparison_truth"] = mergy["comparison_truth"].astype(float)
-                    mergy["reference_truth"] = mergy["reference_truth"].astype(float)
-                    mergy["fc"] = mergy["comparison_truth"] / mergy["reference_truth"]
-                    per_sample.append(mergy[["reject_null", "fc"]].copy())
+                cat = pd.read_parquet(cache_path)
             except Exception as e:
                 skipped += 1
-                print(f"  skip {sid}/{d.name}: {type(e).__name__}: {e}", flush=True)
+                print(f"  skip {sid} cache: {type(e).__name__}: {e}", flush=True)
                 continue
-        if not per_sample:
-            continue
-        cat = pd.concat(per_sample, ignore_index=True)
+            if "reject_null" not in cat.columns or "fc" not in cat.columns:
+                skipped += 1
+                continue
+            cat = cat[["reject_null", "fc"]].dropna(subset=["fc"])
+        else:
+            sim_dirs = [d for d in sorted(pt_dir.iterdir()) if d.is_dir()]
+            per_sample = []
+            for d in sim_dirs:
+                res_dir = d / "tests" / "hs_act" / test_type
+                if not (res_dir.exists() and any(res_dir.iterdir())):
+                    continue
+                required = [
+                    d / "ground_truth.tsv.gz",
+                    d / "futures.tsv.gz",
+                    d / "state.parquet",
+                ] + [res_dir / f"{i}_results.tsv" for i in range(N_SIMS)]
+                if not all(p.exists() for p in required):
+                    skipped += 1
+                    continue
+                try:
+                    sim = scm.de_novo_simulation(location=pt_dir, name=d.name, client=client)
+                    reps = sim.get_state_field("n_sims")
+                    for i in range(reps):
+                        mergy = sim._merge_in_ground_truth(
+                            hypothesis_set_name="hs_act", test_type=test_type, index=i
+                        )
+                        mergy["comparison_truth"] = mergy["comparison_truth"].astype(float)
+                        mergy["reference_truth"] = mergy["reference_truth"].astype(float)
+                        mergy["fc"] = mergy["comparison_truth"] / mergy["reference_truth"]
+                        per_sample.append(mergy[["reject_null", "fc"]].copy())
+                except Exception as e:
+                    skipped += 1
+                    print(f"  skip {sid}/{d.name}: {type(e).__name__}: {e}", flush=True)
+                    continue
+            if not per_sample:
+                continue
+            cat = pd.concat(per_sample, ignore_index=True)
         out = row.to_dict()
         out.update(_power_metrics(cat))
         rows.append(out)
     if skipped:
-        print(f"  aggregate: skipped {skipped} unloadable sim dirs", flush=True)
+        print(f"  aggregate: skipped {skipped} unloadable items", flush=True)
     return pd.DataFrame(rows)
 
 
@@ -774,7 +926,16 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
                             out_path=out_path, hline=hline, invert_y=invert,
                             force_linear_x=linx, anchors=alist)
 
-    # Pairwise heatmaps for top axes by smoother range (= biggest LOESS swing)
+    # Pairwise heatmaps for top axes by smoother range (= biggest LOESS swing).
+    # Render once for the per-mode df and, when a combined frame exists, once
+    # more for the fused full+topup+topup3 dataset.
+    _pairwise_heatmaps(df, suffix=suffix, title_suffix="")
+    if mode in ("topup", "topup3") and prior_dfs:
+        _pairwise_heatmaps(combined, suffix="_combined",
+                           title_suffix=f" -- combined ({sources}, n={len(combined)})")
+
+
+def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     ranges = {}
     for axis in AXIS_NAMES:
         x = df[axis].values.astype(float)
@@ -787,7 +948,7 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
         except Exception:
             ranges[axis] = 0.0
     top3 = sorted(ranges.items(), key=lambda kv: -kv[1])[:3]
-    print(f"Top axes by marginal swing: {top3}", flush=True)
+    print(f"Top axes by marginal swing ({suffix or 'full'}): {top3}", flush=True)
     pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]), (top3[1][0], top3[2][0])]
     fig, axes = plt.subplots(1, 3, figsize=(14, 4))
     for ax, (a, b) in zip(axes, pairs):
@@ -801,7 +962,6 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
             xb = np.log10(xb); b_lab = f"log10 {b}"
         else:
             b_lab = b
-        # 8x8 binning, mean power per bin
         nb = 8
         bins_a = np.linspace(xa.min(), xa.max(), nb + 1)
         bins_b = np.linspace(xb.min(), xb.max(), nb + 1)
@@ -816,10 +976,11 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
         ax.set_xlabel(a_lab)
         ax.set_ylabel(b_lab)
         plt.colorbar(im, ax=ax, label="power @ FC=2")
-    fig.suptitle("Pairwise heatmaps (top-3 axes by marginal swing)")
+    fig.suptitle(f"Pairwise heatmaps (top-3 axes by marginal swing){title_suffix}")
     plt.tight_layout()
     out_pair = OUT / f"pairwise_heatmaps{suffix}.svg"
     fig.savefig(out_pair, format="svg", bbox_inches="tight")
+    plt.close(fig)
     print(f"Saved: {out_pair}", flush=True)
 
 
@@ -887,6 +1048,10 @@ def get_samples() -> pd.DataFrame:
         # 'u' prefix keeps sample_ids disjoint from 's' (full) and 't' (topup).
         df = draw_lhs(N_LHS, seed=20260507, bounds=TOPUP3_AXIS_BOUNDS,
                       sample_id_prefix="u")
+    elif CURRENT_MODE == "union":
+        # 'v' prefix keeps sample_ids disjoint from prior sweeps.
+        df = draw_lhs(N_LHS, seed=20260511, bounds=UNION_AXIS_BOUNDS,
+                      sample_id_prefix="v")
     else:
         df = draw_lhs(N_LHS, seed=SEED)
     df.to_parquet(SAMPLES_PATH)
@@ -948,6 +1113,57 @@ if __name__ == "__main__":
         # the table exists before parallel sbatch slice jobs race on it.
         get_samples()
         print("samples table ready", flush=True)
+        sys.exit(0)
+
+    if phase == "cache_prune":
+        # Backfill cache + prune for samples in this mode's table. For each
+        # sample with valid sim dirs but no cached_results.parquet, build
+        # the cache then rm -rf the raw sim_<hash> contents. Existing
+        # caches and missing samples are skipped silently.
+        # Optional slice args (positional 3,4) partition the samples table
+        # the same way phase_simulate does, so cache_prune can be sbatched
+        # in parallel across slices. Default is one slice = all samples,
+        # since cache_prune is fast and usually not worth slicing.
+        cp_slice_idx = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+        cp_n_slices = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+        samples = get_samples()
+        sliced = _slice_samples(samples, cp_slice_idx, cp_n_slices)
+        print(f"\n{'='*60}\nPhase: cache_prune ({mode}, slice "
+              f"{cp_slice_idx}/{cp_n_slices}: {len(sliced)}/{len(samples)})"
+              f"\n{'='*60}", flush=True)
+        cluster, client = _make_local_client()
+        n_cached = n_pruned = n_skipped = 0
+        total_freed = 0
+        try:
+            for _, row in sliced.iterrows():
+                sid = row["sample_id"]
+                pt_dir = _sample_dir(sid)
+                if not pt_dir.exists():
+                    n_skipped += 1
+                    continue
+                cache_path = pt_dir / "cached_results.parquet"
+                already_cached = cache_path.exists()
+                ok = _cache_sample(pt_dir, sid, client)
+                if not ok:
+                    n_skipped += 1
+                    print(f"  {sid}: no valid sim dirs; skipping", flush=True)
+                    continue
+                if not already_cached:
+                    n_cached += 1
+                try:
+                    freed = _prune_sample(pt_dir)
+                    total_freed += freed
+                    n_pruned += 1
+                    print(f"  {sid}: {'cached + ' if not already_cached else ''}"
+                          f"pruned {freed/1e9:.1f} GB", flush=True)
+                except Exception as e:
+                    print(f"  {sid}: prune failed: {type(e).__name__}: {e}",
+                          flush=True)
+        finally:
+            client.close(); cluster.close()
+        print(f"\nSummary: cached={n_cached} pruned={n_pruned} "
+              f"skipped={n_skipped} freed={total_freed/1e12:.2f} TB",
+              flush=True)
         sys.exit(0)
 
     samples = get_samples()
