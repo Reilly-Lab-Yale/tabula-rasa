@@ -947,7 +947,7 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     ranges = {}
     for axis in AXIS_NAMES:
         x = df[axis].values.astype(float)
-        y = df["power_at_fc2"].values.astype(float)
+        y = df["power_auc_1to3"].values.astype(float)
         log_scale = AXIS_BOUNDS[axis][2]
         x_plot = np.log10(x) if log_scale else x
         try:
@@ -970,12 +970,19 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
             xb = np.log10(xb); b_lab = f"log10 {b}"
         else:
             b_lab = b
+        # Mask non-finite power before the weighted histogram: np.histogram2d
+        # sums weights, so one NaN weight poisons its whole bin to NaN (imshow
+        # then renders it transparent). power_auc_1to3 is NaN-free, but mask
+        # defensively -- the earlier power_at_fc2 weighting was ~15% NaN and
+        # blanked the entire figure.
+        p = df["power_auc_1to3"].values.astype(float)
+        m = np.isfinite(xa) & np.isfinite(xb) & np.isfinite(p)
         nb = 8
-        bins_a = np.linspace(xa.min(), xa.max(), nb + 1)
-        bins_b = np.linspace(xb.min(), xb.max(), nb + 1)
-        H_sum, _, _ = np.histogram2d(xa, xb, bins=[bins_a, bins_b],
-                                      weights=df["power_at_fc2"].values)
-        H_n, _, _ = np.histogram2d(xa, xb, bins=[bins_a, bins_b])
+        bins_a = np.linspace(xa[m].min(), xa[m].max(), nb + 1)
+        bins_b = np.linspace(xb[m].min(), xb[m].max(), nb + 1)
+        H_sum, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b],
+                                      weights=p[m])
+        H_n, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b])
         with np.errstate(invalid="ignore"):
             H = np.where(H_n > 0, H_sum / H_n, np.nan)
         im = ax.imshow(H.T, origin="lower", aspect="auto", cmap="viridis",
@@ -983,7 +990,7 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
                        extent=[bins_a[0], bins_a[-1], bins_b[0], bins_b[-1]])
         ax.set_xlabel(a_lab)
         ax.set_ylabel(b_lab)
-        plt.colorbar(im, ax=ax, label="power @ FC=2")
+        plt.colorbar(im, ax=ax, label="power AUC (FC 1-3)")
     fig.suptitle(f"Pairwise heatmaps (top-3 axes by marginal swing){title_suffix}")
     plt.tight_layout()
     out_pair = OUT / f"pairwise_heatmaps{suffix}.svg"
