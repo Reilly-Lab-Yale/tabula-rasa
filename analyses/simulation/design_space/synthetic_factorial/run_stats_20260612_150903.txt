@@ -1,0 +1,70 @@
+================================================================
+ Union LHS sweep -- resource accounting report
+ Generated: Fri Jun 12 15:09:03 EDT 2026
+ Window: 2026-05-11 00:00 -> 2026-05-17 00:00 (union sim phase only;
+   full/topup/topup3 finished by 05-09, later replot/attribution excluded)
+ Source: sacct (runstats/arraystat do not scale to this dir's 24k mixed-run logs)
+================================================================
+
+NOTE: includes ALL union attempts -- the 2026-05-11 rate-limit storm,
+dead-driver retries, and both tiny-tim fixup passes. That is why there
+are ~7143 driver jobs for 5000 samples. Actual CPU = TotalCPU (batch
+step); Reserved CPU = AllocCPUS x Elapsed (CPUTimeRAW).
+
+== CPU + memory by bucket ==
+bucket      njobs   actual_cpuh  reserved_cpuh   eff%  peakRSS_GB  avgRSS_GB
+other           7           0.0          178.1     0%         0.0        0.0
+driver       7143         859.1         3168.5    27%        56.0        0.9
+worker      20532        5053.5         6458.2    78%       103.0        8.7
+
+TOTAL  actual=5913 cpu-h   reserved=9805 cpu-h   overall eff=60%
+
+== job state breakdown ==
+  driver,CANCELLED by 18716  312
+  driver,COMPLETED           6831
+  other,CANCELLED by 18716   1
+  other,COMPLETED            2
+  other,FAILED               1
+  other,TIMEOUT              3
+  worker,CANCELLED           4
+  worker,CANCELLED by 18716  20385
+  worker,COMPLETED           96
+  worker,TIMEOUT             47
+
+== nodes used (union window) + hardware ==
+  distinct nodes: 93
+  a1130u05n01 a1130u05n03 a1130u05n04 a1130u09n01 a1130u09n02 
+  a1130u09n03 a1130u09n04 a1130u11n01 a1130u11n02 a1130u11n03 
+  a1130u11n04 a1130u18n01 a1130u18n02 a1130u18n03 a1130u18n04 
+  a1130u20n01 a1130u20n02 a1130u20n03 a1130u20n04 a1130u22n01 
+  a1130u22n02 a1130u22n03 a1130u22n04 a1130u24n01 a1130u24n02 
+  a1130u24n03 a1130u24n04 a1130u31n01 a1130u31n02 a1130u31n03 
+  a1130u31n04 a1130u33n01 a1130u33n02 a1130u33n03 a1130u33n04 
+  a1130u35n01 a1130u35n02 a1130u35n03 a1130u35n04 a1130u37n01 
+  a1130u37n02 a1130u37n03 a1130u37n04 a1130u42n01 a1130u43n01 
+  a1132u05n01 a1132u05n03 a1132u05n04 a1132u07n02 a1132u07n03 
+  a1132u07n04 a1132u09n01 a1132u09n02 a1132u09n03 a1132u09n04 
+  a1132u11n01 a1132u11n02 a1132u11n03 a1132u11n04 a1132u18n01 
+  a1132u18n02 a1132u18n03 a1132u18n04 a1132u20n01 a1132u20n02 
+  a1132u20n03 a1132u20n04 a1132u22n01 a1132u22n02 a1132u22n03 
+  a1132u22n04 a1132u24n01 a1132u24n02 a1132u24n03 a1132u24n04 
+  a1132u31n01 a1132u31n02 a1132u31n03 a1132u31n04 a1132u33n01 
+  a1132u33n02 a1132u33n03 a1132u33n04 a1132u35n01 a1132u35n02 
+  a1132u35n03 a1132u35n04 a1132u37n01 a1132u37n02 a1132u37n03 
+  a1132u37n04 a1132u42n01 a1132u43n01 
+  -- representative node spec (CPU/mem) --
+  NodeName=a1130u05n01 Arch=x86_64 CoresPerSocket=32 
+     CPUAlloc=37 CPUEfctv=64 CPUTot=64 CPULoad=19.83
+     AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+     RealMemory=1014783 AllocMem=333824 FreeMem=189300 Sockets=2 Boards=1
+
+  NodeName=a1130u05n03 Arch=x86_64 CoresPerSocket=32 
+     CPUAlloc=62 CPUEfctv=64 CPUTot=64 CPULoad=43.45
+     AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+     RealMemory=1014783 AllocMem=619520 FreeMem=446869 Sockets=2 Boards=1
+
+  NodeName=a1130u05n04 Arch=x86_64 CoresPerSocket=32 
+     CPUAlloc=64 CPUEfctv=64 CPUTot=64 CPULoad=41.12
+     AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+     RealMemory=1014783 AllocMem=542720 FreeMem=744454 Sockets=2 Boards=1
+
