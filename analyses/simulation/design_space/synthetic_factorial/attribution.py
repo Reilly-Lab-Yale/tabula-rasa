@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Pairwise per-axis power attribution between empirical anchors.
 
-Reads output/samples_power_pooled.parquet (6220 samples: full + topup +
-topup3 + union, pooled). The union LHS dominates (5000/6220) so the
-pooled set retains near-LHS-grade axis independence (cross-axis |r| <=
-0.094, vs 0.44 in the pre-union 'combined' patchwork), while the prior
-sweeps contribute extra density near the empirical anchors.
+Reads output/samples_power_union.parquet (5000 samples from a single
+independent LHS over the full union box). This is the canonical analysis
+set: a proper space-filling LHS with cross-axis |r| <= 0.022 (vs 0.44 in
+the pre-union full+topup+topup3 patchwork), so the per-axis marginals
+decompose cleanly with negligible cross-axis confounding.
 
 For each (A, B) anchor pair, fits a 1-D LOESS marginal of
 power_auc_1to3 vs each axis, evaluates the smoother at the A and B
@@ -23,7 +23,7 @@ Notes:
   evaluating LOESS; out-of-range values are hatched in the bar chart.
   The union box is wide enough that most empirical values fall inside.
 - Marginal-sum is approximate -- it overcounts to the extent that axes
-  are correlated. Pooled |r| <= 0.094 keeps this small.
+  are correlated. The union LHS keeps |r| <= 0.022, so this is small.
 - KNN check: 20 nearest LHS samples (in standardized log-feature space)
   give a non-parametric power prediction at each anchor for sanity check.
 """
@@ -275,7 +275,7 @@ def run_pair(df: pd.DataFrame, anchor_a: str, anchor_b: str):
 
 
 def main():
-    df = pd.read_parquet(OUT / "samples_power_pooled.parquet")
+    df = pd.read_parquet(OUT / "samples_power_union.parquet")
     print(f"loaded {len(df)} samples; metric={METRIC}; pairs={len(PAIRS)}")
     for a, b in PAIRS:
         run_pair(df, a, b)
