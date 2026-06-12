@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Synthetic factorial sweep over the design-space encompassing shendure + cohen.
+Synthetic factorial sweep over the design-space encompassing the empirical
+datasets shendure, cohen, and takeshi.
 
 Latin Hypercube sample over 7 axes, simulate at each sample, run MWU on the
 activity hypothesis set, then plot smoothed marginals (plus pairwise heatmaps
-and the shendure/cohen empirical overlay).
+and empirical overlays). Empirical anchors: shendure-Pluripotent and cohen-Rod
+(DEFAULT_ANCHORS, the methods-paper figures), plus takeshi-HepG2 (the
+supplemental with_takeshi marginal variants and the takeshi attribution pairs).
 
 The 1D sweep (analyses/simulation/design_space/shendure_1d) anchored at
 shendure-Pluripotent and varied one axis at a time. This script removes the
@@ -12,14 +15,18 @@ anchor: each LHS sample is a fresh 7-tuple of axis values, with all other
 axes at the LHS-drawn value rather than a fixed reference. The empirical
 datasets become predictions of the meta-surface rather than starting points.
 
-Axes (log-uniform unless noted):
+Axes and bounds vary by mode (see the *_AXIS_BOUNDS dicts). The canonical
+sweep is `union`: a single 5000-point LHS over the full box below
+(log-uniform unless noted):
     n_cells              (500 - 50000)   -- shendure max ~8.2k, cohen max ~18.6k
     n_cres               (50  - 2000)    -- shendure ~207, cohen ~1140
-    bcs_per_cre          (3   - 500)
-    moi                  (0.5 - 30)
-    lib_alpha_nb         (0.02 - 2.0)   -- NB2 alpha for library; theta = 1/alpha
-    minP                 (0.02 - 2.0)   -- reference_activity
-    activity_max_mult    (linear, 2 - 8)
+    bcs_per_cre          (3   - 50000)   -- cohen ~17.2k
+    moi                  (0.5 - 350)     -- takeshi ~266
+    lib_alpha_nb         (0.02 - 2.0)    -- NB2 alpha for library; theta = 1/alpha
+    minP                 (0.003 - 2.0)   -- reference_activity; takeshi ~0.0116
+    activity_max_mult    (1 - 120)       -- log; cohen 1.11, takeshi 37, shendure 99
+The earlier full/topup/topup3 modes (AXIS_BOUNDS / TOPUP*_AXIS_BOUNDS) were
+exploratory sub-boxes used to calibrate this union box; see methods_sweeps.md.
 
 Single test cell type. NB only. Reporter regime fixed at "obs" (best case).
 MWU is the canonical test.
@@ -27,7 +34,8 @@ MWU is the canonical test.
 Usage:
     python synthetic_factorial.py <phase> [mode] [slice n_slices]
         phase:    samples | simulate | plot | replot | all
-        mode:     smoke | pilot | full   (default: full)
+        mode:     smoke | pilot | full | topup | topup3 | union
+                  (default: full; canonical analysis sweep: union)
         slice:    0..n_slices-1   (default: 0; only meaningful for simulate)
         n_slices: total slice count (default: from MODES[mode]["n_slices"])
 
