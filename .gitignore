@@ -22,3 +22,5 @@ worker_*.out
 # project specific
 bc.md
 .claude/
+# Downloaded MPRAbase database (see analyses/mprabase/README.md)
+analyses/mprabase/data/
