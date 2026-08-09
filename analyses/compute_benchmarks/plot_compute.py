@@ -44,7 +44,10 @@ CANONICAL = {
     "cohen": "cohen_obsingle_nb_phantom",
     "seelig": "seelig_cm_moib_nb_phantom",
 }
-CANONICAL_FALLBACK = {"seelig_cm_moib_nb_phantom": "seelig_cm_nb_phantom"}
+# No substituting a different fit when the canonical one has no SLURM log:
+# "canonical" is a statement about fit quality, so a stand-in would put the
+# wrong fit's numbers under the right label. A dataset without a log is drawn
+# as a gap instead.
 
 # code name -> citation label (matches the manuscript's dataset table)
 DISPLAY = {
@@ -209,19 +212,15 @@ BAR_COLOR = "#0072b2"  # Okabe-Ito blue (house palette; global remap is a no-op)
 
 
 def select_canonical(rows):
+    """One row per dataset, or None where the canonical fit has no log."""
     by_fit = {r["fit"]: r for r in rows}
     chosen = []
     for ds in CANONICAL_ORDER:
         want = CANONICAL[ds]
         r = by_fit.get(want)
         if r is None:
-            fb = CANONICAL_FALLBACK.get(want)
-            r = by_fit.get(fb)
-            if r is None:
-                print(f"WARNING: no canonical fit for {ds} ({want} / {fb} missing)")
-                continue
-            print(f"NOTE: canonical fit '{want}' has no log; using fallback "
-                  f"'{fb}' for {ds}.")
+            print(f"NOTE: canonical fit '{want}' has no run_stats log; "
+                  f"{ds} will be drawn as a gap.")
         chosen.append((ds, r))
     return chosen
 
@@ -229,8 +228,10 @@ def select_canonical(rows):
 def plot_canonical(rows):
     chosen = select_canonical(rows)
     labels = [DISPLAY[ds] for ds, _ in chosen]
-    mem = [r["peak_rss_gb"] for _, r in chosen]
-    tmin = [r["total_fit_s"] / 60.0 for _, r in chosen]
+    # nan leaves the slot empty rather than dropping the category, so a
+    # missing fit reads as missing instead of silently vanishing.
+    mem = [r["peak_rss_gb"] if r else float("nan") for _, r in chosen]
+    tmin = [r["total_fit_s"] / 60.0 if r else float("nan") for _, r in chosen]
     x = range(len(chosen))
 
     fig, (ax_m, ax_t) = plt.subplots(1, 2, figsize=(7.0, 3.2))
@@ -242,10 +243,15 @@ def plot_canonical(rows):
         ax.set_xticks(list(x))
         ax.set_xticklabels(labels, rotation=20, ha="right")
         ax.set_ylabel(ylab)
-        ax.set_ylim(0, max(vals) * 1.18)
+        finite = [v for v in vals if v == v]
+        ax.set_ylim(0, (max(finite) if finite else 1.0) * 1.18)
         ax.grid(True, axis="y", alpha=0.25, zorder=0)
         for xi, v in zip(x, vals):
-            ax.text(xi, v, f"{v:.0f} {unit}", ha="center", va="bottom", fontsize=8)
+            if v == v:
+                ax.text(xi, v, f"{v:.0f} {unit}", ha="center", va="bottom", fontsize=8)
+            else:
+                ax.text(xi, ax.get_ylim()[1] * 0.03, "no log", ha="center",
+                        va="bottom", fontsize=7, style="italic", color="#6b6b6b")
     fig.tight_layout()
     OUT.mkdir(exist_ok=True)
     for ext in ("svg", "png"):
