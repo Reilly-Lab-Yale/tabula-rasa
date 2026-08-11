@@ -20,7 +20,11 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import scMPRAforge as scm  # noqa: F401  (sets editable-text rcParams on import)
+from matplotlib.lines import Line2D
+
+# Editable <text> for the manuscript sync pipeline (normally set by
+# importing scMPRAforge, which --replot does not need).
+plt.rcParams["svg.fonttype"] = "none"
 
 DATA = "/nfs/roberts/project/pi_skr2/shared/tabula_data_new"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
@@ -67,14 +71,18 @@ def volcano(sub, title, path, cap):
         ax.set_ylabel(f"-log10(BH p)   (^ = BH p < 1e-{cap:g}, n={int(off.sum())})")
     ax.set_title(f"{title}\n{int(sig.sum())}/{len(sub)} sig at BH<{ALPHA}", fontsize=9)
     fig.tight_layout()
-    fig.savefig(path)
+    fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     print(f"  saved {path}", flush=True)
 
 
 def volcano_by_cell_type(sub, title, path, cap):
     """As volcano(), but significant points take a per-cell-type hue/marker."""
-    fig, ax = plt.subplots(figsize=(5.8, 4))
+    # Three of these sit side by side in the manuscript at about a third of
+    # the text width each, so the figure is kept near-square and the legend
+    # placed below: a wide right-hand legend would spend the printed width on
+    # labels rather than on the data.
+    fig, ax = plt.subplots(figsize=(4.4, 4.2))
     y = sub["neg_log10_bh_p"]
     off = y > cap if cap else pd.Series(False, index=sub.index)
     yc = y.clip(upper=cap) if cap else y
@@ -94,42 +102,62 @@ def volcano_by_cell_type(sub, title, path, cap):
     ax.axvline(0, color="k", ls="--", lw=0.6)
     ax.set_xlabel("log2(FC) vs negative control")
     ax.set_ylabel("-log10(BH p)")
+    handles, labels = ax.get_legend_handles_labels()
     if off.any():
         ax.set_ylim(top=cap)
-        ax.set_ylabel(f"-log10(BH p)   (top row: BH p < 1e-{cap:g}, n={int(off.sum())})")
+        # The clipping note belongs with the key, not welded onto the axis
+        # label where it crowds the axis and shrinks at print size.
+        handles.append(Line2D([], [], linestyle="none", marker=""))
+        labels.append(f"top row: BH p < 1e-{cap:g} (n={int(off.sum())})")
     ax.set_title(f"{title}\n{int(sig.sum())}/{len(sub)} sig at BH<{ALPHA}", fontsize=9)
-    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), fontsize=7,
-              frameon=False, markerscale=1.6, handletextpad=0.2)
+    # Clear of the x-axis label, which sits between the axes and the legend.
+    ax.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, -0.20),
+              ncol=2, fontsize=7, frameon=False, markerscale=1.6,
+              handletextpad=0.2, columnspacing=1.0, borderaxespad=0.0)
     fig.tight_layout()
-    fig.savefig(path)
+    fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     print(f"  saved {path}", flush=True)
 
 
+def compute(name, tsv, neg_controls, ds_dir):
+    """Run the MWU tests and cache them beside the figures."""
+    import scMPRAforge as scm
+
+    dat = scm.scMPRA_data.from_tsv(tsv)
+    dat.set_negative_controls(neg_controls)
+
+    hs = scm.make_all_by_celltype_hypotheses(counts=dat, reference_cre="reference")
+    print(f"  {len(hs)} hypotheses", flush=True)
+
+    df = scm.HypothesisTester("mwu").run(hs, dat).to_dataframe()
+    assert len(df) == len(hs), f"MWU changed row count: {len(hs)} -> {len(df)}"
+    assert (df["comparison_CRE"] != "reference").all(), "reference CRE tested against itself"
+
+    df["log2_fc"] = np.log2(df["fold_change"])
+    df["neg_log10_bh_p"] = -np.log10(df["bh_p"].clip(lower=1e-300))
+    print(f"  NaN p (empty group on one side): {int(df['p_value'].isna().sum())}", flush=True)
+    df.to_csv(f"{ds_dir}/{name}_activity_mwu.tsv", sep="\t", index=False)
+    return df
+
+
 def main():
+    # --replot redraws from the cached TSVs. The tests take a cluster job and
+    # the raw count tables; figure edits should not need either.
+    replot = "--replot" in sys.argv
     for name, (tsv, neg_controls) in DATASETS.items():
         print(f"=== {name} ===", flush=True)
         ds_dir = f"{OUT}/{name}"
         ct_dir = f"{ds_dir}/cell_type_specific"
         os.makedirs(ct_dir, exist_ok=True)
 
-        dat = scm.scMPRA_data.from_tsv(tsv)
-        dat.set_negative_controls(neg_controls)
-
-        hs = scm.make_all_by_celltype_hypotheses(counts=dat, reference_cre="reference")
-        print(f"  {len(hs)} hypotheses", flush=True)
-
-        df = scm.HypothesisTester("mwu").run(hs, dat).to_dataframe()
-        assert len(df) == len(hs), f"MWU changed row count: {len(hs)} -> {len(df)}"
-        assert (df["comparison_CRE"] != "reference").all(), "reference CRE tested against itself"
-
-        df["log2_fc"] = np.log2(df["fold_change"])
-        df["neg_log10_bh_p"] = -np.log10(df["bh_p"].clip(lower=1e-300))
-        n_na = int(df["p_value"].isna().sum())
-        print(f"  NaN p (empty group on one side): {n_na}", flush=True)
+        cached = f"{ds_dir}/{name}_activity_mwu.tsv"
+        if replot:
+            assert os.path.exists(cached), f"--replot needs {cached}"
+            df = pd.read_csv(cached, sep="\t")
+        else:
+            df = compute(name, tsv, neg_controls, ds_dir)
         print(f"  significant at BH<{ALPHA}: {int((df['bh_p'] < ALPHA).sum())}", flush=True)
-
-        df.to_csv(f"{ds_dir}/{name}_activity_mwu.tsv", sep="\t", index=False)
 
         plottable = df[np.isfinite(df["log2_fc"]) & df["bh_p"].notna()]
         assert len(plottable) > 0, f"{name}: nothing plottable"
