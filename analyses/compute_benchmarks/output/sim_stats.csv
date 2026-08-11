@@ -1,0 +1,16 @@
+analysis,dataset,in_paper,n_mains,n_workers,actual_cpu_h,reserved_cpu_h,eff_pct,avg_worker_gb,peak_worker_gb,max_elapsed_h,n_logs
+design_space,union_sweep,True,,,5913.0,9805.0,60,8.7,103.0,,1
+activity_power,shendure,True,4,40,90.6,103.9,87,4.5,6.4,2.87,1
+activity_calibration,cohen,True,1,20,66.5,116.8,57,8.1,8.5,5.75,1
+activity_power,takeshi,False,5,80,53.5,58.7,91,4.0,5.9,1.01,2
+activity_power,cohen,True,1,42,44.7,55.4,81,10.7,43.0,4.83,1
+activity_calibration,shendure,True,1,20,33.1,38.3,86,4.0,4.7,2.41,1
+variant_power,cohen,True,2,40,24.9,123.6,20,6.7,8.3,3.97,1
+activity_prc,shendure,True,1,10,14.6,20.8,70,4.4,4.8,0.66,1
+variant_power,shendure,True,2,40,13.0,57.8,22,1.4,1.6,1.93,1
+activity_power,seelig,True,1,20,8.4,10.4,81,2.0,2.4,0.51,1
+activity_calibration,seelig,True,1,20,6.7,8.5,79,2.0,2.6,0.48,1
+variant_power,takeshi,False,4,60,5.1,23.8,21,1.2,1.6,0.47,1
+activity_prc,seelig,True,5,0,3.7,10.6,35,6.0,16.6,0.92,1
+activity_prc,cohen,True,3,0,2.7,4.9,56,35.2,41.6,0.97,1
+variant_power,seelig,True,1,20,0.9,4.0,22,1.2,1.4,0.2,1
