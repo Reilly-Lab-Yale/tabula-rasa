@@ -18,6 +18,12 @@ slurm-*.out
 slurm-*.err
 slave*.out
 worker_*.out
+_replot_logs_*/
+
+# scratch
+_tmpread/
+# NFS silly-rename stubs, left when an open file is deleted
+.nfs*
 
 # project specific
 bc.md

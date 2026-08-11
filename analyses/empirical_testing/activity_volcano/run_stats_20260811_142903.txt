@@ -1,0 +1,119 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-08-11T14:36:29.706750
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano
+  Main jobs : 21968008
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 21968008  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+No data was found for job 21968008. This is probably because it is too old
+or it expired from Jobstats database. If you are not running this command on the
+cluster where the job was run then use the -c option to specify the cluster.
+If the run time was very short then try running "seff 21968008".
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {},
+  "total_time": 42
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+21968008|activity_volcano|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1114u22n01|1|4|64G|2026-08-11T14:29:03|2026-08-11T14:29:16|2026-08-11T14:29:58|00:00:42|04:00:00|00:29.551|00:27.263|00:02.287|00:02:48||||||||||0:0
+21968008.batch|batch|COMPLETED||prio_skr2||bouchet|a1114u22n01|1|4||2026-08-11T14:29:16|2026-08-11T14:29:16|2026-08-11T14:29:58|00:00:42||00:29.551|00:27.263|00:02.287|00:02:48|2579688K|2579688K|0|0|1841.29M|1.95M|1841.29M|1.95M|1|0:0
+21968008.extern|extern|COMPLETED||prio_skr2||bouchet|a1114u22n01|1|4||2026-08-11T14:29:16|2026-08-11T14:29:16|2026-08-11T14:29:58|00:00:42||00:00:00|00:00:00|00:00:00|00:02:48|||||||||1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1114u22n01 ───────────────────────────────────────────────────────────────
+NodeName=a1114u22n01 Arch=x86_64 CoresPerSocket=64 
+   CPUAlloc=123 CPUEfctv=128 CPUTot=128 CPULoad=26.43
+   AvailableFeatures=cpugen:turin,cpumodel:9575f,common:yes
+   ActiveFeatures=cpugen:turin,cpumodel:9575f,common:yes
+   Gres=(null)
+   NodeAddr=a1114u22n01 NodeHostName=a1114u22n01 Version=25.11.6
+   OS=Linux 5.14.0-570.119.1.el9_6.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Jun 1 07:14:38 EDT 2026 
+   RealMemory=2305024 AllocMem=322560 FreeMem=599815 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2026-07-23T11:38:38 SlurmdStartTime=2026-08-03T11:34:14
+   LastBusyTime=2026-08-11T12:52:12 ResumeAfterTime=None
+   CfgTRES=cpu=128,mem=2251G,billing=150
+   AllocTRES=cpu=123,mem=315G
+   CurrentWatts=0 AveWatts=0
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-21968008.err  (9 lines total) ───────────────────────────────────────
+[first 9 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1786472964.382132  306162 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1786472970.375931  306162 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/dask/dataframe/io/csv.py:505: UserWarning: Warning gzip compression does not support breaking apart files
+Please ensure that each individual file can fit in memory and
+use the keyword ``blocksize=None to remove this message``
+Setting ``blocksize=None``
+  warn(
+
+── slurm-21968008.out  (40 lines total) ──────────────────────────────────────
+[first 20 lines]
+=== shendure ===
+  2093 hypotheses
+  NaN p (empty group on one side): 0
+  significant at BH<0.05: 929
+  y cap: 50.0
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/shendure_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/shendure_activity_volcano_by_cell_type.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_Cardiomyocytes_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_EpiblastPrimitiveStreak_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_ExEndodermParietal_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_ExEndodermVisceral_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_Haematoendothelial_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_Mesoderm_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_NeuroectodermBrain_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_NeuroectodermRostral_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_Pluripotent_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/shendure/cell_type_specific/shendure_SurfaceEctoderm_activity_volcano.svg
+=== cohen ===
+  452 hypotheses
+  NaN p (empty group on one side): 0
+[last 20 lines]
+  significant at BH<0.05: 248
+  y cap: None
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cohen_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cohen_activity_volcano_by_cell_type.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cell_type_specific/cohen_Bipolar_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cell_type_specific/cohen_Interneuron_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cell_type_specific/cohen_Mueller_Glia_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/cohen/cell_type_specific/cohen_Rod_activity_volcano.svg
+=== seelig ===
+  2685 hypotheses
+  NaN p (empty group on one side): 0
+  significant at BH<0.05: 813
+  y cap: None
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/seelig/seelig_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/seelig/seelig_activity_volcano_by_cell_type.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/seelig/cell_type_specific/seelig_HepG2_activity_volcano.svg
+  saved /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/empirical_testing/activity_volcano/output/seelig/cell_type_specific/seelig_K562_activity_volcano.svg
+
+Done.
+EXITING SHELL
