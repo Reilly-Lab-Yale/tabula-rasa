@@ -57,13 +57,15 @@ path = "scMPRAforge/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["scMPRAforge"]
+# tests/ holds several MB of fixtures and a scMPRAforge -> package symlink
+# that lets notebooks import without installing. Walking it recurses, so it
+# is excluded from the wheel rather than shipped.
+exclude = ["scMPRAforge/tests"]
 
 # presets/*.tgz are read at import time (Bounds.from_tgz), so they are not
-# optional data -- the package will not import without them. tests/ carries
-# several MB of fixtures and is excluded from the distribution.
-[tool.hatch.build.targets.wheel.force-include]
-"scMPRAforge/presets" = "scMPRAforge/presets"
-
+# optional data -- the package will not import without them. No force-include
+# is needed: they live inside the package directory, which hatchling ships
+# whole, and adding them again collides at the same archive path.
 [tool.hatch.build.targets.sdist]
 include = ["scMPRAforge", "pyproject.toml", "README.md", "environment.yml"]
 exclude = ["scMPRAforge/tests"]
