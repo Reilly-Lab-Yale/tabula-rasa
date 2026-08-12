@@ -1254,7 +1254,8 @@ SEELIG_CM_MOIB_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_z
 SEELIG_BOUNDS=SEELIG_CM_MOIB_NB_BOUNDS
 
 TAKESHI_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/takeshi_obs_nb_phantom.tgz")
-TAKESHI_BOUNDS=TAKESHI_OBS_NB_BOUNDS
+# No canonical alias for takeshi yet.
+# TAKESHI_BOUNDS=TAKESHI_OBS_NB_BOUNDS
 
 class scMPRA_data:
     """
@@ -3262,8 +3263,10 @@ class ortho:
 
         Meant for debugging / manual inspection.
         """
-        # Detect fit_mode from design dicts for conditional mean adjustment
+        # Detect fit_mode and reporter_expansion from design dicts, so the QC
+        # denominator can be rebuilt the way the fit built it.
         fit_mode = None
+        reporter_expansion = None
         for design_dict in (self.by_cell_type_design, self.by_cre_design):
             if design_dict is not None:
                 sample_key = next(iter(design_dict))
@@ -3271,30 +3274,42 @@ class ortho:
                 if hasattr(sample, 'result'):
                     sample = sample.result()
                 fit_mode = sample.get('fit_mode', None)
+                reporter_expansion = sample.get('reporter_expansion', None)
                 if fit_mode is not None:
                     break
 
         self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
             design_keys=list(self.by_cell_type_design.keys()) if self.by_cell_type_design is not None else None,
             scMPRAdat=self.training_data,
-            fit_mode=fit_mode)
+            fit_mode=fit_mode,
+            reporter_expansion=reporter_expansion)
         self.by_cre_qc=ortho._nb_versus_means(params=self.by_cre_parameters,
             design_keys=list(self.by_cre_design.keys()) if self.by_cre_design is not None else None,
             scMPRAdat=self.training_data,
-            fit_mode=fit_mode)
+            fit_mode=fit_mode,
+            reporter_expansion=reporter_expansion)
     
     @staticmethod
-    def _nb_versus_means(params,scMPRAdat,design_keys=None,fit_mode=None):
+    def _nb_versus_means(params,scMPRAdat,design_keys=None,fit_mode=None,
+                         reporter_expansion=None):
         """
         Takes a model & original training data and produces a QC dictionary
         regressing data means against nb estimates.
         Used for quality control.
 
+        The comparison is only meaningful if mu and the data mean are taken
+        over the same observations. Every phantom fit mode adds zeros the
+        source table does not contain, so the denominator is reconstructed
+        per mode rather than read off the table.
+
         design_keys: optional list of level keys from the design dict, used
         only for a sanity-check assertion that params and design are aligned.
-        fit_mode: if a phantom fit_mode, uses _cm_group_totals to compute
-        the effective denominator (n_nonzero + n_zeros) the model actually
-        saw, so the QC comparison is on the correct scale.
+        fit_mode: selects how the denominator is rebuilt -- _cm_group_totals
+        for the CM modes, _reporter_zero_counts for obs_phantom. On the plain
+        path the model fits exactly the rows averaged here, so no
+        reconstruction is needed (and r is 1 by construction).
+        reporter_expansion: "coarse" or "single"; required to reproduce an
+        obs_phantom denominator, since the two differ only in this.
         """
         if design_keys is not None:
             assert sorted(params.keys)==sorted(design_keys), "mismatched model"
@@ -3336,6 +3351,34 @@ class ortho:
                     f"QC: MOIB mode, p_transfected={p_t:.6f} "
                     f"(MOI={moi:.4f}, n_lib={n_lib})."
                 )
+
+        # For reporter-informed phantom orthos, reconstruct the same group
+        # totals the fit used. Without this the mean is taken over the rows
+        # present in the table while mu is fit over those rows plus the
+        # reporter-informed zeros, so the two are on different denominators.
+        # The mismatch varies by anti-level, so it does not cancel in the
+        # regression: it destroys the linearity this QC is testing for.
+        obs_totals = None
+        if not use_missing and fit_mode == "obs_phantom":
+            reporter = getattr(scMPRAdat, '_coarse_reporter', None)
+            assert reporter is not None, (
+                "obs_phantom ortho has no coarse reporter on its training "
+                "data; cannot reconstruct the denominator the fit used")
+            nz_cols = [split, anti, "rep_id", "umis_mpra_bc", "cell_bc"]
+            nz_pdf = _to_pandas(data[data["umis_mpra_bc"] > 0][nz_cols])
+            for col in [split, anti, "rep_id"]:
+                nz_pdf[col] = nz_pdf[col].astype(str)
+            cell_map = _to_pandas(
+                data[["rep_id", "cell_bc", "cell_type"]].drop_duplicates())
+            mpra_map = _to_pandas(
+                data[["rep_id", "mpra_bc", "cre_id"]].drop_duplicates())
+            for df in [cell_map, mpra_map]:
+                for col in df.columns:
+                    df[col] = df[col].astype(str)
+            obs_totals = _reporter_zero_counts(
+                nz_pdf, reporter, mpra_map, cell_map, split,
+                [str(k) for k in params.keys],
+                reporter_expansion=reporter_expansion or "coarse")
 
         # For non-phantom CM orthos, precompute denominator info so we can
         # estimate CM means without materializing the full Cartesian expansion.
@@ -3391,6 +3434,17 @@ class ortho:
                 combined = pd.DataFrame({"obs_sum": obs_sum, "total_possible": total_possible}).fillna(0)
                 by_anti = combined.groupby(level=0).sum()
                 data_means = (by_anti["obs_sum"] / by_anti["total_possible"].replace(0, np.nan))
+                data_means.name = "mean(umis_mpra_bc)"
+
+            elif obs_totals is not None:
+                # Same denominator the reporter-informed fit used: nonzero
+                # observations plus the zeros the reporter licensed.
+                lvl = obs_totals[obs_totals[split] == str(model_level)]
+                obs_sum = _to_pandas(subset.groupby(anti)["umis_mpra_bc"].sum())
+                n_total = lvl.groupby(anti)["n_total"].sum()
+                n_total.index = n_total.index.astype(str)
+                obs_sum.index = obs_sum.index.astype(str)
+                data_means = obs_sum / n_total.reindex(obs_sum.index).replace(0, np.nan)
                 data_means.name = "mean(umis_mpra_bc)"
             else:
                 data_means = subset.groupby(anti)["umis_mpra_bc"].agg("mean")
