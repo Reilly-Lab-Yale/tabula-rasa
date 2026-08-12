@@ -50,7 +50,7 @@ dependencies = [
 dev = ["pytest"]
 
 [project.urls]
-Repository = "https://github.com/Reilly-Lab-Yale/tabula-rasa"
+Repository = "https://github.com/Reilly-Lab-Yale/scMPRAforge"
 
 [tool.hatch.version]
 path = "scMPRAforge/__init__.py"
