@@ -17,12 +17,21 @@ magnitude, so Pearson r sits at 0.999999 even for a fit whose families
 disagree by a factor of two. The percentiles of |mu_cre - mu_ct| / mu_ct are
 what separate them.
 
-Reads the saved parameter pickles directly -- no scMPRAforge import, no
-cluster, no dask.
+Reads the saved parameter pickles directly -- no scMPRAforge import and no
+dask, so it runs anywhere the ortho directories are readable.
+
+RUN THIS ON THE CLUSTER. The laptop's /nfs mount reports several ortho
+directories as empty when they are not, so a local run silently compares a
+subset: it saw 11 of the 19 orthos that actually carry saved parameters,
+omitting every cohen obs/cm fit. Discovery is by directory listing and
+cannot tell a hidden directory from an absent one, so there is nothing to
+assert against -- the cluster is the source of truth and results are copied
+back.
 
     python analyses/model_selection/cross_family_agreement.py
 """
 import pickle
+import re
 from pathlib import Path
 
 import matplotlib
@@ -48,6 +57,10 @@ CANONICAL = {
 DATASET_COLOUR = {"shendure": BLUE, "cohen": ORANGE, "seelig": GREEN}
 DATASET_LABEL = {"shendure": "Lalanne et al.", "cohen": "Zhao et al.",
                  "seelig": "Yin et al."}
+# takeshi is fit and QC'd upstream but is not one of the datasets the
+# manuscript introduces, so it is reported to the console and the TSV but
+# kept out of the figure panel and the supplementary table.
+MANUSCRIPT_DATASETS = set(DATASET_LABEL)
 # Fits shown in the left-hand scatter: the three canonical fits, plus the
 # reporter-free Lalanne fit as the contrast. That one is not a broken fit --
 # it is what the same experiment looks like when no transfection reporter was
@@ -235,6 +248,116 @@ def main():
                     bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {OUT/'cross_family_agreement.svg'} and .png")
+
+    manuscript_panel(rows)
+    manuscript_table(rows)
+
+
+def manuscript_panel(rows):
+    """Canonical fits only, as a main-text panel.
+
+    The claim this panel carries is that splitting the fit into two families
+    is a reparameterisation rather than an approximation, so it shows only
+    the fits the manuscript actually uses. The full comparison, including
+    the expansions and families that were not selected, goes in the table.
+    """
+    canon = [r for r in rows
+             if r["canonical"] and r["dataset"] in MANUSCRIPT_DATASETS]
+    canon.sort(key=lambda r: r["rel"].median())
+
+    fig, ax = plt.subplots(figsize=(4.6, 2.0))
+    y = np.arange(len(canon))
+    med = [100 * r["rel"].median() for r in canon]
+    p95 = [100 * r["rel"].quantile(0.95) for r in canon]
+
+    ax.barh(y, med, height=0.6, color=[r["colour"] for r in canon], zorder=3)
+    ax.hlines(y, med, p95, color=INK, lw=1.0, zorder=4)
+    ax.vlines(p95, y - 0.16, y + 0.16, color=INK, lw=1.0, zorder=4)
+    for i, r in enumerate(canon):
+        ax.text(p95[i] * 1.06, i, f"n={len(r['rel']):,}", va="center",
+                fontsize=7, color=MUTED)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels([DATASET_LABEL[r["dataset"]] for r in canon], fontsize=8)
+    ax.set_xlabel("disagreement between stratification directions\n"
+                  "(median bar, whisker to 95th percentile)", fontsize=8.5,
+                  color=INK)
+    ax.xaxis.set_major_formatter(lambda v, _: f"{v:g}%")
+    ax.set_xlim(0, max(p95) * 1.45)
+    ax.grid(True, axis="x", color="#e6e6e6", lw=0.8, zorder=0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color("#cccccc")
+    ax.tick_params(colors=MUTED, labelsize=8, length=0)
+
+    fig.tight_layout()
+    for ext in ("svg", "png"):
+        fig.savefig(OUT / f"cross_family_canonical.{ext}", dpi=200,
+                    bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT/'cross_family_canonical.svg'} and .png")
+
+
+def manuscript_table(rows):
+    """Full comparison as a TSV and as a LaTeX tabular the manuscript inputs.
+
+    Emitting the tabular here rather than transcribing it keeps the numbers
+    in one place; the manuscript syncs the file the same way it syncs figures.
+    """
+    tsv = OUT / "cross_family_agreement.tsv"
+    with open(tsv, "w") as f:
+        f.write("fit\tdataset\tcanonical\tn_pairs\tmedian_pct\tp95_pct\tmax_pct\n")
+        for r in rows:
+            f.write(f"{r['name']}\t{r['dataset']}\t{int(r['canonical'])}\t"
+                    f"{len(r['rel'])}\t{100*r['rel'].median():.4g}\t"
+                    f"{100*r['rel'].quantile(0.95):.4g}\t"
+                    f"{100*r['rel'].max():.4g}\n")
+
+    def pct(x):
+        """Percentages a reader can scan: no scientific notation in a table."""
+        v = 100 * x
+        if v < 10:
+            return f"{v:.2f}\\%"
+        if v < 1000:
+            return f"{v:.0f}\\%"
+        return f"{v:,.0f}\\%"
+
+    def split_name(name, dataset):
+        """Split an ortho name into its expansion and count family.
+
+        Some orthos carry a trailing build date (cohen_obs_nb_phantom_20260401);
+        stripping only "_phantom" leaves the family token buried and silently
+        labels every dated ZINB fit as NB, so the family is asserted rather
+        than inferred from a suffix test.
+        """
+        rest = re.sub(r"_\d{8}$", "", name[len(dataset) + 1:])
+        rest = rest.replace("_phantom", "")
+        expansion, _, family = rest.rpartition("_")
+        assert family in ("nb", "zinb"), (
+            f"cannot read a count family off {name!r} (got {family!r})")
+        expansion = expansion.replace("cm_moib", "CM+MOI").replace("cm", "CM")
+        return expansion, family.upper()
+
+    tex = OUT / "cross_family_agreement.tex"
+    with open(tex, "w") as f:
+        f.write("% Generated by analyses/model_selection/cross_family_agreement.py\n")
+        f.write("% Do not edit; re-run the script instead.\n")
+        shown = [r for r in rows if r["dataset"] in MANUSCRIPT_DATASETS]
+        f.write("\\begin{tabular}{lllrrrr}\n\\hline\n")
+        f.write("Dataset & Expansion & Family & Pairs & Median & 95th pct "
+                "& Max \\\\\n\\hline\n")
+        for r in shown:
+            ds = DATASET_LABEL.get(r["dataset"], r["dataset"])
+            expansion, family = split_name(r["name"], r["dataset"])
+            mark = "$^{*}$" if r["canonical"] else ""
+            f.write(f"{ds}{mark} & \\emph{{{expansion}}} & {family} & "
+                    f"{len(r['rel']):,} & {pct(r['rel'].median())} & "
+                    f"{pct(r['rel'].quantile(0.95))} & "
+                    f"{pct(r['rel'].max())} \\\\\n")
+        f.write("\\hline\n\\end{tabular}\n")
+    print(f"wrote {tsv.name} and {tex.name}")
 
 
 if __name__ == "__main__":
