@@ -13,7 +13,6 @@ _mpl.rcParams["svg.fonttype"] = "none"
 _mpl.rcParams["pdf.fonttype"] = 42
 _mpl.rcParams["ps.fonttype"] = 42
 import logging
-import umi_tools
 import patsy
 import statsmodels.discrete.count_model as smdc
 from tensorzinb.tensorzinb import TensorZINB
@@ -46,6 +45,6 @@ __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non
 __version__ = "0.1.0.dev0"
 
 #Delete symbols used internally
-del pd, sns, plt, logging, umi_tools, patsy, smdc, TensorZINB, Formula, Enum, Client
+del pd, sns, plt, logging, patsy, smdc, TensorZINB, Formula, Enum, Client
 
 

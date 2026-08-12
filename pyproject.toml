@@ -40,7 +40,6 @@ dependencies = [
   "pyarrow>=23.0",
   "formulaic>=1.2",
   "patsy",
-  "umi_tools>=1.1",
   "tensorflow>=2.21",
   "tf-keras>=2.21",      # tensorflow 2.16 dropped the Keras 2 API tensorzinb needs
   "tensorzinb-plusplus>=0.0.7",
@@ -48,6 +47,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# umi_tools publishes no wheels on PyPI and its sdist fails to build on
+# modern setuptools, so it cannot be a hard dependency without making the
+# package uninstallable from PyPI. It is needed only for barcode clustering
+# (utils.cluster_barcodes), which imports it lazily. Prefer conda:
+#   conda install -c bioconda umi_tools
+umi = ["umi_tools>=1.1"]
 
 [project.urls]
 Repository = "https://github.com/Reilly-Lab-Yale/scMPRAforge"

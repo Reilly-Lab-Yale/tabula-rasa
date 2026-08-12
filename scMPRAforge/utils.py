@@ -3,7 +3,6 @@
 #external imports
 import functools
 import logging
-import umi_tools
 import re
 import numpy as np
 import pandas as pd
@@ -98,6 +97,20 @@ def bcs_to_lut(bc,threshold=1,encoding="utf-8",*args,**kwargs):
     
     bc={key.encode(encoding):value for key, value in bc.items()}
     
+    # Imported here rather than at module scope: umi_tools ships no wheels on
+    # PyPI and its sdist does not build on modern setuptools, so requiring it
+    # at import would make the package pip-installable only where conda has
+    # already provided it. This is its only use.
+    try:
+        import umi_tools
+    except ImportError as e:
+        raise ImportError(
+            "barcode clustering needs umi_tools, which is not installed. It "
+            "has no PyPI wheel; install it with conda "
+            "(conda install -c bioconda umi_tools) or "
+            "pip install 'scMPRAforge[umi]' if a wheel exists for your "
+            "platform.") from e
+
     #Why is this written as an object..? Why not just a function..? such a strange decision.
     clusterer=umi_tools.UMIClusterer(*args,**kwargs)
     

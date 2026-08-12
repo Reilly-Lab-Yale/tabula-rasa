@@ -65,6 +65,15 @@ Two dependencies are easy to get wrong and both fail confusingly:
   2.16 dropped the Keras 2 API that tensorzinb builds on, so without it
   `import scMPRAforge` fails on `No module named 'tf_keras'`.
 
+Barcode clustering (`utils.bcs_to_lut`) needs `umi_tools`, which is an
+optional extra rather than a dependency: it publishes no PyPI wheels and its
+sdist does not build on current setuptools. Install it from conda if you need
+it -- most users dedup during upstream processing instead.
+
+```
+conda install -c bioconda umi_tools
+```
+
 The zero-inflated solver is
 [tensorzinb-plusplus](https://github.com/saarantras/tensorzinb-plusplus), a
 maintained fork of [tensorzinb](https://github.com/wanglab-georgetown/tensorzinb)
