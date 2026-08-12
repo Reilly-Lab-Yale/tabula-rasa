@@ -18,15 +18,8 @@ disagree by a factor of two. The percentiles of |mu_cre - mu_ct| / mu_ct are
 what separate them.
 
 Reads the saved parameter pickles directly -- no scMPRAforge import and no
-dask, so it runs anywhere the ortho directories are readable.
-
-RUN THIS ON THE CLUSTER. /nfs on the laptop is not a mount of the cluster:
-it is a symlink to a local partial copy holding 11 of the 19 orthos that
-carry saved parameters, missing every cohen obs/cm fit and all of takeshi.
-Discovery is a directory listing, which cannot tell a partial copy from a
-complete one, so a local run quietly compares a subset and reports it as
-though it were everything. The cluster is the source of truth; results are
-copied back.
+dask, so it runs anywhere the ortho directories are readable. Compares
+whatever it discovers under ROOT, so run it where the full set lives.
 
     python analyses/model_selection/cross_family_agreement.py
 """
