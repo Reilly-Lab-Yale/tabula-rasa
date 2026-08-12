@@ -1,0 +1,41 @@
+# Analysis environment for the scMPRA manuscript.
+#
+# Exact pins, because this file exists to reproduce published fits rather
+# than to install a library. scMPRAforge's own dependency floors live in
+# pyproject.toml and are deliberately looser.
+#
+#   micromamba create -f environment.yml -p /path/to/env
+#   pip install -e .          # from the repo root, into that env
+#
+# Two pins are load-bearing rather than incidental:
+#   numpy >= 2 -- saved ortho pickles were written under numpy 2 and cannot
+#     be read by numpy 1.x (ModuleNotFoundError: numpy._core).
+#   tf-keras -- tensorflow 2.16 dropped the Keras 2 API that tensorzinb
+#     builds on. It is not pulled in automatically; without it, importing
+#     scMPRAforge fails.
+name: tz
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - numpy=2.4.4
+  - pandas=3.0.2
+  - scipy=1.17.1
+  - dask=2026.3.0
+  - distributed=2026.3.0
+  - dask-jobqueue=0.9.0
+  - statsmodels=0.14.6
+  - scikit-learn=1.8.0
+  - matplotlib-base=3.10.8
+  - seaborn=0.13.2
+  - pyarrow=23.0.1
+  - formulaic=1.2.1
+  - patsy
+  - umi_tools=1.1.6
+  - pip
+  - pip:
+      # Not on conda-forge at the versions used here.
+      - tensorflow==2.21.0
+      - tf-keras==2.21.0
+      - tensorzinb-plusplus==0.0.7

@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scMPRAforge"
+description = "Modeling, calibration and power analysis for single-cell massively parallel reporter assays"
+readme = "README.md"
+license = { text = "MIT" }
+# 3.11 is what the package is developed and tested against; the upper bound
+# comes from tensorzinb-plusplus, which caps at <3.13.
+requires-python = ">=3.11,<3.13"
+authors = [
+  { name = "Mackenzie Noon", email = "me@mackenzienoon.com" },
+]
+keywords = ["MPRA", "scMPRA", "single-cell", "regulatory genomics", "negative binomial"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dynamic = ["version"]
+
+# Lower bounds are the versions the package is tested against, not verified
+# minimums -- nothing below these has been tried. Exact pins for reproducing
+# published fits are in environment.yml instead.
+dependencies = [
+  "numpy>=2.4",          # saved orthos are numpy-2 pickles; 1.x cannot read them
+  "pandas>=3.0",
+  "scipy>=1.17",
+  "dask>=2026.3",
+  "distributed>=2026.3",
+  "dask-jobqueue>=0.9",
+  "statsmodels>=0.14",
+  "scikit-learn>=1.8",
+  "matplotlib>=3.10",
+  "seaborn>=0.13",
+  "pyarrow>=23.0",
+  "formulaic>=1.2",
+  "patsy",
+  "umi_tools>=1.1",
+  "tensorflow>=2.21",
+  "tf-keras>=2.21",      # tensorflow 2.16 dropped the Keras 2 API tensorzinb needs
+  "tensorzinb-plusplus>=0.0.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/Reilly-Lab-Yale/tabula-rasa"
+
+[tool.hatch.version]
+path = "scMPRAforge/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["scMPRAforge"]
+
+# presets/*.tgz are read at import time (Bounds.from_tgz), so they are not
+# optional data -- the package will not import without them. tests/ carries
+# several MB of fixtures and is excluded from the distribution.
+[tool.hatch.build.targets.wheel.force-include]
+"scMPRAforge/presets" = "scMPRAforge/presets"
+
+[tool.hatch.build.targets.sdist]
+include = ["scMPRAforge", "pyproject.toml", "README.md", "environment.yml"]
+exclude = ["scMPRAforge/tests"]

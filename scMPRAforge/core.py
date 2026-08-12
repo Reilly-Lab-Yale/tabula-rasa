@@ -3278,6 +3278,27 @@ class ortho:
                 if fit_mode is not None:
                     break
 
+        # Orthos fit before fit_mode was recorded carry no tag. An untagged
+        # plain fit is fine -- the model saw exactly the rows averaged here.
+        # An untagged phantom fit is not: without the tag this would take the
+        # plain path and compare mu against a mean over the wrong rows,
+        # reporting a plausible number that is wrong. reporter_expansion is
+        # not recoverable from the design either, and coarse vs single change
+        # the denominator, so refuse rather than guess.
+        if fit_mode is None:
+            td = self.training_data
+            has_reporter = getattr(td, '_coarse_reporter', None) is not None
+            uses_missing = bool(getattr(td, "consider_missing_enabled", False))
+            if has_reporter or uses_missing:
+                raise ValueError(
+                    "this ortho predates the fit_mode tag but its training "
+                    f"data indicates a phantom fit (coarse reporter: "
+                    f"{has_reporter}, consider_missing: {uses_missing}). The "
+                    "QC denominator cannot be rebuilt without knowing the fit "
+                    "mode, and the reporter expansion (coarse vs single) is "
+                    "not recorded in the design. Refit, or pass fit_mode and "
+                    "reporter_expansion to _nb_versus_means directly.")
+
         self.by_cell_qc=ortho._nb_versus_means(params=self.by_cell_type_parameters,
             design_keys=list(self.by_cell_type_design.keys()) if self.by_cell_type_design is not None else None,
             scMPRAdat=self.training_data,

@@ -38,15 +38,40 @@ This repository is organzied as follows:
 
 
 # install
-(temporary : replace with pip install scMPRAforge once we have actually )
+
 ```
-conda create -n env_tensorzinb python=3.10
-conda activate env_tensorzinb
-echo "numpy <2" >> $CONDA_PREFIX/conda-meta/pinned
-git clone https://github.com/wanglab-georgetown/tensorzinb.git
-cd tensorzinb; python setup.py install; cd ..
-#install apple silicon deps as below if necessary
+pip install scMPRAforge
 ```
+
+Not yet published; until it is, install from a checkout:
+
+```
+pip install -e .
+```
+
+To reproduce the environment the published fits were made in, build from the
+pinned spec rather than resolving fresh:
+
+```
+micromamba create -f environment.yml -p /path/to/env
+/path/to/env/bin/pip install -e .
+```
+
+Two dependencies are easy to get wrong and both fail confusingly:
+
+- **numpy must be 2.x.** Saved ortho objects are numpy-2 pickles and raise
+  `ModuleNotFoundError: No module named 'numpy._core'` under numpy 1.x.
+- **`tf-keras` is required** and is not installed automatically. TensorFlow
+  2.16 dropped the Keras 2 API that tensorzinb builds on, so without it
+  `import scMPRAforge` fails on `No module named 'tf_keras'`.
+
+The zero-inflated solver is
+[tensorzinb-plusplus](https://github.com/saarantras/tensorzinb-plusplus), a
+maintained fork of [tensorzinb](https://github.com/wanglab-georgetown/tensorzinb)
+adding TensorFlow 2.16+ support, sparse design matrices and per-observation
+weights. It installs from PyPI as a normal dependency.
+
+## GPU and platform notes
 
 For apple silicon, may need
 ```

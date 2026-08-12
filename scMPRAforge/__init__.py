@@ -43,7 +43,7 @@ from .utils import *  # Imports everything public from utils.py
 __all__ = [name for name in dir() if not name.startswith("_")]  # Expose all non-private functions
 
 
-__version__ = "-1"
+__version__ = "0.1.0.dev0"
 
 #Delete symbols used internally
 del pd, sns, plt, logging, umi_tools, patsy, smdc, TensorZINB, Formula, Enum, Client
