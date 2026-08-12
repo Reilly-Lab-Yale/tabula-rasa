@@ -43,7 +43,13 @@ This repository is organzied as follows:
 pip install scMPRAforge
 ```
 
-Not yet published; until it is, install from a checkout:
+scMPRAforge requires Python 3.11 or 3.12. The import name is case-sensitive:
+
+```python
+import scMPRAforge
+```
+
+For development installs from a checkout:
 
 ```
 pip install -e .
@@ -57,13 +63,12 @@ micromamba create -f environment.yml -p /path/to/env
 /path/to/env/bin/pip install -e .
 ```
 
-Two dependencies are easy to get wrong and both fail confusingly:
+Two compatibility constraints are worth knowing:
 
 - **numpy must be 2.x.** Saved ortho objects are numpy-2 pickles and raise
   `ModuleNotFoundError: No module named 'numpy._core'` under numpy 1.x.
-- **`tf-keras` is required** and is not installed automatically. TensorFlow
-  2.16 dropped the Keras 2 API that tensorzinb builds on, so without it
-  `import scMPRAforge` fails on `No module named 'tf_keras'`.
+- **`tf-keras` is required** and is installed automatically with scMPRAforge.
+  It provides the Keras 2 API that tensorzinb builds on.
 
 Barcode clustering (`utils.bcs_to_lut`) needs `umi_tools`, which is an
 optional extra rather than a dependency: it publishes no PyPI wheels and its
@@ -82,21 +87,9 @@ weights. It installs from PyPI as a normal dependency.
 
 ## GPU and platform notes
 
-For apple silicon, may need
-```
-conda install -c apple tensorflow-deps
-python -m pip install tensorflow-macos==2.9.2
-python -m pip install tensorflow-metal==0.5.1
-```
-
-Additional required packages
-```
-conda install statsmodels 
-conda install matplotlib seaborn bioconda::umi_tools formulaic dask dask-jobqueue
-conda install scikit-learn
-```
-
-may need to install `tensorflow keras` if you didn't above
+On Apple silicon, the standard PyPI installation provides the TensorFlow
+dependency needed for CPU execution. GPU acceleration is optional and
+platform-specific.
 
 At this point, it may work fine. However some environments (such as mccleary gpu nodes) may require some more fnagling to get GPU accel working. Perform the following:
 
@@ -248,5 +241,4 @@ These tables store made-up ground truth, for the purposes of simulation.
 | abundance   | float               | Relative abundance in DNA library | T          |
 
 Abundance column must sum to 1. It can be defined in different ways, but in most cases will be (reads MPRA barcode)/(total MPRA barcode reads)
-
 
