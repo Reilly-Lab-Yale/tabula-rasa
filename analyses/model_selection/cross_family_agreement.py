@@ -20,13 +20,13 @@ what separate them.
 Reads the saved parameter pickles directly -- no scMPRAforge import and no
 dask, so it runs anywhere the ortho directories are readable.
 
-RUN THIS ON THE CLUSTER. The laptop's /nfs mount reports several ortho
-directories as empty when they are not, so a local run silently compares a
-subset: it saw 11 of the 19 orthos that actually carry saved parameters,
-omitting every cohen obs/cm fit. Discovery is by directory listing and
-cannot tell a hidden directory from an absent one, so there is nothing to
-assert against -- the cluster is the source of truth and results are copied
-back.
+RUN THIS ON THE CLUSTER. /nfs on the laptop is not a mount of the cluster:
+it is a symlink to a local partial copy holding 11 of the 19 orthos that
+carry saved parameters, missing every cohen obs/cm fit and all of takeshi.
+Discovery is a directory listing, which cannot tell a partial copy from a
+complete one, so a local run quietly compares a subset and reports it as
+though it were everything. The cluster is the source of truth; results are
+copied back.
 
     python analyses/model_selection/cross_family_agreement.py
 """
