@@ -41,7 +41,26 @@ All phases completed successfully (create, fit, wald_precomp, test, metrics).
 
 MWU outperforms Wald on both metrics. MWU zeros were dropped (has_reporter=False)
 to match what real Seelig data looks like on disc (no transfection reporter means
-only non-zero MPRA signal is observed). Wald operates on MOIB-expanded data.
+only non-zero MPRA signal is observed).
+
+The Wald numbers here are NOT comparable to the other datasets and should not
+be reported. Wald is the only test that reads the fitted model rather than the
+counts, and these orthos were fit under plain consider-missing, not MOIB: the
+design dicts carry fit_mode='cm_phantom', and precompute_wald only builds an
+MOI correction when fit_mode=='cm_phantom_moib'. The MOI term was therefore
+absent from both the coefficients and their standard errors. (An earlier
+version of this file claimed "Wald operates on MOIB-expanded data"; that was
+wrong.) The path could not have fired in any case -- sim.fit_orthos() takes no
+moi_correct_cm argument, so the flag never reaches standard_fit.
+
+Consequence: under plain CM the fitted mean absorbs the transfection term,
+which is why the canonical MOIB fit has median mu 0.505 against 0.0056 here.
+Fixing this needs a refit, not just a re-run of precompute_wald -- the MOI
+correction changes the phantom weights, hence the coefficients themselves.
+
+Pseudobulk is absent for Seelig by construction: it collapses cells to one
+mean per replicate and needs >=2 per group, and this design has one biological
+replicate (R1).
 
 Saved: analyses/simulation/activity_prc/seelig/output/seelig_5x5_activity_summary.tsv
 
