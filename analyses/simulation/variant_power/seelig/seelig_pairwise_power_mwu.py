@@ -30,6 +30,7 @@ import os
 import json
 import pickle
 import uuid
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -55,7 +56,7 @@ DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-SIM_DATE = "2026-05-09"
+SIM_DATE = "2026-08-13"
 SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_seelig_pw"
 
 # Canonical seelig fit per CLAUDE.md / paper_plan: MOIB NB.
@@ -75,9 +76,11 @@ del _params, _all_mus
 
 MINP = scm.SEELIG_BOUNDS.reference_activity
 
+SIM_SEED = 20260813
 N_TOTAL_ANCHORS = 24
 ANCHOR_BASELINES = np.geomspace(MU_P5, MU_P95, N_TOTAL_ANCHORS)
-FC_LOG2_OFFSETS = np.array([0.02, 0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.30])
+FC_LOG2_OFFSETS = np.array([0.02, 0.03, 0.05, 0.07, 0.10, 0.15, 0.20, 0.30,
+                            0.40, 0.45])
 
 CRES_PER_ANCHOR = 1 + len(FC_LOG2_OFFSETS)  # anchor + variants
 N_LIBRARY_REPS = 20
@@ -207,6 +210,9 @@ def phase_simulate(client):
         print(f"  Running {n_remaining} fresh sims.", flush=True)
 
         for lib_rep in range(n_remaining):
+            rep_idx = len(existing_complete) + lib_rep
+            tag = f"{SIM_SEED}:{cohort_idx}:{rep_idx}"
+            np.random.seed(int(hashlib.sha256(tag.encode()).hexdigest()[:8], 16))
             gt_df = build_ground_truth(
                 CELL_TYPES, anchor_indices, N_CRES,
                 ANCHOR_BASELINES, FC_LOG2_OFFSETS, MINP
@@ -220,7 +226,7 @@ def phase_simulate(client):
                 for _ in range(N_SIMS)
             ]
 
-            sim_name = f"sim_{uuid.uuid4().hex[:8]}"
+            sim_name = "sim_" + hashlib.sha256(tag.encode()).hexdigest()[:8]
             sim = scm.de_novo_simulation(
                 location=cohort_dir,
                 name=sim_name,
