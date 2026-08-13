@@ -39,6 +39,10 @@ SIM_ROOT = pathlib.Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/sim
 N_GT_DRAWS = 5
 HYPOTHESIS_SET = "hs_all_ct"
 
+# Legends carry the internal test identifiers; the manuscript uses these.
+TEST_LABEL = {"mwu": "MWU", "ttest": "t-test", "ks": "KS",
+              "pseudobulk": "pseudobulk", "wald_auto": "Wald"}
+
 DATASETS = {
     "shendure": ("Lalanne et al.", "shendure_5x5_activity"),
     "cohen":    ("Zhao et al.",    "cohen_5x5_activity"),
@@ -67,6 +71,14 @@ def median_gt_draw(slug):
     return pick
 
 
+def relabel(entry):
+    """'wald_auto (AUC=0.929)' -> 'Wald (AUC=0.929)'; other entries untouched."""
+    head, _, rest = entry.partition(" ")
+    if head not in TEST_LABEL:
+        return entry
+    return f"{TEST_LABEL[head]} {rest}".rstrip()
+
+
 def main():
     from dask.distributed import Client, LocalCluster
     cluster = LocalCluster(n_workers=1, threads_per_worker=1, memory_limit="16GB")
@@ -83,10 +95,16 @@ def main():
                 HYPOTHESIS_SET, kind, test_types=tests, include_alpha=True)
             fig = plt.gcf()
             fig.set_size_inches(4.4, 3.6)
-            fig.suptitle(f"{label} -- {kind}", fontsize=10)
             for ax in fig.axes:
-                if ax.get_legend() is not None:
-                    ax.legend(loc="lower right", fontsize=7, framealpha=0.9)
+                # One title, naming the regime; the generic "ROC Curve" the
+                # plotting call sets is redundant beside it.
+                ax.set_title(f"{label} -- {kind}", fontsize=10)
+                if ax.get_legend() is None:
+                    continue
+                handles, labels = ax.get_legend_handles_labels()
+                labels = [relabel(t) for t in labels]
+                ax.legend(handles, labels, loc="lower right", fontsize=8,
+                          framealpha=0.9)
             out = OUT / f"{slug}_median_{kind.lower()}.svg"
             fig.savefig(out, format="svg", bbox_inches="tight")
             plt.close(fig)

@@ -43,8 +43,10 @@ import seaborn as sns
 _repo_root = Path(__file__).resolve().parents[4]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import scMPRAforge as scm
+import kircher_reference
 from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
 
@@ -366,15 +368,10 @@ def phase_plot(client):
             yticklabels=[f"{y:.2f}" for y in pivot.index],
         )
 
-        fc_vals = list(pivot.index)
-        if 0.20 in fc_vals:
-            y_pos = fc_vals.index(0.20) + 0.5
-            ax.axhline(y=y_pos, color="blue", linestyle="--",
-                       lw=1.5, alpha=0.7)
-            ax.text(0.02, y_pos - 0.3,
-                    "90% of variant\neffects below",
-                    transform=ax.get_yaxis_transform(), fontsize=7,
-                    color="blue", va="top")
+        drawn = kircher_reference.annotate(ax, pivot.index)
+        assert drawn == 2, (
+            f"{ct}: grid reaches only {drawn} of the two reference effects; "
+            f"fold-change range is {min(pivot.index)}-{max(pivot.index)}")
 
         ax.set_title(f"{ct_display}\n(n_cres={N_CRES}, cells={cells_ct})",
                      fontsize=10)
@@ -419,15 +416,10 @@ def phase_plot(client):
             xticklabels=[f"{x:.3f}" for x in sorted(pivot.columns)],
             yticklabels=[f"{y:.2f}" for y in pivot.index],
         )
-        fc_vals = list(pivot.index)
-        if 0.20 in fc_vals:
-            y_pos = fc_vals.index(0.20) + 0.5
-            ax.axhline(y=y_pos, color="blue", linestyle="--",
-                       lw=1.5, alpha=0.7)
-            ax.text(0.02, y_pos - 0.3,
-                    "90% of variant\neffects below",
-                    transform=ax.get_yaxis_transform(), fontsize=7,
-                    color="blue", va="top")
+        drawn = kircher_reference.annotate(ax, pivot.index)
+        assert drawn == 2, (
+            f"{ct}: grid reaches only {drawn} of the two reference effects; "
+            f"fold-change range is {min(pivot.index)}-{max(pivot.index)}")
         ax.set_title(
             f"MWU pairwise power -- Seelig (no reporter) -- {ct_display}\n"
             f"(n_cres={N_CRES}, cells={cells_ct}, alpha=0.05, "
@@ -493,8 +485,7 @@ def phase_plot(client):
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    ax.text(ax.get_xlim()[1] * 0.95, 0.205, "90% of variant effects",
-            ha="right", va="bottom", fontsize=8, color="gray")
+    kircher_reference.annotate_continuous(ax)
 
     svg_path2 = OUTPUT_DIR / "seelig_pairwise_power_50pct_contours.svg"
     fig.savefig(svg_path2, format="svg", bbox_inches="tight")

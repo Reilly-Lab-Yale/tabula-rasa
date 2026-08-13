@@ -19,8 +19,10 @@ import seaborn as sns
 _repo_root = Path(__file__).resolve().parents[4]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import scMPRAforge as scm
+import kircher_reference
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 PANEL_DIR = OUTPUT_DIR / "panels_mwu"
@@ -69,15 +71,10 @@ for ct in CELL_TYPES:
         yticklabels=[f"{y:.2f}" for y in pivot.index],
     )
 
-    fc_vals = list(pivot.index)
-    if 0.20 in fc_vals:
-        y_pos = fc_vals.index(0.20) + 0.5
-        ax.axhline(y=y_pos, color="blue", linestyle="--",
-                   lw=1.5, alpha=0.7)
-        ax.text(0.02, y_pos - 0.3,
-                "90% of variant\neffects below",
-                transform=ax.get_yaxis_transform(), fontsize=7,
-                color="blue", va="top")
+    drawn = kircher_reference.annotate(ax, pivot.index)
+    assert drawn == 2, (
+        f"{ct}: grid reaches only {drawn} of the two reference effects; "
+        f"fold-change range is {min(pivot.index)}-{max(pivot.index)}")
 
     ax.set_title(
         f"MWU pairwise power -- Shendure -- {ct_display}\n"
