@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Shendure t-test power -- all cell types
+Shendure activity power -- all cell types, all test arms
 
-Assesses Welch's t-test power (TPR) as a function of CRE_oi strength relative
-to `minP`, for every cell type in the Shendure dataset.
+Assesses activity power (TPR) as a function of CRE_oi strength relative to
+`minP`, for every cell type in the Shendure dataset, under both MWU and
+Welch's t-test, each with and without the transfection reporter.
 
 For each cell type:
 1. Draw `n_cres` synthetic CREs from uniform(min, max), with one fixed at
    `minP` as the reference
 2. Simulate `cells_per_cell_type` cells (matching the real count for that cell
    type) across `n_sims` replicates, repeated 100 times
-3. Run Welch's t-test for all CREs vs. reference -- both with reporter
-   (standard) and without reporter (zero-deflated, simulating a no-reporter
-   experiment)
+3. Run every arm in ARMS for all CREs vs. reference -- MWU and Welch's
+   t-test, each with reporter (standard) and without (zero-deflated,
+   simulating a no-reporter experiment)
 4. Aggregate and plot per-cell-type power curves, overlaying both conditions
 
 Each cell type is simulated independently with its own empirical
@@ -24,7 +25,7 @@ Usage:
     python shendure_power_ttest_all_cell_types.py [phase]
 
 Phases:
-    simulate  -- generate simulations and run t-test (both conditions)
+    simulate  -- generate simulations and run all four test arms
     plot      -- aggregate results and produce SVG
     all       -- run both phases sequentially (default)
 """
@@ -60,8 +61,21 @@ DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-SIM_DATE = "2026-04-10"
+SIM_DATE = "2026-08-13"
 SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_shendure_pow"
+
+# {t-test, MWU} x {+reporter, deflated}, as (test directory, method, reporter).
+# The 2026-04-10 run computed only the two t-test arms, which is the test
+# Results 2.2 sets aside; MWU without the reporter had never been run, so the
+# reporter's power benefit could only be measured with a test that
+# over-rejects in exactly that condition. Aggregates are written per arm with
+# SIM_DATE in the filename, leaving that run's parquets in place.
+ARMS = [
+    ("ttest",          "ttest", True),
+    ("ttest_deflated", "ttest", False),
+    ("mwu",            "mwu",   True),
+    ("mwu_deflated",   "mwu",   False),
+]
 
 # Load per-cell-type n_cres from the canonical phantom ortho parameters
 # (avoids loading the full ortho object, which has lazy file references to the
@@ -88,7 +102,7 @@ N_SIMS = 5
 
 
 # ---------------------------------------------------------------------------
-# Phase: simulate -- generate data and run t-test (both +reporter and deflated)
+# Phase: simulate -- generate data and run every arm in ARMS
 # ---------------------------------------------------------------------------
 
 def phase_simulate(client):
@@ -113,14 +127,12 @@ def phase_simulate(client):
         ct_dir = SIM_DIR / cell_type
 
         # Resume: reload already-complete sims from disk.
-        # A sim is "complete" if it has both ttest/ and ttest_deflated/ results.
+        # A sim is "complete" once every arm in ARMS has results.
         sims_ct = []
         if ct_dir.exists():
             for d in sorted(ct_dir.iterdir()):
-                tt_dir = d / "tests" / "hs_all_ct" / "ttest"
-                defl_dir = d / "tests" / "hs_all_ct" / "ttest_deflated"
-                if (tt_dir.exists() and any(tt_dir.iterdir())
-                        and defl_dir.exists() and any(defl_dir.iterdir())):
+                arm_dirs = [d / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
+                if all(p.exists() and any(p.iterdir()) for p in arm_dirs):
                     sims_ct.append(
                         scm.de_novo_simulation(
                             location=ct_dir, name=d.name, client=client
@@ -155,68 +167,42 @@ def phase_simulate(client):
             sim.save()
     print("\nAll sims saved.", flush=True)
 
-    # --- t-test: +reporter (standard) ---
-    # Build a hypothesis set per cell type and run t-test (skip if already done).
-    for cell_type, sims in all_sims.items():
-        print(f"t-test (+reporter): {cell_type}", flush=True)
-        hs = None
-        for sim in sims:
-            tt_dir = sim.location / sim.name / "tests" / "hs_all_ct" / "ttest"
-            if tt_dir.exists() and any(tt_dir.iterdir()):
-                continue  # already done
-            if hs is None:
-                example = scm.scMPRA_data.from_parquet(
-                    sim.scmpradatp / "0.scmpra"
+    # --- run every arm on the same simulated data ---
+    # The deflated arms drop all zero-count observations before testing, which
+    # is what a no-reporter experiment actually sees on disc. Without that the
+    # test gets an unfair advantage: the simulation writes explicit zeros for
+    # transfected-but-silent events that such an experiment could never
+    # observe. Every arm reads the same sims, so the four are exactly paired.
+    for arm, method, has_reporter in ARMS:
+        for cell_type, sims in all_sims.items():
+            print(f"{arm}: {cell_type}", flush=True)
+            hs = None
+            for sim in sims:
+                arm_dir = sim.location / sim.name / "tests" / "hs_all_ct" / arm
+                if arm_dir.exists() and any(arm_dir.iterdir()):
+                    continue  # already done
+                if hs is None:
+                    example = scm.scMPRA_data.from_parquet(
+                        sim.scmpradatp / "0.scmpra"
+                    )
+                    hs = scm.make_all_by_celltype_hypotheses(
+                        counts=example, reference_cre="reference"
+                    )
+                # May already exist from an earlier arm, but not if we resumed
+                # from disk.
+                hypo_file = (
+                    sim.location / sim.name / "tests" / "hs_all_ct"
+                    / "hypotheses.tsv"
                 )
-                hs = scm.make_all_by_celltype_hypotheses(
-                    counts=example, reference_cre="reference"
-                )
-            sim.add_hypothesis_set("hs_all_ct", hs)
-            sim.ttest("hs_all_ct")
-            sim.save()
+                if not hypo_file.exists():
+                    sim.add_hypothesis_set("hs_all_ct", hs)
+                getattr(sim, method)("hs_all_ct", has_reporter=has_reporter)
+                sim.save()
 
-    for sims in all_sims.values():
-        for sim in sims:
-            sim.save()
-    print("t-test (+reporter) done and saved.", flush=True)
-
-    # --- t-test: deflated (no reporter) ---
-    # Same simulated data, but all zero-count observations are dropped before
-    # testing. This simulates what a real no-reporter experiment looks like on
-    # disc: only non-zero MPRA signal is observed. Without this, simulated data
-    # gives the test an unfair advantage because the simulation generates
-    # explicit zeros for transfected-but-silent events, which a no-reporter
-    # experiment would never observe.
-    for cell_type, sims in all_sims.items():
-        print(f"t-test (deflated): {cell_type}", flush=True)
-        hs = None
-        for sim in sims:
-            defl_dir = (
-                sim.location / sim.name / "tests" / "hs_all_ct" / "ttest_deflated"
-            )
-            if defl_dir.exists() and any(defl_dir.iterdir()):
-                continue  # already done
-            if hs is None:
-                example = scm.scMPRA_data.from_parquet(
-                    sim.scmpradatp / "0.scmpra"
-                )
-                hs = scm.make_all_by_celltype_hypotheses(
-                    counts=example, reference_cre="reference"
-                )
-            # Ensure hypothesis set exists (may have been added in +reporter
-            # pass, but if we resumed from disk it won't be).
-            hypo_file = (
-                sim.location / sim.name / "tests" / "hs_all_ct" / "hypotheses.tsv"
-            )
-            if not hypo_file.exists():
-                sim.add_hypothesis_set("hs_all_ct", hs)
-            sim.ttest("hs_all_ct", has_reporter=False)
-            sim.save()
-
-    for sims in all_sims.values():
-        for sim in sims:
-            sim.save()
-    print("t-test (deflated) done and saved.", flush=True)
+        for sims in all_sims.values():
+            for sim in sims:
+                sim.save()
+        print(f"{arm} done and saved.", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +212,8 @@ def phase_simulate(client):
 def phase_plot(client):
     # Prefer cached aggregates (raw sims may have lost their tests/ subtree;
     # the parquets are the canonical record for re-rendering).
-    cached_rep = OUTPUT_DIR / "power_df_reporter.parquet"
-    cached_def = OUTPUT_DIR / "power_df_deflated.parquet"
+    cached_rep = OUTPUT_DIR / f"power_df_mwu_{SIM_DATE}.parquet"
+    cached_def = OUTPUT_DIR / f"power_df_mwu_deflated_{SIM_DATE}.parquet"
     if cached_rep.exists() and cached_def.exists():
         print(f"Loading cached aggregates: {cached_rep}, {cached_def}", flush=True)
         rep_combined = pd.read_parquet(cached_rep)
@@ -248,7 +234,7 @@ def phase_plot(client):
                 for d in sorted(ct_dir.iterdir()):
                     if not d.is_dir():
                         continue
-                    tt_dir = d / "tests" / "hs_all_ct" / "ttest"
+                    tt_dir = d / "tests" / "hs_all_ct" / "mwu"
                     if tt_dir.exists() and any(tt_dir.iterdir()):
                         sims_ct.append(
                             scm.de_novo_simulation(
@@ -258,32 +244,29 @@ def phase_plot(client):
             all_sims[cell_type] = sims_ct
             print(f"  {cell_type}: loaded {len(sims_ct)} sims", flush=True)
 
-        # Aggregate results for both conditions
-        all_mergy_reporter = {
-            ct: scm.sum_pow(sims, hypothesis_set_name="hs_all_ct", test_type="ttest")
-            for ct, sims in all_sims.items()
-        }
-        all_mergy_deflated = {
-            ct: scm.sum_pow(
-                sims, hypothesis_set_name="hs_all_ct", test_type="ttest_deflated"
-            )
-            for ct, sims in all_sims.items()
-        }
-
-        # Save aggregated dataframes
-        for label, mergy_dict in [
-            ("reporter", all_mergy_reporter),
-            ("deflated", all_mergy_deflated),
-        ]:
+        # Aggregate and save every arm. The t-test pair is kept as a
+        # reproduction check against the 2026-04-10 run; the MWU pair is what
+        # the reporter figure now uses.
+        per_arm = {}
+        for arm, _, _ in ARMS:
+            per_arm[arm] = {
+                ct: scm.sum_pow(
+                    sims, hypothesis_set_name="hs_all_ct", test_type=arm
+                )
+                for ct, sims in all_sims.items()
+            }
             rows = []
-            for ct, df in mergy_dict.items():
+            for ct, df in per_arm[arm].items():
                 df = df.copy()
                 df["cell_type"] = ct
                 rows.append(df)
             combined = pd.concat(rows, ignore_index=True)
-            out_path = OUTPUT_DIR / f"power_df_{label}.parquet"
+            out_path = OUTPUT_DIR / f"power_df_{arm}_{SIM_DATE}.parquet"
             combined.to_parquet(out_path)
-            print(f"Saved: {out_path}", flush=True)
+            print(f"Saved: {out_path} ({len(combined):,} rows)", flush=True)
+
+        all_mergy_reporter = per_arm["mwu"]
+        all_mergy_deflated = per_arm["mwu_deflated"]
 
     # --- Plot: overlay +reporter and deflated on each subplot ---
     def _pow_curve_data(mergy, n_bins=100):
@@ -346,12 +329,12 @@ def phase_plot(client):
         axes[j].set_visible(False)
 
     fig.suptitle(
-        "Welch's t-test Power by Cell Type -- Shendure\n"
+        "MWU Power by Cell Type -- Shendure\n"
         "+reporter (obs condition) vs -reporter (zero-deflated)",
         fontsize=12,
     )
     plt.tight_layout()
-    svg_path = OUTPUT_DIR / "power_ttest_reporter_comparison.svg"
+    svg_path = OUTPUT_DIR / f"power_mwu_reporter_comparison_{SIM_DATE}.svg"
     fig.savefig(svg_path, format="svg", bbox_inches="tight")
     print(f"Saved: {svg_path}", flush=True)
 
@@ -370,7 +353,7 @@ if __name__ == "__main__":
         # 24 GB gives ~1.4x headroom. Per-rep memory does not scale with
         # N_LIBRARY_REPS (reps are sequential), so this is sufficient for the
         # FC=4 run too. Worker count doubled 10 -> 20 to halve wall-clock on
-        # the t-test phase, which fans out wider than the inner-rep graph.
+        # the testing phase, which fans out wider than the inner-rep graph.
         cluster = SLURMCluster(
             cores=1,
             memory="24G",

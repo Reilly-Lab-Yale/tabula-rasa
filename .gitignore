@@ -30,3 +30,6 @@ bc.md
 .claude/
 # Downloaded MPRAbase database (see analyses/mprabase/README.md)
 analyses/mprabase/data/
+
+# Published supplementary files, downloaded on demand and checksummed
+analyses/empirical_testing/published_comparison/cache/
