@@ -176,12 +176,13 @@ TOPUP3_AXIS_BOUNDS = {
     "activity_max_mult": (1.0,   1.2e2, True),    # log; covers cohen 1.11 to shendure 99
 }
 
-# Brute-force union over the full + topup + topup3 ranges. One independent
-# LHS sweep over the combined box restores axis independence in the
-# combined dataset (the existing full+topup+topup3 patchwork has induced
-# cross-axis correlation -- e.g. high-moi samples are necessarily from
-# topup and therefore carry topup's high-bcs draws). This is the design
-# the methods paper actually wants for the headline marginal plots.
+# The box enclosing the full + topup + topup3 ranges, swept in one draw.
+# "Union" here means the union of the axis *ranges*, not a union of sample
+# sets: a single LHS over this box is what the methods paper uses. Pooling
+# separate sweeps instead induces cross-axis correlation, because a top-up
+# that extends two axes at once makes them dependent in the pooled sample
+# -- a high-moi draw could only have come from the top-up, and so carries
+# its high bcs_per_cre as well.
 # activity_max_mult is log-scaled here (vs linear in full) because the
 # union range spans two orders of magnitude.
 UNION_AXIS_BOUNDS = {
@@ -302,9 +303,9 @@ def draw_lhs(n: int, seed: int = SEED, bounds: dict = None,
 
     bounds: dict[axis] -> (low, high, log_scale). Defaults to AXIS_BOUNDS.
             For the bounds-expansion top-up sweep, pass TOPUP_AXIS_BOUNDS.
-    sample_id_prefix: "s" for the original sweep, "t" for the top-up. Keeps
-            sample_ids disjoint across sweeps so a combined plot can index by
-            sample_id without collisions.
+    sample_id_prefix: one letter per sweep ("s" full, "t" topup, "u"
+            topup3, "v" union), so a parquet can be traced to the draw that
+            produced it. The manuscript uses "v" exclusively.
     """
     if bounds is None:
         bounds = AXIS_BOUNDS
@@ -893,54 +894,13 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
                     out_path=out_path, hline=hline, invert_y=invert,
                     force_linear_x=linx, anchors=alist)
 
-    # Combined plot: when running in topup mode, fuse with the original full
-    # sweep's samples_power.parquet so the marginals span the full
-    # bcs_per_cre and moi range covered by the union. Both DataFrames must
-    # have the same metric columns -- they will because both were aggregated
-    # by the same _power_metrics function.
-    if mode in ("topup", "topup3"):
-        # Combine prior parquets with the just-aggregated `df`. Sample-id
-        # prefixes are disjoint by construction (s/t/u for full/topup/topup3).
-        prior_paths = [OUT / "samples_power.parquet"]
-        if mode == "topup3":
-            prior_paths.append(OUT / "samples_power_topup.parquet")
-        prior_dfs = []
-        labels = []
-        for p in prior_paths:
-            if p.exists():
-                prior_dfs.append(pd.read_parquet(p))
-                labels.append(p.stem.replace("samples_power", "").lstrip("_") or "full")
-            else:
-                print(f"NOTE: {p} not found, skipping in combined plot", flush=True)
-        if prior_dfs:
-            combined = pd.concat(prior_dfs + [df], ignore_index=True)
-            shared = (combined["sample_id"].duplicated()).any()
-            if shared:
-                print("WARNING: duplicated sample_ids in combined; check prefixes",
-                      flush=True)
-            combined.to_parquet(OUT / "samples_power_combined.parquet")
-            this_label = "topup3" if mode == "topup3" else "topup"
-            sources = " + ".join(labels + [this_label])
-            sizes = " + ".join([str(len(d)) for d in prior_dfs] + [str(len(df))])
-            print(f"\nCombined plot: {sizes} ({sources}) = {len(combined)} samples",
-                  flush=True)
-            for metric, ylim, ylabel, hline, invert, fsuf, tsuf in metric_specs:
-                for asuf, alist, asubtitle in anchor_variants:
-                    for linx_suf, linx in [("", False), ("_linearx", True)]:
-                        out_path = OUT / f"marginals{fsuf}_combined{asuf}{linx_suf}.svg"
-                        _plot_marginals_for_metric(
-                            combined, metric=metric, ylim=ylim, ylabel=ylabel,
-                            title=f"Combined factorial ({sources}, {asubtitle}): {tsuf}",
-                            out_path=out_path, hline=hline, invert_y=invert,
-                            force_linear_x=linx, anchors=alist)
-
     # Pairwise heatmaps for top axes by smoother range (= biggest LOESS swing).
-    # Render once for the per-mode df and, when a combined frame exists, once
-    # more for the fused full+topup+topup3 dataset.
+    # One LHS draw in, one set of heatmaps out. Fusing separate sweeps is not
+    # an option here: sample sets welded together are not a Latin hypercube of
+    # the combined box, and the earlier full+topup+topup3 patchwork induced
+    # cross-axis correlation because its top-ups extended two axes at once.
+    # The "union" modes below draw once over the enclosing box instead.
     _pairwise_heatmaps(df, suffix=suffix, title_suffix="")
-    if mode in ("topup", "topup3") and prior_dfs:
-        _pairwise_heatmaps(combined, suffix="_combined",
-                           title_suffix=f" -- combined ({sources}, n={len(combined)})")
 
 
 def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
