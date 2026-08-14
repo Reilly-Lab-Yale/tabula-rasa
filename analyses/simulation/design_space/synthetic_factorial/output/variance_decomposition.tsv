@@ -1,0 +1,5 @@
+model	terms	n_params	r2	gain_over_reference
+A	linear main effects	7	0.7785718566872976	
+B	A + pairwise interactions	28	0.7986208348445765	0.020048978157278907
+C	cubic main effects	21	0.8586923094797585	0.08012045279246094
+D	cubic main effects + interactions	42	0.8768230859942076	0.018130776514449054
