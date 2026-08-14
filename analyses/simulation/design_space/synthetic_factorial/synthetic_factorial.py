@@ -245,6 +245,24 @@ def _apply_mode(mode: str):
     CURRENT_MODE = mode
     print(f"Mode: {mode!r}: {cfg}", flush=True)
 
+
+def active_bounds(mode: str = None) -> dict:
+    """The axis bounds the given mode draws from.
+
+    Plotting must ask for these rather than reading AXIS_BOUNDS directly.
+    The two disagree on activity_max_mult, which the union sweep draws
+    log-uniformly over [1, 120] while AXIS_BOUNDS declares linear over
+    [2, 8]. Binning that axis linearly puts 58% of a union draw in the first
+    of eight bins and leaves the top bins nearly empty, which reads as a flat
+    response where there is none.
+    """
+    mode = CURRENT_MODE if mode is None else mode
+    return {
+        "topup": TOPUP_AXIS_BOUNDS,
+        "topup3": TOPUP3_AXIS_BOUNDS,
+        "union": UNION_AXIS_BOUNDS,
+    }.get(mode, AXIS_BOUNDS)
+
 # Activity floor: scale with minP rather than absolute. Empirically
 # min_mpra_umi/minP ~ 0.02-0.08 across datasets; pick a single ratio.
 MIN_ACT_FRAC_OF_MINP = 0.05
@@ -274,6 +292,10 @@ EMPIRICAL = {
     # activity_max_mult is p95(mu)/minP per the same convention as the
     # other anchors; takeshi-HepG2's library has a moderate dynamic range
     # (37x), between cohen (1.11) and shendure (99).
+    "seelig-HepG2": dict(
+        n_cells=5858, n_cres=1344, bcs_per_cre=4.945, moi=73.57,
+        lib_alpha_nb=1e-06, minP=0.2092, activity_max_mult=15.04,
+    ),
     "takeshi-HepG2": dict(
         n_cells=1690, n_cres=149, bcs_per_cre=394.07, moi=265.91,
         lib_alpha_nb=1.7174, minP=0.0116, activity_max_mult=37.22,
@@ -283,13 +305,41 @@ EMPIRICAL = {
 # Methods-paper figures use only shendure + cohen overlays. with_takeshi
 # variants (supplemental) overlay all three. Anchor names index into
 # EMPIRICAL above.
+# Display names for plots. The internal keys are the column names in the
+# samples parquets and are left alone so cached sweeps stay readable.
+#
+# "minP" is renamed on sight because the name misleads. It is the fitted mean
+# of the reference element, i.e. the construct's output with no CRE, and the
+# simulation draws every element's activity as a multiple of it
+# (activity_max_mult * minP). It is therefore the level the whole assay
+# operates at, not a promoter one chooses independently of the elements. That
+# is not an extra assumption of the sweep: the GLM adds the intercept and the
+# CRE coefficient in log space, so basal level and fold change are
+# multiplicative on the count scale throughout this work.
+AXIS_DISPLAY = {
+    "minP": "basal expression",
+    "lib_alpha_nb": "library skew (NB alpha)",
+    "bcs_per_cre": "barcodes per element",
+    "n_cres": "elements",
+    "n_cells": "cells",
+    "activity_max_mult": "dynamic range (max / basal)",
+}
+
+
+def axis_label(axis: str) -> str:
+    return AXIS_DISPLAY.get(axis, axis)
+
+
 DEFAULT_ANCHORS = ["shendure-Pluripotent", "cohen-Rod"]
 ALL_ANCHORS = list(EMPIRICAL.keys())
+# The three published designs, which is what the manuscript overlays.
+PUBLISHED_ANCHORS = ["shendure-Pluripotent", "cohen-Rod", "seelig-HepG2"]
 
 EMPIRICAL_COLORS = {
     "shendure-Pluripotent": "darkorange",
     "cohen-Rod":            "purple",
     "takeshi-HepG2":        "teal",
+    "seelig-HepG2":         "seagreen",
 }
 
 
@@ -709,6 +759,12 @@ def _aggregate(samples: pd.DataFrame, client, test_type: str = "mwu") -> pd.Data
     return pd.DataFrame(rows)
 
 
+# Memoized results of _loess_band for the marginal panels, keyed by
+# (metric, axis). Cleared at the top of each phase_plot so a second
+# mode in the same process cannot read the first mode's curves.
+_LOESS_CACHE: dict = {}
+
+
 def _loess_band(x, y, n_grid=100, frac=0.4, n_boot=200, seed=42):
     """LOESS-like smoother via locally-weighted linear regression with
     bootstrap 95% bands. Returns (xg, yhat, lo, hi)."""
@@ -761,7 +817,7 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
         ax = axes[ax_i]
         x = df[axis].values.astype(float)
         y = df[metric].values.astype(float)
-        log_scale = AXIS_BOUNDS[axis][2]
+        log_scale = active_bounds()[axis][2]
         # Always plot raw x; pick xscale via matplotlib so tick labels are
         # actual values rather than log10 of values.
         display_log = log_scale and not force_linear_x
@@ -773,7 +829,17 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
         valid = np.isfinite(y) & np.isfinite(x_smooth)
         if valid.sum() >= 20:
             try:
-                xg, yhat, lo, hi = _loess_band(x_smooth[valid], y[valid])
+                # The smoother and its 200 bootstraps depend only on the
+                # (metric, axis) pair: anchor overlays are drawn on top of it
+                # and force_linear_x only changes the display scale, since
+                # x_smooth keys off log_scale rather than display_log. Without
+                # this cache the same curve is recomputed once per variant --
+                # 210 fits where 35 suffice, about an hour of the run.
+                # _loess_band is seeded, so caching cannot change the output.
+                ck = (metric, axis)
+                if ck not in _LOESS_CACHE:
+                    _LOESS_CACHE[ck] = _loess_band(x_smooth[valid], y[valid])
+                xg, yhat, lo, hi = _LOESS_CACHE[ck]
                 xg_disp = (10.0 ** xg) if log_scale else xg
                 ax.plot(xg_disp, yhat, color="firebrick", lw=2)
                 ax.fill_between(xg_disp, lo, hi, color="firebrick", alpha=0.2)
@@ -791,6 +857,13 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
             cur_lo, cur_hi = float(x_finite.min()), float(x_finite.max())
         else:
             cur_lo, cur_hi = ax.get_xlim()
+        # An anchor can fall outside the swept range on an axis, in which case
+        # the smoother says nothing about it. Such an anchor is marked at the
+        # edge rather than plotted at its value: extending the axis to reach it
+        # would imply the LOESS extends there too, and would squash the region
+        # that actually carries data. Yin et al. is the case in hand, on
+        # lib_alpha_nb -- see the note on that axis in UNION_AXIS_BOUNDS.
+        data_lo, data_hi = cur_lo, cur_hi
         # Stagger label y so multi-anchor overlays at similar x don't overlap.
         drawn = []
         for name in anchors:
@@ -801,15 +874,27 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
             if v is None:
                 continue
             xv = float(v)
+            color = EMPIRICAL_COLORS.get(name, "black")
+            label = name.split("-")[0][:4]
+            if xv < data_lo or xv > data_hi:
+                off_low = xv < data_lo
+                edge = data_lo if off_low else data_hi
+                ax.plot([edge], [1.02], marker="<" if off_low else ">",
+                        color=color, markersize=6, clip_on=False,
+                        transform=ax.get_xaxis_transform())
+                ax.text(edge, 1.07, f"{label} off scale ({xv:.3g})",
+                        fontsize=6, style="italic", color=color,
+                        ha="left" if off_low else "right",
+                        transform=ax.get_xaxis_transform())
+                continue
             cur_lo = min(cur_lo, xv)
             cur_hi = max(cur_hi, xv)
-            color = EMPIRICAL_COLORS.get(name, "black")
             ax.axvline(xv, color=color, linestyle="--", lw=1.0, alpha=0.8)
             ypos = 1.02
             for xprev, _ in drawn:
                 if abs(xv - xprev) < 1e-9:
                     ypos = 1.07
-            ax.text(xv, ypos, name.split("-")[0][:4],
+            ax.text(xv, ypos, label,
                     fontsize=7, ha="center", color=color,
                     transform=ax.get_xaxis_transform())
             drawn.append((xv, name))
@@ -837,7 +922,7 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
             ax.xaxis.set_minor_formatter(NullFormatter())
         else:
             ax.set_xscale("linear")
-        ax.set_xlabel(axis)
+        ax.set_xlabel(axis_label(axis))
         ax.set_ylabel(ylabel)
         if ylim is not None:
             ax.set_ylim(*ylim)
@@ -855,6 +940,7 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
 
 
 def phase_plot(samples_with_power: pd.DataFrame, mode: str):
+    _LOESS_CACHE.clear()
     df = samples_with_power.copy()
     suffix = "" if mode == "full" else f"_{mode}"
     df.to_parquet(OUT / f"samples_power{suffix}.parquet")
@@ -876,9 +962,12 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
         ("fc_at_p50",      None,   "FC at 50% power (lower=better)", None, True,
          "_fc50", "FC at 50% power (minimum detectable effect; NaN if never reached)"),
     ]
-    # Render two anchor variants: no_takeshi (methods paper) and
-    # with_takeshi (supplemental, includes the 3rd anchor).
+    # published: the three assays the manuscript reports on, which is the
+    # variant its figures use. The takeshi variants predate Yin et al. being
+    # available as an anchor and are kept for the unpublished-data comparison.
     anchor_variants = [
+        ("_published",    PUBLISHED_ANCHORS,
+         "shendure + cohen + seelig overlays"),
         ("_no_takeshi",   DEFAULT_ANCHORS,
          "shendure + cohen overlays"),
         ("_with_takeshi", ALL_ANCHORS,
@@ -901,6 +990,80 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
     # cross-axis correlation because its top-ups extended two axes at once.
     # The "union" modes below draw once over the enclosing box instead.
     _pairwise_heatmaps(df, suffix=suffix, title_suffix="")
+    _pairwise_heatmaps_all(df, suffix=suffix)
+
+
+def _heat_panel(ax, df, a, b, cmap="viridis", nb=8):
+    """One (a, b) power surface. Returns the image handle for a colorbar.
+
+    Bins on whichever scale the mode drew the axis on; binning a log-drawn
+    axis linearly piles most of the samples into the first bin and reads as a
+    flat response.
+    """
+    xa = df[a].values.astype(float)
+    xb = df[b].values.astype(float)
+    if active_bounds()[a][2]:
+        xa = np.log10(xa); a_lab = f"log10 {axis_label(a)}"
+    else:
+        a_lab = axis_label(a)
+    if active_bounds()[b][2]:
+        xb = np.log10(xb); b_lab = f"log10 {axis_label(b)}"
+    else:
+        b_lab = axis_label(b)
+    # Mask non-finite power before the weighted histogram: np.histogram2d sums
+    # weights, so one NaN weight poisons its whole bin to NaN (imshow then
+    # renders it transparent). power_auc_1to3 is NaN-free, but mask
+    # defensively -- the earlier power_at_fc2 weighting was ~15% NaN and
+    # blanked the entire figure.
+    pw = df["power_auc_1to3"].values.astype(float)
+    m = np.isfinite(xa) & np.isfinite(xb) & np.isfinite(pw)
+    bins_a = np.linspace(xa[m].min(), xa[m].max(), nb + 1)
+    bins_b = np.linspace(xb[m].min(), xb[m].max(), nb + 1)
+    H_sum, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b], weights=pw[m])
+    H_n, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b])
+    with np.errstate(invalid="ignore"):
+        H = np.where(H_n > 0, H_sum / H_n, np.nan)
+    im = ax.imshow(H.T, origin="lower", aspect="auto", cmap=cmap,
+                   vmin=0, vmax=1,
+                   extent=[bins_a[0], bins_a[-1], bins_b[0], bins_b[-1]])
+    ax.set_xlabel(a_lab)
+    ax.set_ylabel(b_lab)
+    return im
+
+
+def _pairwise_heatmaps_all(df, suffix: str):
+    """Every axis pair, for the supplement.
+
+    The main figure shows three slices picked by marginal swing plus one
+    fixed pair; this is the exhaustive version, so a reader can check that
+    the additive decomposition in the attribution bars is not hiding
+    structure in a pair nobody chose to look at. Fitting power on all seven
+    axes gives R2 = 0.78 from additive main effects alone, and all 21
+    pairwise interaction terms together add 0.02.
+    """
+    import itertools
+    pairs = list(itertools.combinations(AXIS_NAMES, 2))
+    ncol = 5
+    nrow = int(np.ceil(len(pairs) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.0 * ncol, 3.4 * nrow))
+    axes = np.atleast_1d(axes).ravel()
+    im = None
+    for ax, (a, b) in zip(axes, pairs):
+        im = _heat_panel(ax, df, a, b)
+        ax.tick_params(labelsize=7)
+        ax.xaxis.label.set_size(8)
+        ax.yaxis.label.set_size(8)
+    for ax in axes[len(pairs):]:
+        ax.axis("off")
+    fig.suptitle("Power across every pair of design axes "
+                 f"({len(pairs)} pairs, {len(df)} LHS samples)")
+    fig.tight_layout(rect=(0, 0, 0.94, 0.98))
+    cax = fig.add_axes([0.955, 0.15, 0.012, 0.7])
+    fig.colorbar(im, cax=cax, label="power AUC (FC 1-3)")
+    out = OUT / f"pairwise_heatmaps_all{suffix}.svg"
+    fig.savefig(out, format="svg", bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {out}", flush=True)
 
 
 def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
@@ -908,7 +1071,7 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     for axis in AXIS_NAMES:
         x = df[axis].values.astype(float)
         y = df["power_auc_1to3"].values.astype(float)
-        log_scale = AXIS_BOUNDS[axis][2]
+        log_scale = active_bounds()[axis][2]
         x_plot = np.log10(x) if log_scale else x
         try:
             _, yhat, _, _ = _loess_band(x_plot, y, n_boot=20)
@@ -918,40 +1081,33 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     top3 = sorted(ranges.items(), key=lambda kv: -kv[1])[:3]
     print(f"Top axes by marginal swing ({suffix or 'full'}): {top3}", flush=True)
     pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]), (top3[1][0], top3[2][0])]
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    # One pair is always drawn regardless of swing. Basal expression and
+    # dynamic range multiply to the ceiling the assay reaches, and the three
+    # published designs sit almost exactly on a line of constant ceiling
+    # (log-log correlation -0.99 across them), so whether power depends on the
+    # product alone or on how it is split is a question the marginals cannot
+    # answer -- each collapses the other axis. Basal expression does not make
+    # the top three by swing, so without forcing it this slice is never drawn.
+    # Rendered in a different colormap because it is selected by hand, not by
+    # the swing rule that picks the others.
+    forced_pair = ("minP", "activity_max_mult")
+    # Drop it from the swing-selected set first, in the rare case both axes
+    # make the top three; otherwise the same slice is drawn twice.
+    pairs = [p for p in pairs if set(p) != set(forced_pair)] + [forced_pair]
+    fig, axes = plt.subplots(1, len(pairs), figsize=(4.7 * len(pairs), 4))
     for ax, (a, b) in zip(axes, pairs):
-        xa = df[a].values.astype(float)
-        xb = df[b].values.astype(float)
-        if AXIS_BOUNDS[a][2]:
-            xa = np.log10(xa); a_lab = f"log10 {a}"
-        else:
-            a_lab = a
-        if AXIS_BOUNDS[b][2]:
-            xb = np.log10(xb); b_lab = f"log10 {b}"
-        else:
-            b_lab = b
-        # Mask non-finite power before the weighted histogram: np.histogram2d
-        # sums weights, so one NaN weight poisons its whole bin to NaN (imshow
-        # then renders it transparent). power_auc_1to3 is NaN-free, but mask
-        # defensively -- the earlier power_at_fc2 weighting was ~15% NaN and
-        # blanked the entire figure.
-        p = df["power_auc_1to3"].values.astype(float)
-        m = np.isfinite(xa) & np.isfinite(xb) & np.isfinite(p)
-        nb = 8
-        bins_a = np.linspace(xa[m].min(), xa[m].max(), nb + 1)
-        bins_b = np.linspace(xb[m].min(), xb[m].max(), nb + 1)
-        H_sum, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b],
-                                      weights=p[m])
-        H_n, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b])
-        with np.errstate(invalid="ignore"):
-            H = np.where(H_n > 0, H_sum / H_n, np.nan)
-        im = ax.imshow(H.T, origin="lower", aspect="auto", cmap="viridis",
-                       vmin=0, vmax=1,
-                       extent=[bins_a[0], bins_a[-1], bins_b[0], bins_b[-1]])
-        ax.set_xlabel(a_lab)
-        ax.set_ylabel(b_lab)
+        is_forced = (a, b) == forced_pair
+        im = _heat_panel(ax, df, a, b,
+                         cmap="magma" if is_forced else "viridis")
+        if is_forced:
+            for spine in ax.spines.values():
+                spine.set_color("darkorange")
+                spine.set_linewidth(2.0)
+            ax.set_title("fixed pair: do these trade off?", fontsize=9,
+                         color="darkorange")
         plt.colorbar(im, ax=ax, label="power AUC (FC 1-3)")
-    fig.suptitle(f"Pairwise heatmaps (top-3 axes by marginal swing){title_suffix}")
+    fig.suptitle("Pairwise heatmaps: top-3 axes by marginal swing, plus one "
+                 f"fixed pair (right, orange){title_suffix}")
     plt.tight_layout()
     out_pair = OUT / f"pairwise_heatmaps{suffix}.svg"
     fig.savefig(out_pair, format="svg", bbox_inches="tight")
