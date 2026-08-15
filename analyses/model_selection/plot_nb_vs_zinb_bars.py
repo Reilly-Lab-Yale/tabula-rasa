@@ -44,14 +44,24 @@ INK, MUTED = "#1a1a1a", "#6b6b6b"
 # introduces, so it is excluded here.
 # Surnames only: the labels are rotated and seven of them have to fit across
 # a single-column panel. The caption carries the full citations.
+# Labels spell the rule out rather than using the internal codes. "obs"
+# appearing under two datasets was the confusing part: it names a rule that
+# any reporter-bearing design can be fit under, while its correctness depends
+# on whether that reporter resolves barcodes. Naming the granularity makes the
+# mismatch legible -- Zhao et al. has an element-level reporter, so the coarse
+# expansion under it is visibly the wrong rule rather than a second option.
+#
+# "fine" is one zero per delivery event as the reporter records it
+# (core.py reporter_expansion="single", and shendure's preexisting zeros);
+# "coarse" is one zero per barcode of the element (reporter_expansion="coarse").
 LAYOUT = [
-    ("shendure_obs",      "Lalanne (obs)",      True),
-    ("shendure_cm",       "Lalanne (CM)",       False),
-    ("cohen_obsingle",    "Zhao (obsingle)",    True),
-    ("cohen_obs",         "Zhao (obs)",         False),
-    ("cohen_cm",          "Zhao (CM)",          False),
-    ("seelig_cm_moib",    "Yin (CM+MOI)",       True),
-    ("seelig_cm",         "Yin (CM)",           False),
+    ("shendure_obs",      "Lalanne: observed, fine",      True),
+    ("shendure_cm",       "Lalanne: consider missing",    False),
+    ("cohen_obsingle",    "Zhao: observed, fine",         True),
+    ("cohen_obs",         "Zhao: observed, coarse",       False),
+    ("cohen_cm",          "Zhao: consider missing",       False),
+    ("seelig_cm_moib",    "Yin: consider missing + MOI",  True),
+    ("seelig_cm",         "Yin: consider missing",        False),
 ]
 PANELS = [("by_cre", "by CRE"), ("by_cell_type", "by cell type")]
 
@@ -96,7 +106,12 @@ def main():
             # Marks sit on the far side of the bar from zero. Scaling the bar
             # end outward works in both directions on a symlog axis because
             # multiplying a negative by >1 makes it more negative.
-            ax.text(i, (mean + np.sign(mean) * sem) * 1.7,
+            # Adjacent bars of near-equal height put these annotations at the
+            # same y, where "n=1344" and its neighbour collide into an
+            # unreadable run. Push every other one further out so the pair
+            # separates vertically instead.
+            lift = 1.7 if i % 2 == 0 else 2.8
+            ax.text(i, (mean + np.sign(mean) * sem) * lift,
                     f"{stars(p, v.size)}\nn={v.size}", ha="center",
                     va="bottom" if mean > 0 else "top",
                     fontsize=7, color=MUTED, linespacing=1.3)
@@ -107,7 +122,7 @@ def main():
         # Canonical marked on the tick label, not above the bar, so it cannot
         # be confused with the significance marks.
         ax.set_xticklabels([f"{lab} *" if c else lab for _, lab, c in LAYOUT],
-                           fontsize=8.5, rotation=30, ha="right",
+                           fontsize=8, rotation=40, ha="right",
                            rotation_mode="anchor")
         for tick, (_, _, c) in zip(ax.get_xticklabels(), LAYOUT):
             if c:

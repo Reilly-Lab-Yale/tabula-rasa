@@ -225,6 +225,20 @@ def select_canonical(rows):
     return chosen
 
 
+# The manuscript includes this at 0.88\textwidth, and textwidth is 498.7pt
+# (6.90in), so the canvas is drawn at its final size and nothing is rescaled
+# on the way in. Keep the two in step: if the \includegraphics width changes,
+# change the fraction here too, or the text silently stops being the size it
+# says it is. Point sizes below are therefore the sizes a reader sees,
+# against a 10pt body. Nothing downstream rescales text: the sync pipeline
+# deliberately applies no font transform, because enlarging <text> after the
+# fact overflows a viewBox matplotlib already fitted tightly.
+DISPLAY_WIDTH_IN = 0.88 * 498.66 / 72.27
+INK = "#1a1a1a"
+MUTED = "#6b6b6b"
+HAIRLINE = "#d9d9d9"
+
+
 def plot_canonical(rows):
     chosen = select_canonical(rows)
     labels = [DISPLAY[ds] for ds, _ in chosen]
@@ -234,25 +248,38 @@ def plot_canonical(rows):
     tmin = [r["total_fit_s"] / 60.0 if r else float("nan") for _, r in chosen]
     x = range(len(chosen))
 
-    fig, (ax_m, ax_t) = plt.subplots(1, 2, figsize=(7.0, 3.2))
-    for ax, vals, ylab, unit in [
-        (ax_m, mem, "Peak memory (GB)", "GB"),
-        (ax_t, tmin, "Fit time (min)", "min"),
+    fig, (ax_m, ax_t) = plt.subplots(
+        1, 2, figsize=(DISPLAY_WIDTH_IN, DISPLAY_WIDTH_IN * 0.40))
+    for ax, vals, ylab in [
+        (ax_m, mem, "Peak memory (GB)"),
+        (ax_t, tmin, "Fit time (minutes)"),
     ]:
-        ax.bar(x, vals, color=BAR_COLOR, width=0.62, zorder=3)
+        # Thin bars: a wide saturated block reads loud at this size, and the
+        # comparison is between three heights, not three areas.
+        ax.bar(x, vals, color=BAR_COLOR, width=0.5, zorder=3)
         ax.set_xticks(list(x))
-        ax.set_xticklabels(labels, rotation=20, ha="right")
-        ax.set_ylabel(ylab)
+        ax.set_xticklabels(labels, fontsize=8, color=INK)
+        ax.set_ylabel(ylab, fontsize=8.5, color=INK)
         finite = [v for v in vals if v == v]
-        ax.set_ylim(0, (max(finite) if finite else 1.0) * 1.18)
-        ax.grid(True, axis="y", alpha=0.25, zorder=0)
+        ax.set_ylim(0, (max(finite) if finite else 1.0) * 1.12)
+        # Solid hairline grid, one shade off the surface; no value sits on a
+        # bar, so the axis is what carries the numbers.
+        ax.grid(True, axis="y", color=HAIRLINE, lw=0.6, zorder=0)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(HAIRLINE)
+            ax.spines[side].set_linewidth(0.8)
+        ax.tick_params(labelsize=8, colors=MUTED, length=0)
+        for lab in ax.get_xticklabels():
+            lab.set_color(INK)
+        # A gap is not a zero: say so where the bar would have been.
         for xi, v in zip(x, vals):
-            if v == v:
-                ax.text(xi, v, f"{v:.0f} {unit}", ha="center", va="bottom", fontsize=8)
-            else:
+            if v != v:
                 ax.text(xi, ax.get_ylim()[1] * 0.03, "no log", ha="center",
-                        va="bottom", fontsize=7, style="italic", color="#6b6b6b")
-    fig.tight_layout()
+                        va="bottom", fontsize=7.5, style="italic", color=MUTED)
+    fig.tight_layout(pad=0.4)
     OUT.mkdir(exist_ok=True)
     for ext in ("svg", "png"):
         fig.savefig(OUT / f"compute_canonical.{ext}", dpi=200, bbox_inches="tight")
