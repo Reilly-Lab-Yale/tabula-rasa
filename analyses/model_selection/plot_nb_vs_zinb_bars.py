@@ -72,8 +72,13 @@ def stars(p, n):
     return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "ns"
 
 
-def main():
-    d = pd.read_csv(TSV, sep="\t")
+def load_delta_aic(path):
+    """The results table, split into dataset/direction with NB-positive dAIC.
+
+    Shared with plot_delta_aic_per_fit.py so the two figures cannot end up on
+    opposite sign conventions.
+    """
+    d = pd.read_csv(path, sep="\t")
     d[["dataset", "direction"]] = d.comparison.str.split(" / ", expand=True)
     # Published convention is AIC_NB - AIC_ZINB; flip so positive favours NB,
     # matching the by-fit figure. Recomputed from the AIC columns rather than
@@ -82,6 +87,11 @@ def main():
     d["d_nb"] = d.aic_zinb - d.aic_nb
     assert np.allclose(d.d_nb, -d.delta_aic, equal_nan=True), \
         "delta_aic is not AIC_NB - AIC_ZINB; the sign flip would be wrong"
+    return d
+
+
+def main():
+    d = load_delta_aic(TSV)
 
     wanted = {k for k, _, _ in LAYOUT}
     missing = wanted - set(d.dataset)
