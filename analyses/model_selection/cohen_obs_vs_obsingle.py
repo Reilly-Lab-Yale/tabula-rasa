@@ -43,6 +43,17 @@ def extract_mu_table(params):
 obs_mu = extract_mu_table(obs_params)
 obsingle_mu = extract_mu_table(obsingle_params)
 
+# Cached so the manuscript panel can be drawn without the orthos: the coarse
+# expansion is a fit nobody keeps a local copy of, and plotting should not
+# require unpickling one. plot_cohen_expansion.py reads this.
+MU_TSV = Path(__file__).resolve().parent / "cohen_expansion_mu.tsv"
+_cached = pd.concat([obs_mu.assign(expansion="coarse"),
+                     obsingle_mu.assign(expansion="fine")], ignore_index=True)
+assert set(_cached.expansion) == {"coarse", "fine"}, "both expansions must be present"
+assert (_cached.mu >= 0).all(), "fitted means cannot be negative"
+_cached.to_csv(MU_TSV, sep="\t", index=False)
+print(f"wrote {MU_TSV} ({len(_cached)} rows)")
+
 # Parse r-values from QC summary files
 def parse_r_values(summary_path, section="by_cell_type"):
     """Extract per-level r-values from a QC summary.txt file."""
