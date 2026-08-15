@@ -20,7 +20,7 @@ Schema and rationale: ORTHO_METADATA.md.
     python backfill_ortho_meta.py --write
 """
 import argparse
-import json
+import importlib.util
 import pathlib
 import pickle
 import re
@@ -33,9 +33,14 @@ CORE_PY = REPO / "scMPRAforge" / "core.py"
 
 COUNT_COL = "umis_mpra_bc"
 
-# Zeros a fit never materialises are built from a rule at fit time; zeros that
-# arrived in the input were built by data prep and are simply read.
-FIT_TIME = {"per_delivery", "per_barcode", "all_combinations", "all_combinations_moi"}
+# The schema, its classification rule and its validation live with the package
+# so fits and this pass cannot drift. Loaded by path rather than imported:
+# scMPRAforge/__init__.py pulls in the whole fitting stack, which reading
+# metadata has no use for.
+_spec = importlib.util.spec_from_file_location(
+    "scmpraforge_ortho_meta", REPO / "scMPRAforge" / "ortho_meta.py")
+ortho_meta = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(ortho_meta)
 
 
 # ---------------------------------------------------------------- evidence
@@ -128,9 +133,13 @@ def fitted_at(fit_dir, ortho_dir):
                               " ".join(p.name for p in fit_dir.iterdir())))
     if dates:
         return "-".join(dates[-1]), "run_stats filename"
+    # A fitted artifact, not the directory: writing ortho_meta.json into the
+    # directory would otherwise reset the date to the back-fill run.
     import datetime
-    day = datetime.date.fromtimestamp(ortho_dir.stat().st_mtime).isoformat()
-    return day, "ortho directory mtime (no run_stats report kept)"
+    stamps = [p.stat().st_mtime for p in ortho_dir.glob("*.pkl")]
+    assert stamps, f"{ortho_dir.name}: no run_stats report and no saved models to date it from"
+    day = datetime.date.fromtimestamp(min(stamps)).isoformat()
+    return day, "earliest saved model mtime (no run_stats report kept)"
 
 
 # ---------------------------------------------------------------- derivation
@@ -138,32 +147,16 @@ def fitted_at(fit_dir, ortho_dir):
 def derive(ortho_dir, fit_dir, canon):
     ev = parse_fit_script(fit_dir / "fit.py")
 
-    if ev["consider_missing"]:
-        # Consider-missing definitionally disregards reporter information, so
-        # it never carries a reporter expansion.
-        zero_expansion = "all_combinations_moi" if ev["moi_correct_cm"] else "all_combinations"
-        reporter_resolution, reporter_source = "none", "absent"
-    elif ev["phantom_compress"]:
-        assert ev["coarse_reporter"], (
-            f"{fit_dir.name}: phantom_compress=True with no set_coarse_reporter; "
-            "core.py raises on this, so the ortho cannot have been fit this way")
-        zero_expansion = "per_delivery" if ev["reporter_expansion"] == "single" else "per_barcode"
-        reporter_resolution, reporter_source = "element", "separate_table"
-    else:
-        # Neither path taken: no zeros are built, so every zero the fit saw was
-        # already a row in the input, at whatever resolution the reporter has.
-        zero_expansion = "preexisting"
-        reporter_resolution, reporter_source = "barcode", "in_table"
-
-    fit_time = zero_expansion in FIT_TIME
     when, when_from = fitted_at(fit_dir, ortho_dir)
-    rec = {
-        "zero_expansion": zero_expansion,
-        "expansion_stage": "fit_time" if fit_time else "data_prep",
-        "model_family": "nb" if ev["nb_only"] else "zinb",
-        "reporter_resolution": reporter_resolution,
-        "reporter_source": reporter_source,
-        "zero_storage": "phantom_compressed" if fit_time else "materialized",
+    rec = ortho_meta.classify(
+        consider_missing=ev["consider_missing"],
+        moi_correct_cm=ev["moi_correct_cm"],
+        phantom_compress=ev["phantom_compress"],
+        coarse_reporter=ev["coarse_reporter"],
+        reporter_expansion=ev["reporter_expansion"],
+        nb_only=ev["nb_only"],
+    )
+    rec.update({
         "dataset": ev["dataset"],
         "source_table": ev["source_table"].name,
         # Recorded rather than inferred, so the `preexisting` classification
@@ -173,27 +166,60 @@ def derive(ortho_dir, fit_dir, canon):
         "fit_script": str(fit_dir.relative_to(REPO) / "fit.py"),
         "fitted_at": when,
         "fitted_at_basis": when_from,
-        # No fit recorded the repo state it ran against; a sha inferred from
-        # the date would be a guess dressed as provenance.
+        # No fit this old recorded the repo state it ran against, and a sha
+        # inferred from the date would be a guess dressed as provenance.
         "code_version": None,
         "backfilled": True,
         "backfill_basis": "derived from fit.py, core.py *_BOUNDS, design dicts, source table",
-    }
-    if zero_expansion == "per_barcode" and reporter_resolution == "element":
-        # Blanketing an element's whole barcode set from one element-level
-        # observation: the comparison Results 2.1 argues against, kept visible.
-        rec["counterfactual"] = True
+    })
 
     cross_check(rec, ev, ortho_dir, fit_dir)
-    validate(rec, ortho_dir)
-    return rec
+    ortho_meta.validate(rec, ortho_dir.name)
+    return reconcile(ortho_dir, rec)
+
+
+def reconcile(ortho_dir, derived):
+    """
+    Merge a derivation with a record the fit wrote for itself.
+
+    A fit knows its own settings, its exact date and the code it ran; the
+    metadata pass knows what the fit could not -- which fit each dataset
+    treats as canonical, and whether the source table carried zeros. So the
+    pass fills the nulls a fit leaves behind and verifies everything else,
+    rather than overwriting a first-hand record with a reconstruction.
+    """
+    existing = ortho_meta.load(ortho_dir, missing_ok=True)
+    if existing is None or existing.get("backfilled", True):
+        return derived
+
+    merged = dict(existing)
+    for field in ortho_meta.DEFERRED:
+        if merged.get(field) is None:
+            merged[field] = derived[field]
+
+    # Everything else the fit recorded is first-hand, and must survive the
+    # comparison: a disagreement means the artifacts and the fit's own account
+    # of itself have diverged.
+    for k, v in derived.items():
+        if k in ortho_meta.DEFERRED or k in ("fitted_at", "fitted_at_basis",
+                                             "code_version", "backfilled",
+                                             "backfill_basis", "fit_script"):
+            continue
+        assert merged.get(k) == v, (
+            f"{ortho_dir.name}: the fit recorded {k}={merged.get(k)!r}, "
+            f"but its artifacts say {v!r}")
+    return merged
 
 
 def cross_check(rec, ev, ortho_dir, fit_dir):
     """Agreement between independent artifacts: name, design dicts, source data."""
     name = ortho_dir.name
-    assert (rec["model_family"] == "nb") == bool(re.search(r"_nb_", name)), (
-        f"{name}: directory name and nb_only in {fit_dir.name}/fit.py disagree on count family")
+    # zinb before nb: the shorter tag is a suffix of the longer one.
+    named = "zinb" if re.search(r"_zinb(_|$)", name) else \
+        ("nb" if re.search(r"_nb(_|$)", name) else None)
+    assert named == rec["model_family"], (
+        f"{name}: directory name says {named!r} but nb_only in "
+        f"{fit_dir.name}/fit.py gives {rec['model_family']!r}")
 
     fit_mode, rep_exp = design_tags(ortho_dir)
     if fit_mode is not None:
@@ -215,29 +241,6 @@ def cross_check(rec, ev, ortho_dir, fit_dir):
         assert rec["source_has_zero_rows"] is not False, (
             f"{name}: fit builds no zeros and {ev['source_table'].name} has none either, "
             "so the fit saw no zeros at all")
-
-
-def validate(rec, ortho_dir):
-    name = ortho_dir.name
-    if rec["reporter_resolution"] == "none":
-        assert rec["zero_expansion"] in ("all_combinations", "all_combinations_moi"), \
-            f"{name}: no reporter, but zero_expansion={rec['zero_expansion']!r}"
-    if rec["zero_expansion"] == "preexisting":
-        assert rec["expansion_stage"] == "data_prep" and rec["zero_storage"] == "materialized", \
-            f"{name}: preexisting zeros cannot be built or compressed at fit time"
-    if rec["zero_storage"] == "phantom_compressed":
-        assert rec["expansion_stage"] == "fit_time", \
-            f"{name}: nothing compresses zeros that were never built at fit time"
-
-
-def load(ortho_dir):
-    """Read an ortho's metadata, revalidating it. The counterpart to --write."""
-    ortho_dir = pathlib.Path(ortho_dir)
-    path = ortho_dir / "ortho_meta.json"
-    assert path.exists(), f"{ortho_dir.name}: no ortho_meta.json; run backfill_ortho_meta.py"
-    rec = json.loads(path.read_text())
-    validate(rec, ortho_dir)
-    return rec
 
 
 # ---------------------------------------------------------------- driver
@@ -285,7 +288,7 @@ def main():
               f"{rec['expansion_stage']:10s} {rec['zero_storage']:20s} "
               f"{rec['reporter_resolution']:8s} {rec['model_family']:5s} {rec['fitted_at']}")
         if args.write:
-            (o / "ortho_meta.json").write_text(json.dumps(rec, indent=2) + "\n")
+            ortho_meta.write(o, rec)
 
     for name, why in skipped:
         print(f"skipped {name}: {why}", file=sys.stderr)

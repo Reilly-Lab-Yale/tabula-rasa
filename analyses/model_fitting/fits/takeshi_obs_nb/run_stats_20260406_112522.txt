@@ -1,0 +1,179 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-06T11:41:13.741005
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-takeshi/notebooks/object_creation/orthos/takeshi_obs_nb
+  Main jobs : 7357758
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7357758  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7357758
+   User/Account: mcn26/prio_skr2
+       Job Name: tak_obs_nb
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 64GB (16GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Mon Apr 6, 2026 at 11:27 AM
+       Run Time: 00:11:48
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||                        46%]
+  CPU memory usage [|                                               3%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u07n03: 00:21:59/00:47:12 (efficiency=46.6%)
+
+  CPU memory usage per node - used/allocated
+      a1132u07n03: 2.1GB/64GB (543.2MB/16GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 46.6%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/7357758
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u07n03": {
+      "cpus": 4,
+      "total_memory": 68719476736,
+      "total_time": 1319.4,
+      "used_memory": 2278400000
+    }
+  },
+  "total_time": 708
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7357758|tak_obs_nb|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u07n03|1|4|64G|2026-04-06T11:25:22|2026-04-06T11:27:53|2026-04-06T11:39:41|00:11:48|12:00:00|22:48.461|22:07.229|00:41.232|00:47:12||||||||||0:0
+7357758.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u07n03|1|4||2026-04-06T11:27:53|2026-04-06T11:27:53|2026-04-06T11:39:41|00:11:48||22:48.461|22:07.228|00:41.232|00:47:12|3427528K|3427528K|3349388K|3349388K|178.73M|2.92M|178.73M|2.92M|1|0:0
+7357758.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u07n03|1|4||2026-04-06T11:27:53|2026-04-06T11:27:53|2026-04-06T11:39:41|00:11:48||00:00:00|00:00:00|00:00:00|00:47:12|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1132u07n03 ───────────────────────────────────────────────────────────────
+NodeName=a1132u07n03 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=60 CPUEfctv=64 CPUTot=64 CPULoad=29.10
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u07n03 NodeHostName=a1132u07n03 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=738368 FreeMem=547926 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2026-04-02T14:04:13 SlurmdStartTime=2026-04-02T16:30:02
+   LastBusyTime=2026-04-02T14:05:54 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=60,mem=738368M
+   CurrentWatts=808 AveWatts=640
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7357758.err  (33 lines total) ───────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775489280.720002 2601923 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775489285.895719 2601923 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-06 11:28:10,945 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 16ac76ef30b339eec6ca7b9b236c13dd initialized by task ('shuffle-transfer-16ac76ef30b339eec6ca7b9b236c13dd', 1) executed on worker inproc://10.18.22.72/2601923/4
+2026-04-06 11:28:10,989 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 16ac76ef30b339eec6ca7b9b236c13dd deactivated due to stimulus 'task-finished-1775489290.9875581'
+scMPRAforge: WARNING: ortho_filter removed 12 combinations involving 'reference'
+scMPRAforge: INFO: Dropped 105 of 489 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 27.06 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 79.00 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+[last 13 lines]
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 68.24 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 45.53 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+
+── slurm-7357758.out  (30 lines total) ───────────────────────────────────────
+[first 20 lines]
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.72:8787/status
+Loading takeshi data...
+Data loaded and filtered.
+
+Fitting by_cre...
+by_cre done in 5.2s
+
+Fitting by_cell_type...
+by_cell_type done in 448.0s
+
+Total fit time: 455.4s (7.6min)
+Extracting parameters...
+Saving to /nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi/takeshi_obs_nb...
+Saved.
+
+Total wall time: 455.4s (7.6min)
+
+sacct:
+JobID|State|Elapsed|MaxRSS|AveRSS|AllocCPUS|ReqMem
+[last 10 lines]
+7357758|RUNNING|00:11:44|||4|64G
+7357758.batch|RUNNING|00:11:44|||4|
+7357758.extern|RUNNING|00:11:44|||4|
+
+  NodeName=a1132u07n03
+  CPUTot=64
+  RealMemory=1014783
+  AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+
+Done.

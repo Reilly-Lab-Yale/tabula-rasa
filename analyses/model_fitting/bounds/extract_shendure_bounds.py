@@ -18,8 +18,8 @@ PRESET_DIR = Path("/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/scMPRAforge/pr
 OUT_DIR = Path(__file__).parent / "output" / "shendure"
 
 ORTHOS = [
-    "shendure_obs_zinb_phantom",
-    "shendure_obs_nb_phantom",
+    "shendure_obs_zinb",
+    "shendure_obs_nb",
     "shendure_cm_zinb_phantom",
     "shendure_cm_nb_phantom",
 ]

@@ -14,8 +14,8 @@ DATA_ROOT = "/nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi"
 QC_DIR = Path(__file__).resolve().parent / "qc"
 
 ORTHOS = [
-    "takeshi_obs_nb_phantom",
-    "takeshi_obs_zinb_phantom",
+    "takeshi_obs_nb",
+    "takeshi_obs_zinb",
     "takeshi_cm_nb_phantom",
     "takeshi_cm_zinb_phantom",
 ]

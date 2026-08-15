@@ -50,7 +50,7 @@ SIM_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/simulated")
 
 # Canonical phantom ortho for shendure (obs NB)
 ORTHO_DIR = DATA_ROOT / "shendure"
-ORTHO_NAME = "shendure_obs_nb_phantom"
+ORTHO_NAME = "shendure_obs_nb"
 
 
 def sim_name(gt_idx):

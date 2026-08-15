@@ -29,7 +29,7 @@ PANEL_DIR = OUTPUT_DIR / "panels_mwu"
 PANEL_DIR.mkdir(exist_ok=True)
 
 DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
-ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb_phantom"
+ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
 N_CRES_PER_CT = {ct: len(_params.nb[ct]) for ct in sorted(_params.nb.keys())}

@@ -64,7 +64,7 @@ ANALYSES = Path("/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-reporter-fig/ana
 DATASETS = {
     "shendure": dict(
         power_df=ANALYSES / "simulation/activity_power/shendure/output/power_df_reporter.parquet",
-        ortho_dir=DATA / "shendure/shendure_obs_nb_phantom",
+        ortho_dir=DATA / "shendure/shendure_obs_nb",
         n_cres=None,  # per-CT, varies
         bounds=scm.SHENDURE_BOUNDS,
     ),

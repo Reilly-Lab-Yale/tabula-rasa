@@ -1,0 +1,217 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-03T16:37:35.529387
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/notebooks/object_creation/orthos/shendure_obs_zinb
+  Main jobs : 7131601
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7131601  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7131601
+   User/Account: mcn26/prio_skr2
+       Job Name: shend_obs_zinb
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 64GB (16GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Fri Apr 3, 2026 at 2:51 PM
+       Run Time: 00:31:55
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [||||||||||||||||||                             37%]
+  CPU memory usage [|                                               3%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1132u31n01: 00:47:32/02:07:40 (efficiency=37.2%)
+
+  CPU memory usage per node - used/allocated
+      a1132u31n01: 2.2GB/64GB (557.2MB/16GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 37.2%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/7131601
+
+  * This job only needed 4% of the requested time which was 12:00:00. For
+    future jobs, please request less time by modifying the --time Slurm
+    directive. This will lower your queue times and allow the Slurm job
+    scheduler to work more effectively for all users. For more info:
+      https://docs.ycrc.yale.edu
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1132u31n01": {
+      "cpus": 4,
+      "total_memory": 68719476736,
+      "total_time": 2852.7,
+      "used_memory": 2336997376
+    }
+  },
+  "total_time": 1915
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7131601|shend_obs_zinb|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1132u31n01|1|4|64G|2026-04-03T14:49:05|2026-04-03T14:51:04|2026-04-03T15:22:59|00:31:55|12:00:00|47:49.290|45:28.317|02:20.973|02:07:40||||||||||0:0
+7131601.batch|batch|COMPLETED||prio_skr2||bouchet|a1132u31n01|1|4||2026-04-03T14:51:04|2026-04-03T14:51:04|2026-04-03T15:22:59|00:31:55||47:49.290|45:28.316|02:20.973|02:07:40|3583868K|3583868K|3495876K|3495876K|682.39M|10.36M|682.39M|10.36M|1|0:0
+7131601.extern|extern|COMPLETED||prio_skr2||bouchet|a1132u31n01|1|4||2026-04-03T14:51:04|2026-04-03T14:51:04|2026-04-03T15:22:59|00:31:55||00:00:00|00:00:00|00:00:00|02:07:40|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1132u31n01 ───────────────────────────────────────────────────────────────
+NodeName=a1132u31n01 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=57 CPUEfctv=64 CPUTot=64 CPULoad=56.60
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1132u31n01 NodeHostName=a1132u31n01 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=334336 FreeMem=397740 Sockets=2 Boards=1
+   State=MIXED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2026-03-26T15:01:10 SlurmdStartTime=2026-04-02T16:30:02
+   LastBusyTime=2026-03-26T15:02:52 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=57,mem=326.50G
+   CurrentWatts=896 AveWatts=623
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7131601.err  (65 lines total) ───────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775242271.257133 1213366 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775242276.417808 1213366 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-03 14:51:21,910 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 85e04137a826ba5ba6a6b24cebdcd665 initialized by task ('shuffle-transfer-85e04137a826ba5ba6a6b24cebdcd665', 1) executed on worker inproc://10.18.22.98/1213366/4
+2026-04-03 14:51:21,952 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 85e04137a826ba5ba6a6b24cebdcd665 deactivated due to stimulus 'task-finished-1775242281.95188'
+scMPRAforge: WARNING: ortho_filter removed 4 combinations involving 'reference'
+scMPRAforge: INFO: Dropped 641 of 2103 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'ExEndodermParietal'. Contrasts are NOT comparable to models with the canonical reference.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 31.35 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 23.98 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+[last 45 lines]
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 21.79 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 13.94 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 13.02 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 12.90 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: INFO: MoM for 'Cardiomyocytes': median P(X=0|NB) from non-zero data = 0.2356
+scMPRAforge: INFO: MoM for 'Cardiomyocytes': NB naturally explains zeros (P(X=0|NB)=0.236 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'Haematoendothelial': median P(X=0|NB) from non-zero data = 0.2466
+scMPRAforge: INFO: MoM for 'Haematoendothelial': NB naturally explains zeros (P(X=0|NB)=0.247 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'NeuroectodermBrain': median P(X=0|NB) from non-zero data = 0.2865
+scMPRAforge: INFO: MoM for 'NeuroectodermBrain': NB naturally explains zeros (P(X=0|NB)=0.287 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'reference': median P(X=0|NB) from non-zero data = 0.2797
+scMPRAforge: INFO: MoM for 'reference': NB naturally explains zeros (P(X=0|NB)=0.280 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'ExEndodermVisceral': median P(X=0|NB) from non-zero data = 0.2669
+scMPRAforge: INFO: MoM for 'ExEndodermVisceral': NB naturally explains zeros (P(X=0|NB)=0.267 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'NeuroectodermRostral': median P(X=0|NB) from non-zero data = 0.2664
+scMPRAforge: INFO: MoM for 'NeuroectodermRostral': NB naturally explains zeros (P(X=0|NB)=0.266 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'EpiblastPrimitiveStreak': median P(X=0|NB) from non-zero data = 0.2801
+scMPRAforge: INFO: MoM for 'EpiblastPrimitiveStreak': NB naturally explains zeros (P(X=0|NB)=0.280 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'SurfaceEctoderm': median P(X=0|NB) from non-zero data = 0.2741
+scMPRAforge: INFO: MoM for 'SurfaceEctoderm': NB naturally explains zeros (P(X=0|NB)=0.274 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'ExEndodermParietal': median P(X=0|NB) from non-zero data = 0.2898
+scMPRAforge: INFO: MoM for 'ExEndodermParietal': NB naturally explains zeros (P(X=0|NB)=0.290 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'Mesoderm': median P(X=0|NB) from non-zero data = 0.2810
+scMPRAforge: INFO: MoM for 'Mesoderm': NB naturally explains zeros (P(X=0|NB)=0.281 > 0.05); ZI poorly identified, falling back to NB init.
+
+── slurm-7131601.out  (30 lines total) ───────────────────────────────────────
+[first 20 lines]
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.98:8787/status
+Loading shendure data...
+Data loaded and filtered.
+
+Fitting by_cre...
+by_cre done in 6.9s
+
+Fitting by_cell_type...
+by_cell_type done in 1425.6s
+
+Total fit time: 1437.4s (24.0min)
+Extracting parameters...
+Saving to /nfs/roberts/project/pi_skr2/shared/tabula_data_new/shendure/shendure_obs_zinb...
+Saved.
+
+Total wall time: 1437.4s (24.0min)
+
+sacct:
+JobID|State|Elapsed|MaxRSS|AveRSS|AllocCPUS|ReqMem
+[last 10 lines]
+7131601|RUNNING|00:31:49|||4|64G
+7131601.batch|RUNNING|00:31:49|||4|
+7131601.extern|RUNNING|00:31:49|||4|
+
+  NodeName=a1132u31n01
+  CPUTot=64
+  RealMemory=1014783
+  AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+
+Done.

@@ -13,7 +13,7 @@ under the conservative test, ZI is definitively needed.
 All pairs use phantom-zero compressed orthos from tabula_data_new.
 
 Available pairs:
-  - shendure obs: ZINB shendure_obs_zinb_phantom  vs NB shendure_obs_nb_phantom
+  - shendure obs: ZINB shendure_obs_zinb  vs NB shendure_obs_nb
   - shendure cm:  ZINB shendure_cm_zinb_phantom   vs NB shendure_cm_nb_phantom
   - cohen obs:    ZINB cohen_obs_zinb_phantom_20260401  vs NB cohen_obs_nb_phantom_20260401
   - cohen cm:     ZINB cohen_cm_zinb_phantom_20260401   vs NB cohen_cm_nb_phantom_20260401
@@ -29,8 +29,8 @@ data_root = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 
 pairs = {
     "shendure_obs": {
-        "zinb": data_root / "shendure" / "shendure_obs_zinb_phantom",
-        "nb":   data_root / "shendure" / "shendure_obs_nb_phantom",
+        "zinb": data_root / "shendure" / "shendure_obs_zinb",
+        "nb":   data_root / "shendure" / "shendure_obs_nb",
     },
     "shendure_cm": {
         "zinb": data_root / "shendure" / "shendure_cm_zinb_phantom",
@@ -49,8 +49,8 @@ pairs = {
         "nb":   data_root / "seelig" / "seelig_cm_nb_phantom",
     },
     "takeshi_obs": {
-        "zinb": data_root / "takeshi" / "takeshi_obs_zinb_phantom",
-        "nb":   data_root / "takeshi" / "takeshi_obs_nb_phantom",
+        "zinb": data_root / "takeshi" / "takeshi_obs_zinb",
+        "nb":   data_root / "takeshi" / "takeshi_obs_nb",
     },
     "takeshi_cm": {
         "zinb": data_root / "takeshi" / "takeshi_cm_zinb_phantom",

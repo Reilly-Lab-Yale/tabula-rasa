@@ -460,7 +460,7 @@ I0000 00:00:1778269015.740457 2898844 port.cc:153] oneDNN custom operations are 
 Dashboard: http://10.18.22.58:8787/status
 
 ============================================================
-Processing shendure_obs_zinb_phantom
+Processing shendure_obs_zinb
 ============================================================
   by_cre: 208 models
   by_cell_type: 10 models
@@ -756,7 +756,7 @@ I0000 00:00:1778269014.795217 2439608 port.cc:153] oneDNN custom operations are 
 Dashboard: http://10.18.22.114:8787/status
 
 ============================================================
-Processing takeshi_obs_nb_phantom
+Processing takeshi_obs_nb
 ============================================================
   by_cre: 150 models
   by_cell_type: 3 models

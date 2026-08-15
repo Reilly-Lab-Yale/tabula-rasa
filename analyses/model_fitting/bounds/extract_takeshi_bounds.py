@@ -5,7 +5,7 @@ Mirrors extract_shendure_bounds.py, except: tgzs are written to
 analyses/model_fitting/bounds/output/takeshi/ instead of
 scMPRAforge/presets/ (the package is core-locked).
 
-Canonical (takeshi_obs_nb_phantom) is processed first so that the power
+Canonical (takeshi_obs_nb) is processed first so that the power
 simulation can be kicked off while the remaining orthos are still extracting.
 """
 import sys
@@ -24,8 +24,8 @@ OUT_DIR = Path(__file__).parent / "output" / "takeshi"
 
 # Canonical first.
 ORTHOS = [
-    "takeshi_obs_nb_phantom",
-    "takeshi_obs_zinb_phantom",
+    "takeshi_obs_nb",
+    "takeshi_obs_zinb",
     "takeshi_cm_nb_phantom",
     "takeshi_cm_zinb_phantom",
 ]

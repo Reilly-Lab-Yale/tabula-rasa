@@ -9,7 +9,7 @@ Takeshi has a barcode-level oBC transfection reporter (like Shendure), so
 both the +reporter (obs condition) and the deflated (-reporter, drop-zeros)
 condition are evaluated. Reference cell type is HepG2.
 
-Bounds come from `scm.TAKESHI_BOUNDS` (canonical = takeshi_obs_nb_phantom).
+Bounds come from `scm.TAKESHI_BOUNDS` (canonical = takeshi_obs_nb).
 
 Usage:
     python takeshi_power_ttest_all_cell_types.py [phase]
@@ -53,8 +53,8 @@ SIM_DATE = "2026-04-11"
 SIM_DIR = SCRATCH_ROOT / "simulated" / f"{SIM_DATE}_takeshi_pow"
 
 # Per-cell-type n_cres from the canonical phantom ortho parameters
-# (canonical = takeshi_obs_nb_phantom, matches scm.TAKESHI_BOUNDS).
-ORTHO_DIR = DATA_ROOT / "takeshi" / "takeshi_obs_nb_phantom"
+# (canonical = takeshi_obs_nb, matches scm.TAKESHI_BOUNDS).
+ORTHO_DIR = DATA_ROOT / "takeshi" / "takeshi_obs_nb"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
 

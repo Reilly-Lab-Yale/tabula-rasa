@@ -76,7 +76,7 @@ ANCHOR_BCS_PER_CRE = float(ANCHOR_BOUNDS.library_model.mu_nb)
 ANCHOR_MOI = float(ANCHOR_BOUNDS.get_effective_moi())
 
 # n_cres anchor: match what the empirical shendure obs fit used for this CT.
-_PARAMS_PATH = DATA_ROOT / "shendure/shendure_obs_nb_phantom/by_cell_type_parameters.pkl"
+_PARAMS_PATH = DATA_ROOT / "shendure/shendure_obs_nb/by_cell_type_parameters.pkl"
 with open(_PARAMS_PATH, "rb") as _f:
     _params = pickle.load(_f)
 ANCHOR_N_CRES = len(_params.nb[ANCHOR_CT])

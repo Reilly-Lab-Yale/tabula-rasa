@@ -5,7 +5,7 @@ I0000 00:00:1775924261.527965  566943 port.cc:153] oneDNN custom operations are 
 Dashboard: http://10.18.22.68:8787/status
 
 ============================================================
-Processing takeshi_obs_nb_phantom
+Processing takeshi_obs_nb
 ============================================================
   by_cre: 150 models
   by_cell_type: 3 models
@@ -30,12 +30,12 @@ scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision ev
   nb_only: True
   n_negative_controls: 20
   zi type: Series, is None: False
-  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom.tgz
-  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom_transfection.svg
-  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_phantom_library.svg
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_nb_library.svg
 
 ============================================================
-Processing takeshi_obs_zinb_phantom
+Processing takeshi_obs_zinb
 ============================================================
   by_cre: 150 models
   by_cell_type: 3 models
@@ -60,9 +60,9 @@ scMPRAforge: INFO: Computed a total of 13802.431732050143 estimated collision ev
   nb_only: False
   n_negative_controls: 20
   zi type: Series, is None: False
-  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom.tgz
-  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom_transfection.svg
-  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_phantom_library.svg
+  Saved bounds: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb.tgz
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_transfection.svg
+  Saved: /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa/analyses/model_fitting/bounds/output/takeshi/takeshi_obs_zinb_library.svg
 
 ============================================================
 Processing takeshi_cm_nb_phantom

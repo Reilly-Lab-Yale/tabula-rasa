@@ -1,8 +1,21 @@
 # Ortho metadata
 
 Every fitted ortho carries an `ortho_meta.json` sidecar describing what was
-modelled and how it was computed. `backfill_ortho_meta.py` derives and writes
-it; `backfill_ortho_meta.load()` reads it back with the same validation.
+modelled and how it was computed.
+
+Fits write their own record: `fit_by_cre_models` and `fit_by_cell_type_models`
+classify their settings, and `ortho.save()` writes the result. `ortho.load()`
+reads it back onto `ortho.meta`. The schema, its classification rule and its
+validation live in `scMPRAforge/ortho_meta.py`, so there is one definition.
+
+`backfill_ortho_meta.py` reconstructs the record for the 19 orthos fit before
+the sidecar existed, and is the only thing that sets `backfilled: true`. It
+also fills the two fields no fit can know about itself --- `canonical` and
+`source_has_zero_rows` --- on records fits wrote, verifying rather than
+overwriting everything else those records state. Re-running it is safe: it
+never downgrades a first-hand record to a reconstruction, and a disagreement
+between a fit's account of itself and its artifacts is an assertion failure
+rather than a silent overwrite.
 
 ## Why a sidecar, and why these fields
 
@@ -46,9 +59,15 @@ fit adds none; `per_delivery` = one zero per (cell, element) detection;
 `all_combinations` = every observable combination; `all_combinations_moi` =
 same, each weighted by P(transfected).
 
-`counterfactual` appears only when set. `code_version` is null on every
-back-filled record: no fit recorded the repo state it ran against, and a sha
-inferred from the date would be a guess dressed as provenance.
+`counterfactual` appears only when set. `canonical` and `source_has_zero_rows`
+are null on a record a fit has just written and no metadata pass has seen yet:
+null reads as "not yet determined", not as "no". `code_version` names the code that ran the
+fit, in a self-describing form: `git:<sha>` or `git:<sha>-dirty` from a
+checkout, `version:<v>` from an installed package. It is null on every
+back-filled record --- none of those fits recorded the repo state they ran
+against, and a sha inferred from the date would be a guess dressed as
+provenance.
+`backfill_basis` appears only on reconstructed records.
 
 ## Derivation
 
@@ -94,8 +113,8 @@ Written 2026-08-14. `*` canonical, `!` counterfactual.
 
 | ortho | zero_expansion | stage | storage | reporter |
 |---|---|---|---|---|
-| `shendure_obs_nb_phantom` * | preexisting | data_prep | materialized | barcode / in_table |
-| `shendure_obs_zinb_phantom` | preexisting | data_prep | materialized | barcode / in_table |
+| `shendure_obs_nb` * | preexisting | data_prep | materialized | barcode / in_table |
+| `shendure_obs_zinb` | preexisting | data_prep | materialized | barcode / in_table |
 | `shendure_cm_{nb,zinb}_phantom` | all_combinations | fit_time | phantom | none / absent |
 | `shendure_cm_moib_nb_phantom` | all_combinations_moi | fit_time | phantom | none / absent |
 | `cohen_obsingle_nb_phantom` * | per_delivery | fit_time | phantom | element / separate_table |
@@ -139,7 +158,7 @@ the script reports them as skipped rather than passing over them silently.
   zero per delivery. Added 2026-04-06 in `248f5df` ("+single zero for coarse"),
   with `"coarse"` made the default to preserve the prior behaviour. `fit_mode`
   arrived 2026-04-05 (`1c3fb7b`), `consider_missing` 2026-03-10 (`e1d0ed1`).
-  `shendure_obs_nb_phantom` was fit 2026-04-03, before any of the tags --- which
+  `shendure_obs_nb` was fit 2026-04-03, before any of the tags --- which
   is why its design dicts carry `fit_mode=None`.
 - `fit_mode` cannot distinguish `obs` from `obsingle` (both `obs_phantom`);
   only `reporter_expansion` does, and it is absent from the CM design dicts.
@@ -147,12 +166,10 @@ the script reports them as skipped rather than passing over them silently.
   untagged orthos from training-data properties. The inference is correct; it
   just describes implementation, not the modelling choice.
 
-## Open
+## Naming
 
-- `shendure_obs_nb_phantom` is provably `zero_storage: materialized`, so
-  `_phantom` in its name is false. Renaming is a migration, not a `mv`: the
-  name appears in the manuscript Methods as a canonical preset name, in
-  `scMPRAforge/presets/*.tgz` filenames, and across analysis scripts. Cheap
-  before 1.0, expensive after.
-- Whether `zero_expansion` should be written by new fits directly (a
-  `standard_fit` parameter), so `backfilled` is only ever true for these 19.
+An ortho's name carries its dataset, its expansion and its count family.
+`_phantom` records that the zeros were compressed into design-row weights, so
+it belongs only on orthos whose `zero_storage` is `phantom_compressed`. The
+four fits whose zeros arrived in the input --- `shendure_obs_{nb,zinb}` and
+`takeshi_obs_{nb,zinb}` --- carry no such suffix.

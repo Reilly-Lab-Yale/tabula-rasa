@@ -50,7 +50,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 SIM_DATE = "2026-04-10"
 SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_shendure_pw"
 
-ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb_phantom"
+ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
 

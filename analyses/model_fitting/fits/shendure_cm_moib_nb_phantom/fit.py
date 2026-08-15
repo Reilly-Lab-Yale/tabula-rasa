@@ -4,7 +4,7 @@ Shendure CM MOIB fit -- consider_missing with MOI-based phantom zero
 downweighting. Subtracts structural zeros (from incomplete transfection)
 so the NB mu reflects the conditional rate (given transfection).
 
-Validation test: compare mu to shendure_obs_nb_phantom (should converge).
+Validation test: compare mu to shendure_obs_nb (should converge).
 """
 import sys, time, os, subprocess
 sys.path.insert(0, '/nfs/roberts/project/pi_skr2/mcn26/tabula-rasa')

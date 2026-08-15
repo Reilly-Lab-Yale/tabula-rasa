@@ -1,0 +1,216 @@
+================================================================================
+  SLURM Run Statistics Report
+  Generated : 2026-04-06T10:58:18.557450
+  Directory : /nfs/roberts/project/pi_skr2/mcn26/tabula-rasa-takeshi/notebooks/object_creation/orthos/takeshi_obs_zinb
+  Main jobs : 7356095
+  Workers   : none
+================================================================================
+
+================================================================================
+  Job 7356095  [MAIN]
+================================================================================
+
+
+── jobstats — human-readable (avg/peak utilization) ──────────────────────────
+
+================================================================================
+                              Slurm Job Statistics                              
+================================================================================
+         Job ID: 7356095
+   User/Account: mcn26/prio_skr2
+       Job Name: tak_obs_zinb
+          State: COMPLETED
+          Nodes: 1
+      CPU Cores: 4
+     CPU Memory: 64GB (16GB per CPU-core)
+  QOS/Partition: prio_skr2/priority
+        Cluster: bouchet
+     Start Time: Mon Apr 6, 2026 at 10:44 AM
+       Run Time: 00:12:52
+     Time Limit: 12:00:00
+
+                              Overall Utilization                               
+================================================================================
+  CPU utilization  [|||||||||||||||||||||||                        47%]
+  CPU memory usage [||                                              4%]
+
+                              Detailed Utilization                              
+================================================================================
+  CPU utilization per node (CPU time used/run time)
+      a1130u07n04: 00:24:37/00:51:28 (efficiency=47.9%)
+
+  CPU memory usage per node - used/allocated
+      a1130u07n04: 2.3GB/64GB (588.7MB/16GB per core of 4)
+
+                                     Notes                                      
+================================================================================
+  * The overall CPU utilization of this job is 47.9%. This value is low
+    compared to the target range of 90% and above. Please investigate the
+    reason for the low efficiency. For instance, have you conducted a scaling
+    analysis? For more info:
+      https://ood-bouchet.ycrc.yale.edu/pun/sys/ycrc_userportal/jobefficiency/7356095
+
+  * Have a nice day!
+
+
+
+
+── jobstats — JSON ───────────────────────────────────────────────────────────
+{
+  "gpus": 0,
+  "nodes": {
+    "a1130u07n04": {
+      "cpus": 4,
+      "total_memory": 68719476736,
+      "total_time": 1477.9,
+      "used_memory": 2469068800
+    }
+  },
+  "total_time": 772
+}
+
+── sacct — full accounting record ────────────────────────────────────────────
+Fields: JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+JobID|JobName|State|Partition|Account|QOS|Cluster|NodeList|NNodes|AllocCPUS|ReqMem|Submit|Start|End|Elapsed|Timelimit|TotalCPU|UserCPU|SystemCPU|CPUTime|MaxRSS|AveRSS|MaxVMSize|AveVMSize|MaxDiskRead|MaxDiskWrite|AveDiskRead|AveDiskWrite|NTasks|ExitCode
+7356095|tak_obs_zinb|COMPLETED|priority|prio_skr2|prio_skr2|bouchet|a1130u07n04|1|4|64G|2026-04-06T10:42:08|2026-04-06T10:44:31|2026-04-06T10:57:23|00:12:52|12:00:00|24:41.320|23:49.827|00:51.493|00:51:28||||||||||0:0
+7356095.batch|batch|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|4||2026-04-06T10:44:31|2026-04-06T10:44:31|2026-04-06T10:57:23|00:12:52||24:41.319|23:49.826|00:51.493|00:51:28|2663032K|2663032K|2551768K|2551768K|174.69M|3.08M|174.69M|3.08M|1|0:0
+7356095.extern|extern|COMPLETED||prio_skr2||bouchet|a1130u07n04|1|4||2026-04-06T10:44:31|2026-04-06T10:44:31|2026-04-06T10:57:23|00:12:52||00:00:00|00:00:00|00:00:00|00:51:28|0|0|0|0|0.00M|0.00M|0.00M|0.00M|1|0:0
+
+
+================================================================================
+  Node Hardware (scontrol show node)
+================================================================================
+
+
+── a1130u07n04 ───────────────────────────────────────────────────────────────
+NodeName=a1130u07n04 Arch=x86_64 CoresPerSocket=32 
+   CPUAlloc=58 CPUEfctv=64 CPUTot=64 CPULoad=31.84
+   AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   ActiveFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+   Gres=(null)
+   NodeAddr=a1130u07n04 NodeHostName=a1130u07n04 Version=24.11.7
+   OS=Linux 4.18.0-553.87.1.el8_10.x86_64 #1 SMP Tue Nov 25 00:57:14 EST 2025 
+   RealMemory=1014783 AllocMem=775200 FreeMem=203224 Sockets=2 Boards=1
+   State=MIXED+PLANNED ThreadsPerCore=1 TmpDisk=0 Weight=11002 Owner=N/A MCS_label=N/A
+   Partitions=priority,day,scavenge 
+   BootTime=2025-12-30T12:27:20 SlurmdStartTime=2026-04-02T16:30:00
+   LastBusyTime=2026-03-24T11:02:40 ResumeAfterTime=None
+   CfgTRES=cpu=64,mem=1014783M,billing=66
+   AllocTRES=cpu=58,mem=775200M
+   CurrentWatts=840 AveWatts=634
+   
+
+
+
+================================================================================
+  Log File Snapshots
+================================================================================
+
+
+── slurm-7356095.err  (193 lines total) ──────────────────────────────────────
+[first 20 lines]
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775486681.515635   35536 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1775486688.024960   35536 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/node.py:188: UserWarning: Port 8787 is already in use.
+Perhaps you already have a cluster running?
+Hosting the HTTP server on port 43551 instead
+  warnings.warn(
+2026-04-06 10:44:53,826 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3795b77a5c38285875135291347e84d0 initialized by task ('shuffle-transfer-3795b77a5c38285875135291347e84d0', 0) executed on worker inproc://10.18.22.17/35536/4
+2026-04-06 10:44:53,851 - distributed.shuffle._scheduler_plugin - WARNING - Shuffle 3795b77a5c38285875135291347e84d0 deactivated due to stimulus 'task-finished-1775486693.851333'
+scMPRAforge: INFO: Dropped 105 of 489 (cell_type, cre_id) combos with fewer than 3 nonzero entries.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 26.72 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+[last 50 lines]
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'K562'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+scMPRAforge: WARNING: No explicit reference level for 'cell_type' in this subset. Falling back to most frequent level 'HepG2'. Contrasts are NOT comparable to models with the canonical reference.
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 76.82 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 68.24 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+/home/mcn26/.conda/envs/tz/lib/python3.11/site-packages/distributed/client.py:3398: UserWarning: Sending large graph of size 45.53 MiB.
+This may cause some slowdown.
+Consider loading the data with Dask directly
+ or using futures or delayed objects to embed the data into the graph without repetition.
+See also https://docs.dask.org/en/stable/best-practices.html#load-data-with-dask for more information.
+  warnings.warn(
+scMPRAforge: INFO: MoM for 'K562': median P(X=0|NB) from non-zero data = 0.2430
+scMPRAforge: INFO: MoM for 'K562': NB naturally explains zeros (P(X=0|NB)=0.243 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'HepG2': median P(X=0|NB) from non-zero data = 0.2135
+scMPRAforge: INFO: MoM for 'HepG2': NB naturally explains zeros (P(X=0|NB)=0.214 > 0.05); ZI poorly identified, falling back to NB init.
+scMPRAforge: INFO: MoM for 'SKNSH': median P(X=0|NB) from non-zero data = 0.2618
+scMPRAforge: INFO: MoM for 'SKNSH': NB naturally explains zeros (P(X=0|NB)=0.262 > 0.05); ZI poorly identified, falling back to NB init.
+
+── slurm-7356095.out  (30 lines total) ───────────────────────────────────────
+[first 20 lines]
+Setting up Dask local cluster...
+Dashboard: http://10.18.22.17:43551/status
+Loading takeshi data...
+Data loaded and filtered.
+
+Fitting by_cre...
+by_cre done in 5.6s
+
+Fitting by_cell_type...
+by_cell_type done in 487.8s
+
+Total fit time: 496.0s (8.3min)
+Extracting parameters...
+Saving to /nfs/roberts/project/pi_skr2/shared/tabula_data_new/takeshi/takeshi_obs_zinb...
+Saved.
+
+Total wall time: 496.0s (8.3min)
+
+sacct:
+JobID|State|Elapsed|MaxRSS|AveRSS|AllocCPUS|ReqMem
+[last 10 lines]
+7356095|RUNNING|00:12:48|||4|64G
+7356095.batch|RUNNING|00:12:48|||4|
+7356095.extern|RUNNING|00:12:48|||4|
+
+  NodeName=a1130u07n04
+  CPUTot=64
+  RealMemory=1014783
+  AvailableFeatures=cpugen:emeraldrapids,cpumodel:8562Y+,common:yes
+
+Done.

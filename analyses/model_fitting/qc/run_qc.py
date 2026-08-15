@@ -3,7 +3,7 @@
 Generic ortho QC script.
 
 Usage:
-    ipython run_qc.py -- --dataset shendure --ortho shendure_obs_nb_phantom
+    ipython run_qc.py -- --dataset shendure --ortho shendure_obs_nb
     ipython run_qc.py -- --dataset cohen --ortho cohen_cm_zinb_phantom_20260401
     ipython run_qc.py -- --dataset seelig --ortho seelig_cm_nb_phantom
 

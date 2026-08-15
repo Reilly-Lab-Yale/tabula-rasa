@@ -11,7 +11,7 @@ Generates the manuscript's worked-example figure: per-fit
 directions, ten by-cell-type fits shown individually and 208 by-CRE fits as a
 distribution. Positive favours NB.
 
-Reads the saved orthos directly (`shendure_obs_nb_phantom` and its zinb
+Reads the saved orthos directly (`shendure_obs_nb` and its zinb
 counterpart) with a tolerant unpickler, so it needs neither `scMPRAforge` nor
 a refit -- only the recorded per-fit scalars.
 

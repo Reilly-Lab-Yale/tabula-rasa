@@ -46,9 +46,47 @@ from enum import Enum
 from typing import List, Dict, Sequence, Tuple, Optional
 
 from dataclasses import dataclass, replace
+
 import json
 import tarfile
 import tempfile
+import subprocess
+import sys
+
+from . import ortho_meta
+
+
+def _code_version():
+    """
+    Provenance for the code that produced a fit, self-describing so a reader
+    years later needs no convention: `git:<sha>`, `git:<sha>-dirty`, or
+    `version:<v>` for an installed package. None if neither is available.
+
+    Run from a checkout, git is the better answer, but only once we have
+    confirmed the repository git reports is actually this package's. A package
+    installed into a virtualenv that happens to sit inside an unrelated
+    repository would otherwise report that repository's HEAD -- provenance for
+    the wrong tree, which is worse than reporting none at all.
+    """
+    here = Path(__file__).resolve().parent
+    try:
+        top = subprocess.run(["git", "-C", str(here), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        if (Path(top) / here.name / "core.py").resolve() == Path(__file__).resolve():
+            sha = subprocess.run(["git", "-C", str(here), "rev-parse", "HEAD"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+            # Scoped to the package directory: the fit script is recorded
+            # separately, and an unrelated dirty file elsewhere in the repo
+            # says nothing about the code that ran.
+            dirty = subprocess.run(["git", "-C", str(here), "status",
+                                    "--porcelain", "--", str(here)],
+                                   capture_output=True, text=True).stdout.strip()
+            return f"git:{sha}-dirty" if dirty else f"git:{sha}"
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        pass
+    # Read lazily: __init__ sets __version__ after importing this module.
+    version = getattr(sys.modules.get(__package__), "__version__", None)
+    return f"version:{version}" if version else None
 
 from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, roc_auc_score, confusion_matrix
 
@@ -1233,8 +1271,8 @@ class Bounds:
 from pathlib import Path
 
 working_dir = Path(__file__).resolve().parent
-SHENDURE_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_zinb_phantom.tgz")
-SHENDURE_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_nb_phantom.tgz")
+SHENDURE_OBS_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_zinb.tgz")
+SHENDURE_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_obs_nb.tgz")
 SHENDURE_CM_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_cm_zinb_phantom.tgz")
 SHENDURE_CM_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/shendure_cm_nb_phantom.tgz")
 SHENDURE_BOUNDS=SHENDURE_OBS_NB_BOUNDS
@@ -1253,7 +1291,7 @@ SEELIG_CM_MOIB_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_nb_
 SEELIG_CM_MOIB_ZINB_BOUNDS=Bounds.from_tgz(working_dir/"presets/seelig_cm_moib_zinb_phantom.tgz")
 SEELIG_BOUNDS=SEELIG_CM_MOIB_NB_BOUNDS
 
-TAKESHI_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/takeshi_obs_nb_phantom.tgz")
+TAKESHI_OBS_NB_BOUNDS=Bounds.from_tgz(working_dir/"presets/takeshi_obs_nb.tgz")
 # No canonical alias for takeshi yet.
 # TAKESHI_BOUNDS=TAKESHI_OBS_NB_BOUNDS
 
@@ -3028,6 +3066,49 @@ class ortho:
 
         self.wald_precomp = None  # WaldPrecomp or None
 
+        self.meta = None  # ortho_meta record, set by the first fit
+
+    def _record_fit_provenance(self, dat, nb_only, phantom_compress,
+                               reporter_expansion, moi_correct_cm):
+        """
+        Build the ortho_meta record from the fitting call, for save() to write.
+
+        Both stratification directions record, and must agree: fitting them
+        under different zero expansions would make the two families describe
+        different data, which the cross-family comparison assumes they do not.
+        """
+        rec = ortho_meta.classify(
+            consider_missing=bool(getattr(dat, "consider_missing_enabled", False)),
+            moi_correct_cm=moi_correct_cm,
+            phantom_compress=phantom_compress,
+            coarse_reporter=getattr(dat, "_coarse_reporter", None) is not None,
+            reporter_expansion=reporter_expansion,
+            nb_only=nb_only,
+        )
+        source = getattr(dat, "source", None)
+        rec.update({
+            "dataset": Path(source).parent.name if source else None,
+            "source_table": Path(source).name if source else None,
+            # Decided after QC, from the *_BOUNDS aliases below; null until the
+            # metadata pass reads them.
+            "canonical": None,
+            "source_has_zero_rows": None,
+            "fitted_at": time.strftime("%Y-%m-%d"),
+            "fitted_at_basis": "recorded at fit time",
+            "code_version": _code_version(),
+            "backfilled": False,
+        })
+        ortho_meta.validate(rec)
+
+        prior = getattr(self, "meta", None)
+        if prior is not None and prior != rec:
+            differing = sorted(k for k in rec if prior.get(k) != rec.get(k))
+            assert differing == ["fitted_at"], (
+                "by_cre and by_cell_type were fit under different settings: "
+                f"{ {k: (prior.get(k), rec.get(k)) for k in differing} }")
+            return  # same fit, one direction finished after midnight
+        self.meta = rec
+
     def save(self,path,name,client=None,strip_training_data=False):
         """
         Simple pickle save.
@@ -3104,6 +3185,15 @@ class ortho:
         else:
             simple_write(None,"training_data.pkl")
 
+        ## what this fit modelled, and how (see ortho_meta)
+        # Only a fit knows its own settings; an ortho that was loaded and
+        # re-saved carries the record it was loaded with, and one from before
+        # the sidecar existed carries none. Neither should overwrite what is
+        # already on disk.
+        meta = getattr(self, "meta", None)   # absent on orthos unpickled directly
+        if meta is not None:
+            ortho_meta.write(full_path, meta)
+
     @classmethod
     def load(cls,client,path,name):
         """
@@ -3166,6 +3256,10 @@ class ortho:
             wp = None
         setattr(ret_ortho, "wald_precomp", wp)
 
+        ## what this fit modelled, and how. Absent on orthos saved before the
+        ## sidecar existed, until backfill_ortho_meta.py has run over them.
+        ret_ortho.meta = ortho_meta.load(full_path, missing_ok=True)
+
         return ret_ortho
 
     
@@ -3190,6 +3284,8 @@ class ortho:
                                                      reporter_expansion=reporter_expansion,
                                                      moi_correct_cm=moi_correct_cm)
         self.by_cre.label_regressors(client,self.by_cre_design)
+        self._record_fit_provenance(dat,nb_only,phantom_compress,
+                                    reporter_expansion,moi_correct_cm)
 
 
     def fit_by_cell_type_models(self,client,dat=None,disable_mom=False,fit_resources={},pre_fit_hook=None,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):
@@ -3205,6 +3301,8 @@ class ortho:
                                                         reporter_expansion=reporter_expansion,
                                                         moi_correct_cm=moi_correct_cm)
         self.by_cell_type.label_regressors(client,self.by_cell_type_design)
+        self._record_fit_provenance(dat,nb_only,phantom_compress,
+                                    reporter_expansion,moi_correct_cm)
 
 
     def criss_cross(self,client,dat,disable_mom=False,gpu=False,nb_only=False,phantom_compress=False,reporter_expansion="coarse",moi_correct_cm=False):

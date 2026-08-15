@@ -30,7 +30,7 @@ plt.rcParams["svg.fonttype"] = "none"
 BASE = Path(__file__).parent
 OUT = BASE / "output"
 DATA = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new/shendure")
-NB, ZINB = DATA / "shendure_obs_nb_phantom", DATA / "shendure_obs_zinb_phantom"
+NB, ZINB = DATA / "shendure_obs_nb", DATA / "shendure_obs_zinb"
 
 BLUE, ORANGE = "#0072b2", "#d55e00"     # Okabe-Ito (house palette)
 INK, MUTED = "#1a1a1a", "#6b6b6b"

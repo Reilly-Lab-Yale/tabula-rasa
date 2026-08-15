@@ -49,8 +49,8 @@ BENCHMARKS = [
     # (dataset_dir, ortho_name, label)
     ("cohen", "cohen_obs_nb_phantom_20260401", "cohen_obs_nb"),
     ("cohen", "cohen_obs_zinb_phantom_20260401", "cohen_obs_zinb"),
-    ("shendure", "shendure_obs_nb_phantom", "shendure_obs_nb"),
-    ("shendure", "shendure_obs_zinb_phantom", "shendure_obs_zinb"),
+    ("shendure", "shendure_obs_nb", "shendure_obs_nb"),
+    ("shendure", "shendure_obs_zinb", "shendure_obs_zinb"),
     ("seelig", "seelig_cm_nb_phantom", "seelig_cm_nb"),
     ("seelig", "seelig_cm_zinb_phantom", "seelig_cm_zinb"),
 ]

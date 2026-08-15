@@ -40,7 +40,7 @@ REPORTER_EXPANSIONS = {"obs", "obsingle"}  # phantom-zero is "cm"
 # dir (only the zinb variant / non-moib nb exist); fall back to the nearest NB
 # fit and flag it.
 CANONICAL = {
-    "shendure": "shendure_obs_nb_phantom",
+    "shendure": "shendure_obs_nb",
     "cohen": "cohen_obsingle_nb_phantom",
     "seelig": "seelig_cm_moib_nb_phantom",
 }

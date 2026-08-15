@@ -43,7 +43,7 @@ BLUE, ORANGE, GREEN, MUTED = "#0072b2", "#d55e00", "#009e73", "#6b6b6b"
 INK = "#1a1a1a"
 
 CANONICAL = {
-    "shendure_obs_nb_phantom",
+    "shendure_obs_nb",
     "cohen_obsingle_nb_phantom",
     "seelig_cm_moib_nb_phantom",
 }

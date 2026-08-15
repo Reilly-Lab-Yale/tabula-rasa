@@ -1,0 +1,22 @@
+========================================================================
+  takeshi_obs_nb -- Model QC Summary
+  Model type: NB-only
+========================================================================
+
+-- Convergence ---------------------------------------------------------
+
+  by_cell_type: 3/3 converged
+  by_cre: 150/150 converged
+
+-- Mu range (NB mean estimate) -----------------------------------------
+
+  by_cell_type: min=0.0016  max=1.5793  median=0.0371
+  by_cre: min=0.0016  max=1.5837  median=0.0372
+
+-- Pearson r (mu vs mean UMI) ------------------------------------------
+
+  by_cell_type: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=0
+    NaN anti-levels dropped before regression: 0/380 across all models
+  by_cre: mean r=1.000  min=1.000  max=1.000  n(r<0.8)=0  n_nan_r=25
+    NaN anti-levels dropped before regression: 0/380 across all models
+

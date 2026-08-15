@@ -80,7 +80,7 @@ ARMS = [
 # Load per-cell-type n_cres from the canonical phantom ortho parameters
 # (avoids loading the full ortho object, which has lazy file references to the
 # training data).
-ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb_phantom"
+ORTHO_DIR = DATA_ROOT / "shendure" / "shendure_obs_nb"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
 

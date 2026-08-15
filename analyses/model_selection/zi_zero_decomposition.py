@@ -33,8 +33,8 @@ OUT_DIR = Path(__file__).resolve().parent
 
 datasets = {
     "Shendure (obs)": {
-        "nb":   data_root / "shendure" / "shendure_obs_nb_phantom",
-        "zinb": data_root / "shendure" / "shendure_obs_zinb_phantom",
+        "nb":   data_root / "shendure" / "shendure_obs_nb",
+        "zinb": data_root / "shendure" / "shendure_obs_zinb",
         "dir":  "shendure",
     },
     "Shendure (CM)": {
@@ -43,8 +43,8 @@ datasets = {
         "dir":  "shendure",
     },
     "Takeshi (obs)": {
-        "nb":   data_root / "takeshi" / "takeshi_obs_nb_phantom",
-        "zinb": data_root / "takeshi" / "takeshi_obs_zinb_phantom",
+        "nb":   data_root / "takeshi" / "takeshi_obs_nb",
+        "zinb": data_root / "takeshi" / "takeshi_obs_zinb",
         "dir":  "takeshi",
     },
     "Takeshi (CM)": {

@@ -66,7 +66,7 @@ Simulations live at
 
 ## Bounds
 
-Used `scm.TAKESHI_BOUNDS` (canonical = `takeshi_obs_nb_phantom`).
+Used `scm.TAKESHI_BOUNDS` (canonical = `takeshi_obs_nb`).
 - minP (`reference_activity`) = 0.011637
 - min activity = 0.001582 (`min_mpra_umi`)
 - max activity = 4 * minP = 0.046547
