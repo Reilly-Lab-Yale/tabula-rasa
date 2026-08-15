@@ -61,7 +61,7 @@ def main():
         ax.axvline(med, color=color, ls=(0, (4, 3)), lw=1.1, zorder=4)
         # Above the taller of the two distributions, so the two annotations
         # cannot land on each other.
-        ax.annotate(f"{label}\nmedian {med:.4g}", (med, 1.0),
+        ax.annotate(f"{label}\nmedian {med:.2g}", (med, 1.0),
                     xycoords=("data", "axes fraction"),
                     xytext=(0, 4), textcoords="offset points",
                     ha="center", va="bottom", fontsize=7.5, color=color)

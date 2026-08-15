@@ -63,7 +63,7 @@ def main():
     # Stacked, not side by side: seven labels of this length need the full
     # width to be read, and stacking means one label block instead of two.
     fig, axes = plt.subplots(
-        2, 1, figsize=(DISPLAY_WIDTH_IN, 5.6), sharex=True)
+        2, 1, figsize=(DISPLAY_WIDTH_IN, 4.15), sharex=True)
 
     for ax, (direction, title) in zip(axes, PANELS):
         sub = d[d.direction == direction]
@@ -97,13 +97,10 @@ def main():
             ax.spines[side].set_color("#d9d9d9")
             ax.spines[side].set_linewidth(0.8)
 
-        # Placed in axes coordinates: on a symlog scale the zero line is not
-        # at the middle of the data range, and it sits differently in each.
-        zero = ax.transLimits.transform((0, 0))[1]
-        for label, frac in (("NB preferred", (zero + 1) / 2),
-                            ("ZINB preferred", zero / 2)):
-            ax.text(1.012, frac, label, transform=ax.transAxes, rotation=90,
-                    ha="left", va="center", fontsize=7.5, color=MUTED)
+        # No "NB preferred" / "ZINB preferred" flags down the right edge: the
+        # y-axis label already gives the quantity and its sign, and two
+        # rotated labels do not fit beside a panel this short without meeting
+        # in the middle. Fig 1B, which is taller, still carries them.
 
     fig.supylabel(r"$\Delta$AIC per fit (ZINB $-$ NB)", fontsize=9.5, color=INK,
                   x=0.005)
