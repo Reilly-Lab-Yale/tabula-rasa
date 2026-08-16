@@ -359,3 +359,48 @@ Ideas that are out of scope for v1 but worth recording for a future version.
   and use cell-type-specific P(transfected) when computing phantom zero weights
   in `_cm_group_totals`. Would require parameterizing `moi_correction` as a
   dict keyed by cell_type rather than a single scalar.
+
+- **Formal treatment of zero-inflation uptake.** We now measure how much of an
+  expansion's asserted structural zeros the fitted inflation parameter actually
+  takes on -- "uptake", the fitted pi over the value implied if every added
+  zero were structural, `(pi_base*T_base + delta_zeros)/T_flooded`. Empirically
+  it is 44% (Zhao, coarse and CM), 61% (Lalanne, CM) and 1% (Yin, CM). We
+  report the numbers but cannot say what sets them, and the manuscript is
+  deliberately silent on the mechanism. A proper treatment would need to:
+
+  1. Establish the factorization. In a saturated ZINB the nonzero counts follow
+     a zero-truncated NB that does not involve pi, so (mu, theta) are fixed by
+     the nonzero data and pi then solves `z = pi + (1-pi)*p0(mu, theta)`, i.e.
+     `pi = (z - p0)/(1 - p0)`. Under that two-step, uptake should approach 1 as
+     z approaches 1, which is *not* what we see -- so the first job is to show
+     where the factorization fails.
+  2. Show how the stratified design breaks it. mu is per element, pi is per
+     replicate and theta is shared along one axis, so mu is no longer pinned by
+     the nonzero counts alone and a ridge opens up: many (pi, mu) pairs give the
+     same P(0). Lalanne CM sits on that ridge with pi=0.61 and a count
+     component still producing p0=0.9995.
+  3. Compute the effective (profile) Fisher information for pi after
+     eliminating mu and theta. The leading term goes as
+     `T*(1-p0)^2 / [P(0)*(1-P(0))]`, which vanishes as p0 -> 1: the precise
+     sense in which a count component that can explain the zeros by itself
+     leaves nothing to estimate pi with.
+  4. Handle the boundary. pi is constrained to [0,1] and Yin sits against 0, so
+     the LRT null is a 50:50 mixture of chi2_0 and chi2_1 rather than chi2_1.
+     This is why lambda comes out at ~0 and slightly negative rather than
+     symmetric noise, and any formal claim about "no preference for ZINB" needs
+     the mixture null.
+  5. Carry the weights. Phantom compression makes this a weighted likelihood,
+     and MOIB adds a known offset, so the information calculus is not the
+     textbook unweighted one.
+
+  The payoff is a design criterion: given cells, barcodes, MOI and an expected
+  expression level, predict the uptake a design would achieve, and so whether
+  ZINB is worth fitting at all. It is also checkable against data we already
+  have -- predict uptake from the zero-truncated fits and compare to the
+  measured 44/44/61/1%. Note that our own attempt to predict uptake from
+  summary statistics failed: across four datasets it tracks neither mean
+  nonzero count nor detection breadth (Zhao has the lowest counts of the four
+  and 44% uptake; Yin and Takeshi have higher counts and ~1%), and within
+  Lalanne CM the apparent expression effect is entirely explained by detection
+  breadth. That is the evidence that a formal account, not another covariate,
+  is what is missing.
