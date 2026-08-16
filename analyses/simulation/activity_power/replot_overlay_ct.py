@@ -16,16 +16,20 @@ REFERENCE_NAMES = {
     "takeshi": "HepG2",
 }
 
+# The reporter/deflated pair is MWU. Measuring the reporter's power benefit
+# with the t-test confounds it: the t-test over-rejects in exactly the deflated
+# condition, so part of the apparent benefit is that miscalibration rather than
+# the reporter. The 2026-08-13 run added the MWU arms for this reason -- see the
+# ARMS comment in shendure/shendure_power_ttest_all_cell_types.py.
+# Yin et al. is still t-test: no MWU arm has been run on its power sims.
 DATASETS = {
     "cohen": [
-        ("reporter", "cohen/output/cohen_power_df_reporter.parquet"),
-        ("deflated", "cohen/output/cohen_power_df_deflated.parquet"),
-        ("mwu", "cohen/output/cohen_power_df.parquet"),
+        ("reporter", "output/cohen_power_df_2026-08-13_mwu.parquet"),
+        ("deflated", "output/cohen_power_df_2026-08-13_mwu_deflated.parquet"),
     ],
     "shendure": [
-        ("reporter", "shendure/output/power_df_reporter.parquet"),
-        ("deflated", "shendure/output/power_df_deflated.parquet"),
-        ("mwu", "shendure/output/power_df.parquet"),
+        ("reporter", "shendure/output/power_df_mwu_2026-08-13.parquet"),
+        ("deflated", "shendure/output/power_df_mwu_deflated_2026-08-13.parquet"),
     ],
     "seelig": [
         ("deflated", "seelig/output/seelig_power_df_deflated.parquet"),

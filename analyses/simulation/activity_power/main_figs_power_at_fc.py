@@ -46,16 +46,22 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 OUT_DIR = SCRIPT_DIR / "output"
 OUT_DIR.mkdir(exist_ok=True)
 
+# The reporter/deflated pair is MWU. Measuring the reporter's power benefit
+# with the t-test confounds it: the t-test over-rejects in exactly the deflated
+# condition, so part of the apparent benefit is that miscalibration rather than
+# the reporter. The 2026-08-13 run added the MWU arms for this reason -- see the
+# ARMS comment in shendure/shendure_power_ttest_all_cell_types.py.
+# Yin et al. is still t-test: no MWU arm has been run on its power sims.
 DATASETS = {
     "cohen": {
-        "reporter": SCRIPT_DIR / "cohen/output/cohen_power_df_reporter.parquet",
-        "deflated": SCRIPT_DIR / "cohen/output/cohen_power_df_deflated.parquet",
+        "reporter": SCRIPT_DIR / "output/cohen_power_df_2026-08-13_mwu.parquet",
+        "deflated": SCRIPT_DIR / "output/cohen_power_df_2026-08-13_mwu_deflated.parquet",
         "ref_display": "Rod",
         "title": "Cohen (episomal, CRE-reporter)",
     },
     "shendure": {
-        "reporter": SCRIPT_DIR / "shendure/output/power_df_reporter.parquet",
-        "deflated": SCRIPT_DIR / "shendure/output/power_df_deflated.parquet",
+        "reporter": SCRIPT_DIR / "shendure/output/power_df_mwu_2026-08-13.parquet",
+        "deflated": SCRIPT_DIR / "shendure/output/power_df_mwu_deflated_2026-08-13.parquet",
         "ref_display": "Pluripotent",
         "title": "Shendure (piggyBac, oBC reporter)",
     },
