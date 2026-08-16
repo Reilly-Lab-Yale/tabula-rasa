@@ -1,0 +1,8 @@
+dataset	regime	ortho	zero_expansion	n_zeros	n_total	zero_fraction
+cohen	fine	cohen_obsingle_zinb_phantom	per_delivery	463009	3651562	0.1267975184318382
+cohen	coarse	cohen_obs_zinb_phantom_20260401	per_barcode	7501702202	7504890755	0.9995751366536714
+cohen	consider missing	cohen_cm_zinb_phantom_20260401	all_combinations	21080212059	21083400612	0.9998487647671892
+shendure	observed	shendure_obs_zinb	preexisting	653701	781460	0.8365124254600363
+shendure	consider missing	shendure_cm_zinb_phantom	all_combinations	652505086	652632845	0.9998042406216929
+seelig	consider missing + MOI	seelig_cm_moib_zinb_phantom	all_combinations_moi	369879	1130314	0.327235617713308
+seelig	consider missing	seelig_cm_zinb_phantom	all_combinations	67932621	68693056	0.9889299582187754
