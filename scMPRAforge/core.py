@@ -1566,8 +1566,14 @@ class scMPRA_data:
             return
         
         groupby_columns=list(set(self.data.columns)-{"umis_mpra_bc"})
-        
-        self.data= self.data.groupby(groupby_columns).agg("sum").reset_index()
+
+        umis_in=self.data["umis_mpra_bc"].sum()
+        #dropna=False: a NaN in any key column (e.g. cre_id_original when
+        #set_negative_controls was never called) would otherwise take the row
+        #with it, silently.
+        self.data= self.data.groupby(groupby_columns,dropna=False).agg("sum").reset_index()
+        assert self.data["umis_mpra_bc"].sum()==umis_in, \
+            f"flattening changed total UMIs: {umis_in} -> {self.data['umis_mpra_bc'].sum()}"
         self.operations.append("overtransfection_flattened")
     
     def overtransfected(self, log=True, threshold_pct=WARN_MULTI_TRANSFECTION_PERCENT):
@@ -7284,7 +7290,7 @@ class de_novo_simulation:
         n_sims:int=None,
         experiment_bounds:Bounds=None,
         ground_truth:pd.DataFrame=None,
-        flatten_overtransfection=None,
+        flatten_overtransfection=True,
         negative_controls=["reference"],
         reference_cell_type="reference"
         ):
@@ -7358,23 +7364,28 @@ class de_novo_simulation:
             
             self.futures = pd.DataFrame(index=range(n_sims))
             
-            required = ("libraries", 
+            required = ("libraries",
                         "library_mapping",
                         "n_sims",
                         "experiment_bounds",
-                        "ground_truth",
-                        "flatten_overtransfection")
-                        
-            
+                        "ground_truth")
+
+            #validate before writing: set_state_field saves state.parquet on
+            #every call, so a half-initalized object would persist to disk.
+            if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
+                raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
+
+            if not flatten_overtransfection:
+                logger.warning("flatten_overtransfection disabled: debug-only setting. "
+                               "Simulated data will retain repeat integrations of the same "
+                               "barcode in one cell, which a real experiment cannot resolve.")
+
             #lightweight, just save.
             self.set_state_field("n_sims",n_sims)
             self.set_state_field("reference_cell_type",reference_cell_type)
             self.set_state_field("negative_controls",negative_controls)
             self.set_state_field("alpha",DEFAULT_SIGNIFICANCE_THRESHOLD)
             self.set_state_field("flatten_overtransfection",flatten_overtransfection)
-            
-            if any(x is None for x in [libraries,library_mapping,n_sims,experiment_bounds,ground_truth]):
-                raise ValueError(f"When initalizing a new object, required params include all of: {required}.")
 
             #if `libraries` is a single dataframe, put it in a one-element list. 
             if isinstance(libraries, pd.DataFrame):
@@ -8504,7 +8515,7 @@ def one_library_replicate(root,min,max,client,flatten_overtransfection,bound,n_c
                             client=client,
                             libraries=libraries,
                             library_mapping="corresponding",
-                            flatten_overtransfection=True,
+                            flatten_overtransfection=flatten_overtransfection,
                             n_sims=n_sims,
                             experiment_bounds=bound,
                             ground_truth=gt_df)
