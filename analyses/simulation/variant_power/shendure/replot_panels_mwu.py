@@ -83,7 +83,7 @@ for ct in CELL_TYPES:
         fontsize=10,
     )
     ax.set_xlabel("Baseline activity (mu)", fontsize=9)
-    ax.set_ylabel("log2(FC)", fontsize=9)
+    ax.set_ylabel("|log2 FC|", fontsize=9)
     ax.tick_params(labelsize=7)
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
 
