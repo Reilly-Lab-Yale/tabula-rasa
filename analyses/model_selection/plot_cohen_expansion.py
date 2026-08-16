@@ -43,28 +43,42 @@ SERIES = [
 ]
 
 
-def main():
-    d = pd.read_csv(TSV, sep="\t")
-    missing = {k for k, _, _ in SERIES} - set(d.expansion)
-    assert not missing, f"missing from {TSV.name}: {sorted(missing)}"
-    assert (d.mu > 0).all(), "a fitted mean of zero cannot go on a log axis"
+def draw_mu_hist(ax, series, nbins=46, labels="at-median"):
+    """Overlaid log-x histograms of fitted means, each with its median marked.
 
-    lo, hi = np.log10(d.mu.min()), np.log10(d.mu.max())
-    bins = np.logspace(lo, hi, 46)
+    series: [(values, label, colour), ...]. Shared with plot_cm_family_mu.py so
+    that the panels contrasting expansions and the panels contrasting count
+    families get identical binning and furniture; the only thing that differs
+    between them is which two populations are overlaid.
 
-    fig, ax = plt.subplots(figsize=(DISPLAY_WIDTH_IN, 2.9))
+    labels="at-median" puts each label over its own median line, which reads
+    directly but needs the medians to be far apart. "stacked" puts them in one
+    block at the left instead, for panels whose medians are close enough that
+    the two labels would other otherwise overlap.
+    """
+    allv = np.concatenate([v for v, _, _ in series])
+    assert (allv > 0).all(), "a fitted mean of zero cannot go on a log axis"
+    bins = np.logspace(np.log10(allv.min()), np.log10(allv.max()), nbins)
 
-    for key, label, color in SERIES:
-        v = d.loc[d.expansion == key, "mu"].values
+    for i, (v, label, color) in enumerate(series):
         med = np.median(v)
         ax.hist(v, bins=bins, color=color, alpha=0.65, linewidth=0)
         ax.axvline(med, color=color, ls=(0, (4, 3)), lw=1.1, zorder=4)
-        # Above the taller of the two distributions, so the two annotations
-        # cannot land on each other.
-        ax.annotate(f"{label}\nmedian {med:.2g}", (med, 1.0),
-                    xycoords=("data", "axes fraction"),
-                    xytext=(0, 4), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=7.5, color=color)
+        if labels == "at-median":
+            # Above the taller of the two distributions, so the two
+            # annotations cannot land on each other.
+            ax.annotate(f"{label}\nmedian {med:.2g}", (med, 1.0),
+                        xycoords=("data", "axes fraction"),
+                        xytext=(0, 4), textcoords="offset points",
+                        ha="center", va="bottom", fontsize=7.5, color=color)
+        else:
+            # One line per series, first on top, all left-aligned above the
+            # axes. The colour of the text is what keys the two histograms.
+            ax.annotate(f"{label} median {med:.2g}", (0.0, 1.0),
+                        xycoords="axes fraction",
+                        xytext=(0, 4 + (len(series) - 1 - i) * 10),
+                        textcoords="offset points",
+                        ha="left", va="bottom", fontsize=7.5, color=color)
 
     ax.set_xscale("log")
     ax.set_xlabel("fitted mean, UMI per element", fontsize=9, color=INK)
@@ -76,6 +90,15 @@ def main():
         ax.spines[side].set_color("#d9d9d9")
         ax.spines[side].set_linewidth(0.8)
 
+
+def main():
+    d = pd.read_csv(TSV, sep="\t")
+    missing = {k for k, _, _ in SERIES} - set(d.expansion)
+    assert not missing, f"missing from {TSV.name}: {sorted(missing)}"
+
+    fig, ax = plt.subplots(figsize=(DISPLAY_WIDTH_IN, 2.9))
+    draw_mu_hist(ax, [(d.loc[d.expansion == key, "mu"].values, label, color)
+                      for key, label, color in SERIES])
     fig.tight_layout()
     OUT.mkdir(exist_ok=True)
     for ext in ("svg", "png"):
