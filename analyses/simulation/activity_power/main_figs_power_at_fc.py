@@ -73,20 +73,20 @@ DATASETS = {
         "reporter": SCRIPT_DIR / "output/cohen_power_df_2026-08-13_mwu.parquet",
         "deflated": SCRIPT_DIR / "output/cohen_power_df_2026-08-13_mwu_deflated.parquet",
         "ref_display": "Rod",
-        "title": "Zhao et al. (episomal, CRE reporter)",
+        "title": "Zhao et al.",
         "n_cell_types": 4,
     },
     "shendure": {
         "reporter": SCRIPT_DIR / "shendure/output/power_df_mwu_2026-08-13.parquet",
         "deflated": SCRIPT_DIR / "shendure/output/power_df_mwu_deflated_2026-08-13.parquet",
         "ref_display": "Pluripotent",
-        "title": "Lalanne et al. (piggyBac, oBC reporter)",
+        "title": "Lalanne et al.",
         "n_cell_types": 10,
     },
     "seelig": {
         "deflated": SCRIPT_DIR / "seelig/output/seelig_power_df_deflated.parquet",
         "ref_display": "HepG2",
-        "title": "Yin et al. (episomal, no reporter)",
+        "title": "Yin et al.",
         "n_cell_types": 2,
     },
 }
@@ -583,7 +583,7 @@ def fig_b_slope_discrete(mpows):
         ax.set_ylim(0, 1.02)
         ax.set_yticks([0, 0.5, 1.0], ["0", "0.5", "1"])
         ax.axhline(0.8, color=MUTED, ls="--", lw=0.7, zorder=1)
-        ax.set_title(DATASETS[name]["title"].split(" (")[0], loc="left", color=INK, pad=4)
+        ax.set_title(DATASETS[name]["title"], loc="left", color=INK, pad=4)
         ax.set_xlabel("fold change", color=INK)
         style_axes(ax, grid_axis="y")
 
