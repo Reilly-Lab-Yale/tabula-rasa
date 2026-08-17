@@ -101,6 +101,28 @@ assert MIN_ACTIVITY < MINP < MAX_ACTIVITY, (
 )
 
 
+def _has_all_data(sim_dir):
+    """Whether a sim directory holds a complete set of simulated datasets.
+
+    Resume keys on the data rather than on the test results: the arm loop
+    already skips arms it finds on disk, so a run interrupted partway through
+    testing can pick up its existing sims and compute only the missing arms.
+    Keying on test results instead would discard hours of simulation whenever
+    a run died between arms.
+    """
+    if not (sim_dir / "state.parquet").exists():
+        return False
+    return all(
+        (sim_dir / "simulated_scmpra" / f"{i}.scmpra" / "data.parquet").exists()
+        for i in range(N_SIMS)
+    )
+
+
+def _has_all_arms(sim_dir):
+    arm_dirs = [sim_dir / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
+    return all(p.exists() and any(p.iterdir()) for p in arm_dirs)
+
+
 # ---------------------------------------------------------------------------
 # Phase: simulate -- generate data and run every arm in ARMS
 # ---------------------------------------------------------------------------
@@ -130,21 +152,25 @@ def phase_simulate(client):
         )
         ct_dir = SIM_DIR / cell_type
 
-        # Resume: reload already-complete sims from disk.
-        # A sim is "complete" once every arm in ARMS has results.
+        # Resume: reload every sim whose simulated data is complete.
         sims_ct = []
+        n_untested = 0
         if ct_dir.exists():
             for d in sorted(ct_dir.iterdir()):
-                if not d.is_dir():
+                if not d.is_dir() or not _has_all_data(d):
                     continue
-                arm_dirs = [d / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
-                if all(p.exists() and any(p.iterdir()) for p in arm_dirs):
-                    sims_ct.append(
-                        scm.de_novo_simulation(
-                            location=ct_dir, name=d.name, client=client
-                        )
+                sims_ct.append(
+                    scm.de_novo_simulation(
+                        location=ct_dir, name=d.name, client=client
                     )
-        print(f"  Resumed {len(sims_ct)} complete sims from disk.", flush=True)
+                )
+                if not _has_all_arms(d):
+                    n_untested += 1
+        print(
+            f"  Resumed {len(sims_ct)} sims from disk "
+            f"({n_untested} still missing at least one arm).",
+            flush=True,
+        )
 
         n_remaining = N_LIBRARY_REPS - len(sims_ct)
         print(f"  Running {n_remaining} fresh sims.", flush=True)
@@ -164,8 +190,10 @@ def phase_simulate(client):
             sims_ct.append(sim)
 
         all_sims[cell_type] = sims_ct
-        assert len(sims_ct) == N_LIBRARY_REPS, (
-            f"{cell_type}: expected {N_LIBRARY_REPS} replicates, have "
+        # An interrupted run can leave more sims on disk than requested; extra
+        # replicates only sharpen the estimate, too few means data went missing.
+        assert len(sims_ct) >= N_LIBRARY_REPS, (
+            f"{cell_type}: expected at least {N_LIBRARY_REPS} replicates, have "
             f"{len(sims_ct)}"
         )
         print(f"  {len(sims_ct)} replicates ready.", flush=True)
@@ -226,8 +254,7 @@ def phase_plot(client):
             for d in sorted(ct_dir.iterdir()):
                 if not d.is_dir():
                     continue
-                arm_dirs = [d / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
-                if all(p.exists() and any(p.iterdir()) for p in arm_dirs):
+                if _has_all_arms(d):
                     sims_ct.append(
                         scm.de_novo_simulation(
                             location=ct_dir, name=d.name, client=client
