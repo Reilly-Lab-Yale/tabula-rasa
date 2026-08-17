@@ -335,16 +335,25 @@ def draw_annotations(ax, curve, dataset, condition, color):
                 markeredgecolor="white", markeredgewidth=0.8, zorder=6)
 
 
-def draw_title(fig, dataset, condition, color):
-    """Dataset above, condition below, with a key stub for the curve colour.
+def draw_title(fig, dataset, condition, color, role=None):
+    """Dataset name, plus a condition key on the standalone panels only.
 
     Indented to the left edge of the axes rather than the figure: the
     manuscript overlays a bold panel letter on the top-left corner of the row
     via \\panel{}, and a flush-left title lands under it.
+
+    The manuscript row (``role`` set) carries no condition key. Each of those
+    three panels shows its dataset's only empirical regime -- Lalanne et al.
+    and Zhao et al. ran a transfection reporter, Yin et al. did not -- so the
+    label restates the dataset rather than distinguishing anything. On the
+    standalone panels the condition is a real contrast, a withheld reporter
+    against a used one, and the key stays.
     """
     x = LEFT_IN / FIG_W
     fig.text(x, 1 - 0.11 / FIG_H, DISPLAY_NAME[dataset],
              ha="left", va="center", fontsize=7.5, color=INK)
+    if role is not None:
+        return
     fig.add_artist(Line2D(
         [x, x + 0.085 / FIG_W], [1 - 0.245 / FIG_H] * 2,
         color=color, lw=1.6, solid_capstyle="round",
@@ -394,7 +403,7 @@ def plot_overlay(curve, dataset, condition, out_path):
     if role in (None, "middle"):
         ax.set_xlabel("fold change vs minP", color=INK, labelpad=1)
 
-    draw_title(fig, dataset, condition, color)
+    draw_title(fig, dataset, condition, color, role)
     fig.subplots_adjust(
         left=LEFT_IN / FIG_W, right=1 - RIGHT_IN / FIG_W,
         top=1 - TOP_IN / FIG_H, bottom=BOTTOM_IN / FIG_H,
