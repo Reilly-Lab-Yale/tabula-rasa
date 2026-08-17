@@ -37,13 +37,17 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from synthetic_factorial import (
-    AXIS_NAMES, AXIS_BOUNDS, UNION_AXIS_BOUNDS, EMPIRICAL, EMPIRICAL_COLORS,
+    AXIS_NAMES, UNION_AXIS_BOUNDS, EMPIRICAL, EMPIRICAL_COLORS,
     _loess_band, OUT,
 )
 
 # Union LHS already spans the full box; use it directly as the clamp
 # bracket so anchors that fall inside the union range don't get flagged
-# as out-of-range.
+# as out-of-range. Ranges and log flags must both come from here: the
+# union sweep draws activity_max_mult log-uniformly while AXIS_BOUNDS
+# declares it linear, and smoothing an axis on a scale the samples were
+# not drawn on distorts its marginal. active_bounds() carries the same
+# warning for the binned plots.
 COMBINED_BOUNDS = UNION_AXIS_BOUNDS
 
 METRIC = "power_auc_1to3"
@@ -65,7 +69,7 @@ PAIRS = [
 
 
 def _x_to_plot(axis: str, x):
-    return np.log10(x) if AXIS_BOUNDS[axis][2] else x
+    return np.log10(x) if COMBINED_BOUNDS[axis][2] else x
 
 
 def _clamp(axis: str, x):
@@ -91,7 +95,7 @@ def _knn_predict(df: pd.DataFrame, anchor: dict, k: int = 20) -> float:
             continue
         v_c, _ = _clamp(axis, v)
         x = df[axis].values.astype(float)
-        if AXIS_BOUNDS[axis][2]:
+        if COMBINED_BOUNDS[axis][2]:
             x = np.log10(x)
             vp = np.log10(v_c)
         else:
@@ -213,7 +217,7 @@ def run_pair(df: pd.DataFrame, anchor_a: str, anchor_b: str):
         ax = axes_flat[ax_i]
         x = df[axis].values.astype(float)
         y = df[METRIC].values.astype(float)
-        log_scale = AXIS_BOUNDS[axis][2]
+        log_scale = COMBINED_BOUNDS[axis][2]
         x_plot = np.log10(x) if log_scale else x
         valid = np.isfinite(x_plot) & np.isfinite(y)
         ax.scatter(x_plot[valid], y[valid], s=8, alpha=0.3, color="steelblue")
