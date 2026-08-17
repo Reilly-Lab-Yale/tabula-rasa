@@ -16,15 +16,16 @@ axes at the LHS-drawn value rather than a fixed reference. The empirical
 datasets become predictions of the meta-surface rather than starting points.
 
 Axes and bounds vary by mode (see the *_AXIS_BOUNDS dicts). The canonical
-sweep is `union`: a single 5000-point LHS over the full box below
-(log-uniform unless noted):
-    n_cells              (500 - 50000)   -- shendure max ~8.2k, cohen max ~18.6k
-    n_cres               (50  - 2000)    -- shendure ~207, cohen ~1140
-    bcs_per_cre          (3   - 50000)   -- cohen ~17.2k
-    moi                  (0.5 - 350)     -- takeshi ~266
-    lib_alpha_nb         (0.02 - 2.0)    -- NB2 alpha for library; theta = 1/alpha
-    minP                 (0.003 - 2.0)   -- reference_activity; takeshi ~0.0116
-    activity_max_mult    (1 - 120)       -- log; cohen 1.11, takeshi 37, shendure 99
+sweep is `union`: a single 5000-point LHS over UNION_AXIS_BOUNDS, log-uniform
+on every axis. The box is drawn wide enough to contain the empirical anchors
+in EMPIRICAL, so each dataset is interior to the sweep rather than an
+extrapolation from it. Read bounds and anchor values off those two dicts.
+
+Two axis names need glossing:
+    lib_alpha_nb    NB2 alpha for the library; theta = 1/alpha
+    minP            the reference element's fitted mean, not a promoter
+                    strength -- see the comment on AXIS_DISPLAY
+
 The earlier full/topup/topup3 modes (AXIS_BOUNDS / TOPUP*_AXIS_BOUNDS) were
 exploratory sub-boxes used to calibrate this union box; see methods_sweeps.md.
 
@@ -131,11 +132,10 @@ CELL_TYPE = "reference"
 
 # (low, high, log_scale)
 AXIS_BOUNDS = {
-    # n_cells upper at 50k: cohen-Rod has 18.6k cells, shendure-Pluripotent
-    # 8.2k. 50k gives ~3x headroom over the largest empirical CT without
-    # blowing past the MWU sweet spot (200k caused a >1h MWU stall in pilot).
+    # n_cells upper gives roughly 3x headroom over the largest empirical cell
+    # type without blowing past the MWU sweet spot -- an order of magnitude
+    # higher caused a multi-hour MWU stall in pilot.
     "n_cells":           (5.0e2, 5.0e4, True),
-    # n_cres upper at 2000: cohen 1140, shendure 207.
     "n_cres":            (5.0e1, 2.0e3, True),
     "bcs_per_cre":       (3.0,   5.0e2, True),
     "moi":               (0.5,   3.0e1, True),
@@ -144,12 +144,11 @@ AXIS_BOUNDS = {
     "activity_max_mult": (2.0,   8.0,   False),
 }
 
-# Top-up sweep bounds. The original LHS box left cohen-Rod outside on
-# bcs_per_cre (cohen=17244 vs LHS max 500, 34x past) and moi (cohen=149 vs
-# LHS max 30, 5x past). Top-up draws 100 samples in the previously
-# unexplored high-bcs/high-moi corner. Other axes use the same ranges as
-# the main sweep so the top-up surfaces still combine cleanly with the
-# original samples.
+# Top-up sweep bounds. The original LHS box left the cohen-Rod anchor outside
+# on bcs_per_cre and moi, by more than an order of magnitude on the former.
+# Top-up draws 100 samples in the previously unexplored high-bcs/high-moi
+# corner. Other axes use the same ranges as the main sweep so the top-up
+# surfaces still combine cleanly with the original samples.
 TOPUP_AXIS_BOUNDS = {
     "n_cells":           (5.0e2, 5.0e4, True),
     "n_cres":            (5.0e1, 2.0e3, True),
@@ -161,19 +160,19 @@ TOPUP_AXIS_BOUNDS = {
     "activity_max_mult": (2.0,   8.0,   False),
 }
 
-# Second top-up bounds. Extends moi, minP, and activity_max_mult to cover
-# takeshi-HepG2 (moi=266, minP=0.0116, activity_max_mult=37). Same
-# expansion incidentally closes outstanding gaps on activity_max_mult for
-# shendure (99) and cohen (1.11). Other axes use the FULL combined range
-# from prior sweeps so topup3 samples span the 7-D space broadly.
+# Second top-up bounds. Extends moi, minP, and activity_max_mult so the
+# takeshi-HepG2 anchor falls inside, which incidentally closes outstanding
+# gaps on activity_max_mult for the other anchors too. Other axes use the
+# FULL combined range from prior sweeps so topup3 samples span the 7-D
+# space broadly.
 TOPUP3_AXIS_BOUNDS = {
     "n_cells":           (5.0e2, 5.0e4, True),
     "n_cres":            (5.0e1, 2.0e3, True),
     "bcs_per_cre":       (3.0,   5.0e4, True),
-    "moi":               (2.0e2, 3.5e2, True),    # extends past takeshi=266
+    "moi":               (2.0e2, 3.5e2, True),
     "lib_alpha_nb":      (0.02,  2.0,   True),
-    "minP":              (3.0e-3, 2.0e-2, True),  # extends below takeshi=0.0116
-    "activity_max_mult": (1.0,   1.2e2, True),    # log; covers cohen 1.11 to shendure 99
+    "minP":              (3.0e-3, 2.0e-2, True),
+    "activity_max_mult": (1.0,   1.2e2, True),    # log, unlike the full-mode box
 }
 
 # The box enclosing the full + topup + topup3 ranges, swept in one draw.
@@ -250,11 +249,11 @@ def active_bounds(mode: str = None) -> dict:
     """The axis bounds the given mode draws from.
 
     Plotting must ask for these rather than reading AXIS_BOUNDS directly.
-    The two disagree on activity_max_mult, which the union sweep draws
-    log-uniformly over [1, 120] while AXIS_BOUNDS declares linear over
-    [2, 8]. Binning that axis linearly puts 58% of a union draw in the first
-    of eight bins and leaves the top bins nearly empty, which reads as a flat
-    response where there is none.
+    The two disagree on activity_max_mult: the union sweep draws it
+    log-uniformly over a much wider range than the linear one AXIS_BOUNDS
+    declares. Binning a union draw on the linear declaration crowds most of
+    the samples into the first bin and leaves the top bins nearly empty,
+    which reads as a flat response where there is none.
     """
     mode = CURRENT_MODE if mode is None else mode
     return {
@@ -269,14 +268,16 @@ MIN_ACT_FRAC_OF_MINP = 0.05
 
 SEED = 20260505
 
-# Empirical anchors for plot overlay.
-# Empirical anchor values for plot overlay. activity_max_mult is the
-# data-derived ratio p95(mu) / minP -- i.e. how broad the assayed CRE
-# activity dynamic range is, robust to single-CRE outliers. Shendure's
-# library has strong promoters (eef1aP at 272x baseline) producing a
-# heavy tail; cohen's library is variants of a single element, all
-# clustered near baseline. Both empirical values fall outside the LHS
-# range [2, 8] -- shendure above (99x), cohen below (1.11x).
+# Empirical anchor values for plot overlay, and the source of truth for every
+# per-dataset number in this module -- do not restate them in comments.
+#
+# activity_max_mult is the data-derived ratio p95(mu) / minP, i.e. how broad
+# the assayed CRE activity dynamic range is, robust to single-CRE outliers.
+# The spread across datasets is real and large: Lalanne et al.'s library
+# carries strong promoters producing a heavy tail, while Zhao et al.'s is
+# variants of a single element, all clustered near baseline. That spread is
+# why the union box draws this axis log-uniformly; the superseded full-mode
+# box was linear and too narrow to contain either anchor.
 EMPIRICAL = {
     "shendure-Pluripotent": dict(
         n_cells=8201, n_cres=207, bcs_per_cre=136.06, moi=18.01,
@@ -286,16 +287,18 @@ EMPIRICAL = {
         n_cells=18633, n_cres=116, bcs_per_cre=17244.5, moi=149.15,
         lib_alpha_nb=1.3873, minP=0.9363, activity_max_mult=1.11,
     ),
-    # Takeshi-HepG2 (the canonical "reference" CT, HepG2). Unpublished as
-    # of 2026-05-07; the with_takeshi figure variant is supplemental, and
-    # the methods-paper version uses no_takeshi (DEFAULT_ANCHORS below).
-    # activity_max_mult is p95(mu)/minP per the same convention as the
-    # other anchors; takeshi-HepG2's library has a moderate dynamic range
-    # (37x), between cohen (1.11) and shendure (99).
+    # Yin et al. synthesised its barcodes rather than adding them by PCR, so
+    # its library is near-deterministic and the NB fit returns alpha at the
+    # optimiser floor. That value sits below UNION_AXIS_BOUNDS, so this anchor
+    # is the one that clamps on lib_alpha_nb; attribution against it should
+    # treat that axis as not applicable rather than clamped.
     "seelig-HepG2": dict(
         n_cells=5858, n_cres=1344, bcs_per_cre=4.945, moi=73.57,
         lib_alpha_nb=1e-06, minP=0.2092, activity_max_mult=15.04,
     ),
+    # Unpublished as of 2026-05-07; the with_takeshi figure variant is
+    # supplemental, and the methods-paper version uses no_takeshi
+    # (DEFAULT_ANCHORS below).
     "takeshi-HepG2": dict(
         n_cells=1690, n_cres=149, bcs_per_cre=394.07, moi=265.91,
         lib_alpha_nb=1.7174, minP=0.0116, activity_max_mult=37.22,
