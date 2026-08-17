@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Replot Cohen MWU pairwise power heatmaps as separate per-CT SVGs.
+"""Replot Seelig MWU pairwise power heatmaps as separate per-CT SVGs.
 
-Reads cohen_pairwise_power_df.parquet and emits one SVG per cell type into
+Reads seelig_pairwise_power_df.parquet and emits one SVG per cell type into
 output/panels_mwu/. No simulation -- pure plotting.
 """
 
@@ -29,7 +29,7 @@ PANEL_DIR = OUTPUT_DIR / "panels_mwu"
 PANEL_DIR.mkdir(exist_ok=True)
 
 DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
-ORTHO_DIR = DATA_ROOT / "cohen" / "cohen_obsingle_nb_phantom"
+ORTHO_DIR = DATA_ROOT / "seelig" / "seelig_cm_moib_nb_phantom"
 with open(ORTHO_DIR / "by_cell_type_parameters.pkl", "rb") as f:
     _params = pickle.load(f)
 N_CRES = max(len(_params.nb[ct]) for ct in sorted(_params.nb.keys()))
@@ -38,7 +38,7 @@ del _params
 N_LIBRARY_REPS = 20
 N_SIMS = 5
 
-power_df = pd.read_parquet(OUTPUT_DIR / "cohen_pairwise_power_df.parquet")
+power_df = pd.read_parquet(OUTPUT_DIR / "seelig_pairwise_power_df.parquet")
 power_grid = (
     power_df
     .groupby(["cell_type", "baseline_mu", "log2_fc"])
@@ -50,7 +50,7 @@ power_grid = (
 CELL_TYPES = sorted(power_grid["cell_type"].unique())
 
 for ct in CELL_TYPES:
-    ct_display = "Rod" if ct == "reference" else ct
+    ct_display = "HepG2" if ct == "reference" else ct
     ct_data = power_grid[power_grid["cell_type"] == ct]
 
     pivot = ct_data.pivot_table(
@@ -59,7 +59,7 @@ for ct in CELL_TYPES:
     pivot = pivot.sort_index(ascending=False)
     pivot = pivot[sorted(pivot.columns)]
 
-    cells_ct = scm.COHEN_BOUNDS.cells_per_cell_type.get(ct, "?")
+    cells_ct = scm.SEELIG_BOUNDS.cells_per_cell_type.get(ct, "?")
 
     fig, ax = plt.subplots(figsize=(7, 5))
     sns.heatmap(
@@ -76,7 +76,7 @@ for ct in CELL_TYPES:
         f"fold-change range is {min(pivot.index)}-{max(pivot.index)}")
 
     ax.set_title(
-        f"MWU pairwise power -- Cohen (episomal) -- {ct_display}\n"
+        f"MWU pairwise power -- Seelig (no reporter) -- {ct_display}\n"
         f"(n_cres={N_CRES}, cells={cells_ct}, alpha=0.05, "
         f"{N_LIBRARY_REPS}x{N_SIMS} reps per grid cell)",
         fontsize=10,
@@ -88,7 +88,7 @@ for ct in CELL_TYPES:
 
     plt.tight_layout()
     safe_ct = ct.replace("/", "_").replace(" ", "_")
-    out_path = PANEL_DIR / f"cohen_pairwise_power_mwu_{safe_ct}.svg"
+    out_path = PANEL_DIR / f"seelig_pairwise_power_mwu_{safe_ct}.svg"
     fig.savefig(out_path, format="svg", bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out_path}", flush=True)

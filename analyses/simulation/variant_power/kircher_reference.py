@@ -7,14 +7,31 @@ median significant effect of about a fifth of the wild-type level, which is
 gridded on, those are 0.263 and 0.398.
 
 Both are drawn, since the median depends on the direction of effect and the
-grid is unsigned. The band between them is the honest answer to "where does a
-typical published variant effect fall".
+grid is unsigned. They are medians of two different distributions, so the
+interval between them carries no meaning and is left unshaded.
+
+The two lines are encoded redundantly in colour and in shape, so they stay
+distinguishable in greyscale and under colour-vision deficiency:
+
+    activating (0.263)  black, long dashes, circle markers
+    repressing (0.398)  blue, dotted, square markers
+
+The lines are drawn plain, with no white casing or underlay. Casing a dashed
+line fills its gaps as well as its edges, so the rule reads as a row of
+white-bordered blocks rather than as one line.
 """
+
+import numpy as np
 
 ACTIVATING_LOG2FC = 0.263   # log2(1.20)
 REPRESSING_LOG2FC = 0.398   # |log2(0.759)|
 
-_COLOR = "#0033cc"
+_ACTIVATING_STYLE = dict(color="#000000", linestyle=(0, (7, 3)), marker="o")
+_REPRESSING_STYLE = dict(color="#2a78d6", linestyle=(0, (1, 2.2)), marker="s")
+
+_LW = 2.0
+_MARKER_SIZE = 4.0
+_N_MARKERS = 5
 
 
 def _row_position(fc_vals, target):
@@ -38,43 +55,37 @@ def _row_position(fc_vals, target):
     raise AssertionError(f"{target} bracketed by no pair of {fc_vals}")
 
 
-def annotate(ax, fc_vals, label=True):
-    """Draw the two medians as dashed lines with the band between them shaded.
+def _draw_line(ax, y, style):
+    """One reference line: the dashed rule, then its markers."""
+    ax.axhline(y=y, color=style["color"], linestyle=style["linestyle"],
+               lw=_LW, zorder=5)
+    marker_x = np.linspace(0.10, 0.90, _N_MARKERS)
+    ax.plot(marker_x, np.full(_N_MARKERS, y),
+            linestyle="none", marker=style["marker"], ms=_MARKER_SIZE,
+            color=style["color"], markeredgecolor="none",
+            transform=ax.get_yaxis_transform(), zorder=6)
+
+
+def annotate(ax, fc_vals):
+    """Draw the two medians as distinguishable reference lines.
 
     Returns the number of lines actually drawn, so a caller can assert the
     grid reaches them.
     """
-    y_act = _row_position(fc_vals, ACTIVATING_LOG2FC)
-    y_rep = _row_position(fc_vals, REPRESSING_LOG2FC)
-
-    if y_act is not None and y_rep is not None:
-        ax.axhspan(min(y_act, y_rep), max(y_act, y_rep),
-                   color=_COLOR, alpha=0.08, zorder=3)
-
     drawn = 0
-    for y in (y_act, y_rep):
+    for target, style in ((ACTIVATING_LOG2FC, _ACTIVATING_STYLE),
+                          (REPRESSING_LOG2FC, _REPRESSING_STYLE)):
+        y = _row_position(fc_vals, target)
         if y is None:
             continue
-        ax.axhline(y=y, color=_COLOR, linestyle="--", lw=1.3, alpha=0.75,
-                   zorder=4)
+        _draw_line(ax, y, style)
         drawn += 1
-
-    if label and drawn:
-        y_top = min(y for y in (y_act, y_rep) if y is not None)
-        ax.text(0.02, y_top - 0.25,
-                "median published\nvariant effect",
-                transform=ax.get_yaxis_transform(), fontsize=7,
-                color=_COLOR, va="bottom", zorder=5)
     return drawn
 
 
-def annotate_continuous(ax, label=True):
+def annotate_continuous(ax):
     """Same two medians, for axes whose y is log2 FC on a continuous scale."""
-    ax.axhspan(ACTIVATING_LOG2FC, REPRESSING_LOG2FC,
-               color=_COLOR, alpha=0.08, zorder=0)
-    for y in (ACTIVATING_LOG2FC, REPRESSING_LOG2FC):
-        ax.axhline(y=y, color=_COLOR, linestyle="--", lw=1.3, alpha=0.75)
-    if label:
-        ax.text(ax.get_xlim()[1] * 0.98, REPRESSING_LOG2FC,
-                "median published variant effect",
-                ha="right", va="bottom", fontsize=8, color=_COLOR)
+    for y, style in ((ACTIVATING_LOG2FC, _ACTIVATING_STYLE),
+                     (REPRESSING_LOG2FC, _REPRESSING_STYLE)):
+        _draw_line(ax, y, style)
+    return 2

@@ -229,7 +229,7 @@ def phase_plot(client):
         ax.set_title(f"{ct_display}\n(n_cres={N_CRES}, cells={cells_ct})",
                      fontsize=10)
         ax.set_xlabel("Baseline activity (mu)", fontsize=9)
-        ax.set_ylabel("log2(FC)", fontsize=9)
+        ax.set_ylabel("|log2 FC|", fontsize=9)
         ax.tick_params(labelsize=7)
         plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
 
@@ -284,7 +284,7 @@ def phase_plot(client):
     ax.axhline(y=0.20, color="gray", linestyle="--", lw=1, alpha=0.7)
     ax.set_xscale("log")
     ax.set_xlabel("Baseline activity (mu)", fontsize=11)
-    ax.set_ylabel(f"Min log2(FC) for {int(power_threshold*100)}% power",
+    ax.set_ylabel(f"Min |log2 FC| for {int(power_threshold*100)}% power",
                   fontsize=11)
     ax.set_title(
         f"Minimum detectable fold change -- Cohen "
