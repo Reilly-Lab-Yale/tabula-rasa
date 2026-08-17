@@ -5,27 +5,9 @@ One small panel per cell type, faceted 5x2. Companion to the single-axis
 overlay in ../qq_overlay.py, which puts every cell type on one pair of axes;
 this figure is the per-cell-type breakdown, so it stays faceted.
 
-Why the panels plot observed minus expected rather than observed against
-expected. The largest departure from uniform anywhere in this dataset is
-KS D = 0.024, and every other cell type is under 0.009. Drawn on a plain
-[0, 1] QQ axis that is a vertical excursion of 2.4% of the panel height at
-worst, and under 1% for nine of the ten -- ten panels of a line lying on the
-diagonal, with the entire result below the resolution of the page. Subtracting
-the diagonal keeps exactly the same information and spends the whole y-axis on
-the part that varies. The ideal-calibration reference is then the horizontal
-line at zero rather than the 45-degree diagonal. `--form classic` draws the
-undifferenced version for comparison.
-
-The grey band is the two-sided Kolmogorov 95% acceptance region,
-D_crit = 1.358 / sqrt(n), so a curve that stays inside the band is exactly a
-cell type whose annotated KS p-value is above 0.05. It is a band for the whole
-curve, not a pointwise interval: the deviation curve is a Brownian bridge and
-is strongly autocorrelated, so a pointwise interval would invite reading a
-single excursion as a result. The band and the annotation are the same test.
-
-Below zero the observed p-values are smaller than uniform, i.e. the test is
-anti-conservative and the false-positive rate runs above nominal; above zero
-it is conservative.
+The deviation form, the Kolmogorov band and the curve downsampling are shared
+with the overlay and documented in ../qq_common.py. `--form classic` draws the
+undifferenced [0, 1] QQ for comparison.
 
     python plot_calibration_qq_detail.py                       # reporter, deviation
     python plot_calibration_qq_detail.py --form classic        # undifferenced QQ
@@ -33,6 +15,7 @@ it is conservative.
 """
 import argparse
 import pathlib
+import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -43,9 +26,14 @@ import pandas as pd
 HERE = pathlib.Path(__file__).resolve().parent
 OUT = HERE / "output"
 
+sys.path.insert(0, str(HERE.parent))
+from qq_common import (  # noqa: E402
+    KS_CRIT_95, INK, MUTED, HAIR, BAND, RC_BASE,
+    check_reduction, curve, expected, reduce_curve,
+)
+
 TEST = "mwu"
 ALPHA = 0.05
-KS_CRIT_95 = 1.358  # Kolmogorov two-sided 95% point; D_crit = KS_CRIT_95 / sqrt(n)
 
 # Code identifiers upstream, reader-facing labels here. "reference" is the
 # cell type the synthetic CREs are calibrated against, pluripotent cells in
@@ -70,8 +58,6 @@ CELL_TYPE_LABEL = {
 # conditions are a real two-level categorical.
 CONDITION_COLOR = {"reporter": "#0072b2", "deflated": "#d55e00"}
 CONDITION_LABEL = {"reporter": "reporter used", "deflated": "reporter withheld"}
-INK, MUTED, HAIR = "#1a1a1a", "#666666", "#c9c9c9"
-BAND = "#e4e4e4"
 
 NCOLS, NROWS = 5, 2
 
@@ -80,14 +66,12 @@ NCOLS, NROWS = 5, 2
 # The figure is drawn at \textwidth (498.66pt = 6.90in) and included unscaled.
 FIG_W = 6.90
 plt.rcParams.update({
-    "svg.fonttype": "none",       # editable <text> downstream
-    "pdf.fonttype": 42,
+    **RC_BASE,
     "font.size": 8,
     "axes.labelsize": 8.5,
     "axes.titlesize": 8,
     "xtick.labelsize": 7,
     "ytick.labelsize": 7,
-    "axes.unicode_minus": False,  # the repo is plain ASCII
 })
 
 
@@ -130,107 +114,7 @@ def ks_table(condition):
 
 
 LINEWIDTH_PT = 1.3
-N_PRETHIN = 40000     # rank grid before simplification
 RDP_FRACTION = 0.30   # simplification tolerance, as a fraction of the linewidth
-
-
-def thin_ranks(n, n_keep=N_PRETHIN):
-    """Rank indices to draw, dense at both tails and even through the bulk.
-
-    One vector element per p-value is what makes the notebook's version of this
-    figure a 74 MB SVG. The deviation curve is a Brownian bridge: smooth over
-    the bulk, so an even grid reproduces it, and steepest as it leaves zero at
-    either end, which the log-spaced ends cover. This is only the first pass;
-    `simplify` then drops whatever the drawn stroke would cover anyway.
-    """
-    assert n_keep >= 8, f"n_keep={n_keep} is too few to shape a curve"
-    if n <= n_keep:
-        return np.arange(n)
-    tail = n_keep // 4
-    lo = np.unique(np.round(np.geomspace(1, n / 2, tail)).astype(int)) - 1
-    hi = n - 1 - lo
-    mid = np.linspace(0, n - 1, n_keep - 2 * tail).astype(int)
-    return np.unique(np.concatenate([lo, mid, hi]))
-
-
-def simplify(x, y, tol_y):
-    """Douglas-Peucker keep-mask, distance measured vertically rather than
-    perpendicular to the chord.
-
-    A QQ curve is single-valued and strictly increasing in x, and the renderer
-    joins the kept points with straight segments, so the vertical gap to the
-    chord is exactly the error a reader sees. Bounding that directly makes
-    tol_y a guarantee; the usual perpendicular distance is smaller than the
-    vertical one on a sloped chord and would let the error past it. Iterative
-    rather than recursive: the input is tens of thousands of points and
-    Python's stack is not.
-    """
-    assert len(x) == len(y), f"x has {len(x)} points, y has {len(y)}"
-    assert np.all(np.diff(x) > 0), "x must be strictly increasing for a vertical metric"
-    keep = np.zeros(len(x), dtype=bool)
-    keep[0] = keep[-1] = True
-    stack = [(0, len(x) - 1)]
-    while stack:
-        i, j = stack.pop()
-        if j <= i + 1:
-            continue
-        seg = slice(i + 1, j)
-        chord = y[i] + (y[j] - y[i]) * (x[seg] - x[i]) / (x[j] - x[i])
-        dist = np.abs(y[seg] - chord)
-        k = int(np.argmax(dist))
-        if dist[k] > tol_y:
-            k += i + 1
-            keep[k] = True
-            stack.append((i, k))
-            stack.append((k, j))
-    return keep
-
-
-def expected(n):
-    """Expected uniform quantile for each rank, i.e. the QQ x-coordinate."""
-    return (np.arange(1, n + 1) - 0.5) / n
-
-
-def curve(v, form):
-    """(x, y) of the full QQ curve for one cell type, every p-value included."""
-    exp = expected(len(v))
-    return exp, (v if form == "classic" else v - exp)
-
-
-def reduce_curve(v, form, tol_y):
-    """The drawn subset of the curve: rank-thin, then simplify."""
-    x, y = curve(v, form)
-    keep = thin_ranks(len(v))
-    x, y = x[keep], y[keep]
-    mask = simplify(x, y, tol_y)
-    return x[mask], y[mask]
-
-
-def check_reduction(pvals, form, tol_y, half_stroke_y, dpi=300):
-    """Assert the drawn stroke covers the true curve everywhere.
-
-    The criterion is the one that decides whether a reader can see a difference:
-    the full-resolution curve must lie within half a linewidth of the polyline
-    actually drawn, so the stroke on the page paints over it. Reported in
-    rendered pixels as well, since that is the intuitive unit.
-    """
-    worst, worst_ct, drawn, total = 0.0, None, 0, 0
-    for ct, v in pvals.items():
-        x, y = curve(v, form)
-        xr, yr = reduce_curve(v, form, tol_y)
-        err = float(np.abs(np.interp(x, xr, yr) - y).max())
-        drawn += len(xr)
-        total += len(x)
-        if err > worst:
-            worst, worst_ct = err, ct
-    assert worst < half_stroke_y, (
-        f"reduction is visible: worst error {worst:.3e} ({worst_ct}) exceeds "
-        f"half a linewidth {half_stroke_y:.3e} in data units"
-    )
-    px = half_stroke_y * 2 / (LINEWIDTH_PT / 72 * dpi)  # data units per pixel
-    print(f"downsample: {drawn} of {total} points drawn ({100 * drawn / total:.3f}%); "
-          f"worst departure {worst:.3e} data units = {worst / px:.2f} px at {dpi} dpi, "
-          f"half a linewidth is {half_stroke_y / px:.2f} px")
 
 
 def fmt_p(p):
@@ -275,7 +159,8 @@ def figure(pvals_by_cond, ks_by_cond, form):
     stroke_y = LINEWIDTH_PT / 72 / panel_h * (ylim[1] - ylim[0])
     tol_y = RDP_FRACTION * stroke_y
     for cond in conds:
-        check_reduction(pvals_by_cond[cond], form, tol_y, 0.5 * stroke_y)
+        check_reduction(pvals_by_cond[cond], form, tol_y, 0.5 * stroke_y,
+                        linewidth_pt=LINEWIDTH_PT)
 
     fig, axes = plt.subplots(NROWS, NCOLS, figsize=(FIG_W, fig_h), squeeze=False)
     fig.subplots_adjust(
