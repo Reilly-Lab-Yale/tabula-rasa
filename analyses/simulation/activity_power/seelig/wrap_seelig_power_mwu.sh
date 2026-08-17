@@ -2,9 +2,9 @@
 #SBATCH --job-name=seelig_pow
 #SBATCH --partition=priority
 #SBATCH --account=prio_skr2
-#SBATCH --time=14:00:00
+#SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 #SBATCH --exclude=a1132u18n02
