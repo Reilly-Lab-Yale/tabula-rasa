@@ -21,6 +21,19 @@ on every axis. The box is drawn wide enough to contain the empirical anchors
 in EMPIRICAL, so each dataset is interior to the sweep rather than an
 extrapolation from it. Read bounds and anchor values off those two dicts.
 
+Three of the SVGs this writes are placed in the manuscript, and are drawn at
+the width the page gives them, since the manuscript sync applies no font
+scaling:
+
+    pairwise_heatmaps_union.svg          Fig 5A, at \textwidth (6.90 in)
+    marginals_auc_union_published.svg    Fig 5B, at 0.95\linewidth (6.56 in)
+    pairwise_heatmaps_all_union.svg      Fig S10, at \linewidth (6.90 in)
+
+Fig 5A shows that the axes act close to independently, which is what licenses
+reading each of them on its own in Fig 5B; Fig S10 is the exhaustive version
+of 5A. Same type scale and greys as activity_power/replot_overlay_ct.py and
+variant_power/panel_style.py. The `manuscript` phase renders just these three.
+
 Two axis names need glossing:
     lib_alpha_nb    NB2 alpha for the library; theta = 1/alpha
     minP            the reference element's fitted mean, not a promoter
@@ -34,7 +47,7 @@ MWU is the canonical test.
 
 Usage:
     python synthetic_factorial.py <phase> [mode] [slice n_slices]
-        phase:    samples | simulate | plot | replot | all
+        phase:    samples | simulate | plot | replot | manuscript | all
         mode:     smoke | pilot | full | topup | topup3 | union
                   (default: full; canonical analysis sweep: union)
         slice:    0..n_slices-1   (default: 0; only meaningful for simulate)
@@ -48,6 +61,9 @@ Usage:
     replot   -- re-render SVGs from the cached samples_power<mode>.parquet
                 without walking scratch or starting a dask client. Fails if
                 the cache is missing.
+    manuscript -- as replot, but only the three SVGs the manuscript places:
+                pairwise_heatmaps (Fig 5A), marginals_auc..._published
+                (Fig 5B) and pairwise_heatmaps_all (Fig S10).
     all      -- samples then simulate (slice 0 only) then plot. Useful only
                 when n_slices=1 (smoke). For pilot/full use launch.sh.
 
@@ -319,13 +335,30 @@ EMPIRICAL = {
 # is not an extra assumption of the sweep: the GLM adds the intercept and the
 # CRE coefficient in log space, so basal level and fold change are
 # multiplicative on the count scale throughout this work.
+#
+# "moi" is the transfection NB mean, i.e. the number of library constructs
+# delivered per cell (see make_synthetic_bounds -> set_effective_moi), so the
+# gloss names the count rather than repeating the acronym.
 AXIS_DISPLAY = {
     "minP": "basal expression",
     "lib_alpha_nb": "library skew (NB alpha)",
     "bcs_per_cre": "barcodes per element",
     "n_cres": "elements",
     "n_cells": "cells",
+    "moi": "MOI (constructs per cell)",
     "activity_max_mult": "dynamic range (max / basal)",
+}
+
+# Short forms for the heatmap grids, where an axis label is rotated into a
+# panel barely an inch tall and the long form runs off both ends of it. The
+# two that are still too long once the gloss is dropped are wrapped rather
+# than abbreviated further.
+AXIS_DISPLAY_SHORT = {
+    "lib_alpha_nb": "library skew",
+    "bcs_per_cre": "barcodes\nper element",
+    "moi": "MOI",
+    "minP": "basal\nexpression",
+    "activity_max_mult": "dynamic range",
 }
 
 
@@ -333,17 +366,125 @@ def axis_label(axis: str) -> str:
     return AXIS_DISPLAY.get(axis, axis)
 
 
+def axis_label_short(axis: str) -> str:
+    return AXIS_DISPLAY_SHORT.get(axis, axis_label(axis))
+
+
 DEFAULT_ANCHORS = ["shendure-Pluripotent", "cohen-Rod"]
 ALL_ANCHORS = list(EMPIRICAL.keys())
 # The three published designs, which is what the manuscript overlays.
 PUBLISHED_ANCHORS = ["shendure-Pluripotent", "cohen-Rod", "seelig-HepG2"]
 
+# The house per-dataset colours, the same three Okabe-Ito hues and the same
+# assignment as model_selection/cross_family_agreement.py, so a dataset keeps
+# its colour across the manuscript. The triple passes every categorical check
+# on white with all pairs in play (worst CVD dE 11.0, normal-vision 18.7, all
+# above 3:1). Takeshi is supplemental only; adding it puts the worst pair in
+# the 6-8 CVD band, which the single-letter tag beside each rule covers.
 EMPIRICAL_COLORS = {
-    "shendure-Pluripotent": "darkorange",
-    "cohen-Rod":            "purple",
-    "takeshi-HepG2":        "teal",
-    "seelig-HepG2":         "seagreen",
+    "shendure-Pluripotent": "#0072b2",
+    "cohen-Rod":            "#d55e00",
+    "seelig-HepG2":         "#009e73",
+    "takeshi-HepG2":        "#cc79a7",
 }
+
+# Author-citation form plus the one-letter tag that marks the anchor's rule
+# inside a panel. Written here rather than left to the manuscript's
+# dataset_names SVG transform, which only rewrites text that survived as
+# <text> nodes. The tag carries the identity that colour alone would not.
+ANCHOR_DISPLAY = {
+    "shendure-Pluripotent": ("L", "Lalanne et al."),
+    "cohen-Rod":            ("Z", "Zhao et al."),
+    "seelig-HepG2":         ("Y", "Yin et al."),
+    "takeshi-HepG2":        ("T", "Takeshi (unpublished)"),
+}
+
+# ---------------------------------------------------------------------------
+# Figure style
+#
+# Both manuscript panels are drawn at the width the page gives them -- Fig 5A
+# at \textwidth of a 6.90 in text block, Fig 5B at 0.95\linewidth of it -- and
+# the manuscript sync applies no font scaling, so a point size set here is the
+# point size a reader gets. Same type scale and same ink/muted/hairline greys
+# as activity_power/replot_overlay_ct.py and variant_power/panel_style.py.
+# ---------------------------------------------------------------------------
+
+INK, MUTED, HAIR = "#1a1a1a", "#666666", "#c9c9c9"
+# Scatter is background texture behind the smoother, not a series.
+DOT = "#c2c2c2"
+
+# Power is a magnitude on a fixed 0-1 scale, so the ramp is sequential and
+# single-hue. YlOrRd is what the Fig 3B power heatmaps already use for the
+# same quantity.
+POWER_CMAP = "YlOrRd"
+
+plt.rcParams.update({
+    "svg.fonttype": "none",       # keep text editable downstream
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "font.size": 7,
+    "axes.labelsize": 7.5,
+    "axes.titlesize": 7.5,
+    "xtick.labelsize": 6.5,
+    "ytick.labelsize": 6.5,
+    "legend.fontsize": 6.5,
+    "axes.unicode_minus": False,  # the repo is plain ASCII
+})
+
+
+def _fmt_decade(k: int) -> str:
+    """A power of ten as a plain decimal.
+
+    Plain rather than mathtext: svg.fonttype="none" leaves mathtext as text
+    nodes in a maths font the manuscript's font transform does not know about,
+    and the repo is plain ASCII besides.
+    """
+    return f"{10.0 ** k:g}" if k >= 0 else f"{10.0 ** k:.{-k}f}"
+
+
+def _decade_ticks(lo: float, hi: float, max_ticks: int = 4) -> list:
+    """Decades spanning [lo, hi] in log10 units, thinned to at most max_ticks.
+
+    Thinned by stride so the ladder stays evenly spaced; the ends are what a
+    reader uses to place the axis, so the first decade in range is always kept.
+    """
+    decades = list(range(int(np.ceil(lo)), int(np.floor(hi)) + 1))
+    if len(decades) > max_ticks:
+        stride = int(np.ceil(len(decades) / max_ticks))
+        decades = decades[::stride]
+    return decades
+
+
+def _assert_labels_fit(fig, what):
+    """No axis label may be longer than the panel edge it names.
+
+    Nothing is cropped when one is -- the figure is saved at a fixed size, so
+    an over-long label simply runs into its neighbour, which is exactly the
+    collision that is hard to notice in a grid of twenty-one panels.
+    """
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    for ax in fig.axes:
+        box = ax.get_window_extent(r)
+        for label, along in ((ax.yaxis.label, box.height),
+                             (ax.xaxis.label, box.width)):
+            if not label.get_text():
+                continue
+            ext = label.get_window_extent(r)
+            run = ext.height if label is ax.yaxis.label else ext.width
+            assert run <= along, (
+                f"{what}: label {label.get_text()!r} runs {run / fig.dpi:.2f} "
+                f"in along a {along / fig.dpi:.2f} in panel edge")
+
+
+def _assert_text_fits(fig, texts, limit_in, what):
+    """No header line may run past the width it was written to fit."""
+    fig.canvas.draw()
+    for t in texts:
+        right = t.get_window_extent(fig.canvas.get_renderer()).x1 / fig.dpi
+        assert right <= limit_in, (
+            f"{what}: {t.get_text()[:40]!r} ends at {right:.2f} in, past the "
+            f"{limit_in:.2f} in it has")
 
 
 # ---------------------------------------------------------------------------
@@ -787,48 +928,205 @@ def _loess_band(x, y, n_grid=100, frac=0.4, n_boot=200, seed=42):
     return xg, yhat, lo, hi
 
 
+# --- Fig 5B geometry, in inches at the size the page gives the panel --------
+# Three columns of seven axes: at 6.56 in a fourth column would leave each
+# panel too narrow for a decade ladder underneath it, and two columns would
+# make the figure taller than the page has left once Fig 5A is above it.
+MARG_FIG_W = 6.56            # 0.95\linewidth of a 6.90 in text block
+MARG_NCOL = 3
+# The left margin is narrow because the y axis is labelled once for the whole
+# grid: it holds a three-rung ladder and nothing else. It is also what puts
+# this panel's first column roughly under Fig 5A's, once the 0.95\linewidth
+# inclusion has centred the panel in the text block.
+MARG_LEFT_IN, MARG_RIGHT_IN = 0.36, 0.06
+MARG_COLGAP_IN = 0.28
+MARG_PLOT_H_IN = 1.15
+MARG_HEADROOM_IN = 0.20      # anchor tags sit above each panel's top spine
+MARG_XFURN_IN = 0.42         # tick ladder and axis name under each row
+MARG_TOP_IN = 0.42           # title and subtitle
+MARG_BOTTOM_IN = 0.06
+MARG_PLOT_W_IN = (MARG_FIG_W - MARG_LEFT_IN - MARG_RIGHT_IN
+                  - (MARG_NCOL - 1) * MARG_COLGAP_IN) / MARG_NCOL
+MARG_ROW_IN = MARG_HEADROOM_IN + MARG_PLOT_H_IN + MARG_XFURN_IN
+MARG_NROW = int(np.ceil(len(AXIS_NAMES) / MARG_NCOL))
+MARG_FIG_H = MARG_TOP_IN + MARG_NROW * MARG_ROW_IN + MARG_BOTTOM_IN
+
+# Two anchor tags closer than this in axes fraction go on separate lines.
+ANCHOR_TAG_SEP = 0.06
+
+
+def _marg_rect(i: int) -> list:
+    """Figure-fraction rect of the i-th marginal panel, row-major."""
+    r, c = divmod(i, MARG_NCOL)
+    x = MARG_LEFT_IN + c * (MARG_PLOT_W_IN + MARG_COLGAP_IN)
+    top = MARG_TOP_IN + r * MARG_ROW_IN + MARG_HEADROOM_IN
+    return [x / MARG_FIG_W, (MARG_FIG_H - top - MARG_PLOT_H_IN) / MARG_FIG_H,
+            MARG_PLOT_W_IN / MARG_FIG_W, MARG_PLOT_H_IN / MARG_FIG_H]
+
+
+def _style_marg_axes(ax, show_yticks: bool):
+    """Hairline y grid, no box, ticks without tick marks."""
+    ax.grid(axis="y", color=HAIR, lw=0.5, zorder=0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(HAIR)
+        ax.spines[side].set_linewidth(0.8)
+    ax.tick_params(length=0, colors=INK, pad=2)
+    if not show_yticks:
+        ax.tick_params(labelleft=False)
+
+
+def _draw_anchor_rules(ax, axis: str, anchors: list, data_lo: float,
+                       data_hi: float):
+    """Dashed rule and one-letter tag where each published design sits.
+
+    Call after the x limits are final: the tags are laid out in axes fraction
+    so that two designs at nearby values end up on separate lines rather than
+    on top of one another, and that fraction depends on the limits.
+
+    An anchor outside the swept range is marked at the edge rather than
+    plotted at its value: extending the axis to reach it would imply the
+    smoother extends there too, and would squash the region that carries the
+    data. Yin et al. on lib_alpha_nb is the case in hand -- see the note on
+    that axis in EMPIRICAL.
+    """
+    placed = []
+    for name in anchors:
+        coord = EMPIRICAL.get(name)
+        if coord is None or coord.get(axis) is None:
+            continue
+        xv = float(coord[axis])
+        color = EMPIRICAL_COLORS.get(name, INK)
+        tag = ANCHOR_DISPLAY[name][0]
+        if xv < data_lo or xv > data_hi:
+            off_low = xv < data_lo
+            edge = data_lo if off_low else data_hi
+            ax.plot([edge], [1.015], marker="<" if off_low else ">",
+                    color=color, markersize=3, clip_on=False,
+                    transform=ax.get_xaxis_transform())
+            ax.text(edge, 1.015, f"  {tag} off scale" if off_low
+                    else f"{tag} off scale  ",
+                    fontsize=6, color=color, va="baseline",
+                    ha="left" if off_low else "right",
+                    transform=ax.get_xaxis_transform())
+            continue
+        frac = ax.transAxes.inverted().transform(
+            ax.transData.transform((xv, 0)))[0]
+        row = 0
+        while any(abs(frac - f) < ANCHOR_TAG_SEP and r == row
+                  for f, r in placed):
+            row += 1
+        ax.axvline(xv, color=color, linestyle=(0, (3, 2)), lw=0.8, zorder=3)
+        ax.text(xv, 1.015 + 0.085 * row, tag, fontsize=6, fontweight="bold",
+                ha="center", va="baseline", color=color,
+                transform=ax.get_xaxis_transform())
+        placed.append((frac, row))
+    return placed
+
+
+def _draw_anchor_key(fig, rect, anchors: list):
+    """Name the dashed rules, in the grid slot the seven axes leave empty."""
+    x = rect[0] + 0.01
+    y = rect[1] + rect[3] - 0.02
+    dy = 0.115 / MARG_FIG_H
+    fig.text(x, y, "published designs", fontsize=6.5, color=INK,
+             ha="left", va="top")
+    for k, name in enumerate(anchors):
+        color = EMPIRICAL_COLORS.get(name, INK)
+        tag, full = ANCHOR_DISPLAY[name]
+        yk = y - (k + 1.35) * dy
+        fig.add_artist(plt.Line2D([x, x + 0.10 / MARG_FIG_W], [yk] * 2,
+                                  color=color, lw=0.8, ls=(0, (3, 2))))
+        fig.text(x + 0.13 / MARG_FIG_W, yk, f"{tag}   {full}", fontsize=6,
+                 color=MUTED, ha="left", va="center")
+
+
 def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float,float]",
                                 ylabel: str, title: str, out_path: Path,
+                                subtitle: str = "",
                                 hline: "float | None" = None,
                                 invert_y: bool = False,
                                 force_linear_x: bool = False,
                                 anchors: "list[str] | None" = None):
     """Render the 7-axis marginals figure for a chosen power metric column.
 
-    For axes that have log_scale=True in AXIS_BOUNDS, the LOESS smoother
-    runs in log10-space (otherwise the smoother is dominated by the dense
-    end of the distribution), but the matplotlib axis itself is set to
-    'log' so tick labels show the raw values (e.g. 100, 1000, 10000) rather
-    than log10 values (2, 3, 4). This is much more readable than the prior
-    "log10 axis_name" labelling.
+    One panel per design axis: the sampled designs as a light scatter, the
+    LOESS smoother and its bootstrap band on top, and a dashed rule where each
+    published design sits. The smoother is what the figure is about, so it is
+    the only thing drawn at full contrast; the scatter is the residual spread
+    the other six axes leave behind, and reads as texture behind it.
 
-    force_linear_x=True overrides the per-axis log scale and sets all
-    panels to linear x. The smoother *still runs in log space* for axes
-    that span >1 decade (otherwise the smoother is a noisy mess concentrated
-    at the dense end), but the curve is drawn back on the linear scale.
-    Useful when reviewers want a "true scale" view alongside the log view.
+    For axes that have log_scale=True in the mode's bounds, the smoother runs
+    in log10-space (otherwise it is dominated by the dense end of the
+    distribution) but the axis is drawn on a log scale, so the ladder shows
+    raw values rather than their logarithms.
+
+    force_linear_x=True overrides the per-axis log scale and sets all panels
+    to linear x. The smoother *still runs in log space* for those axes, and
+    the curve is drawn back on the linear scale. Useful when reviewers want a
+    "true scale" view alongside the log view.
+
+    The y scale is shared across panels and labelled once, on the left.
+    Repeating it seven times spends a seventh of the figure restating that
+    every panel plots the same quantity.
     """
+    from matplotlib import patheffects as pe
+    from matplotlib.ticker import (FixedFormatter, FixedLocator, MaxNLocator,
+                                   NullLocator)
+
     if anchors is None:
         anchors = DEFAULT_ANCHORS
-    # constrained_layout handles log tick labels better than tight_layout,
-    # which tends to compress panels when the log "10^N" formatting takes
-    # extra vertical space. Wider figsize gives each panel more breathing
-    # room horizontally for log tick labels.
-    fig, axes = plt.subplots(3, 3, figsize=(15, 12), constrained_layout=True)
-    axes = axes.ravel()
+    y_all = df[metric].values.astype(float)
+    if ylim is None:
+        # A shared range even when the caller has no fixed one: per-panel
+        # autoscaling would draw the same curve at seven different heights.
+        finite = y_all[np.isfinite(y_all)]
+        assert len(finite), f"{metric}: no finite values in {len(y_all)} samples"
+        ylim = (float(np.min(finite)), float(np.nanpercentile(finite, 99)))
+
+    fig = plt.figure(figsize=(MARG_FIG_W, MARG_FIG_H))
     for ax_i, axis in enumerate(AXIS_NAMES):
-        ax = axes[ax_i]
+        ax = fig.add_axes(_marg_rect(ax_i))
         x = df[axis].values.astype(float)
-        y = df[metric].values.astype(float)
+        y = y_all
         log_scale = active_bounds()[axis][2]
-        # Always plot raw x; pick xscale via matplotlib so tick labels are
-        # actual values rather than log10 of values.
         display_log = log_scale and not force_linear_x
-        # LOESS input remains log-spaced for any axis whose data span >1
-        # decade, since the smoother is sensitive to bunched-up x. Use
-        # log10(x) for the smoother input regardless of display.
         x_smooth = np.log10(x) if log_scale else x
-        ax.scatter(x, y, s=8, alpha=0.4, color="steelblue")
+
+        ax.scatter(x, y, s=1.2, alpha=0.32, color=DOT, linewidths=0,
+                   zorder=1, rasterized=True)
+
+        # Limits before the anchors, which need them to lay their tags out,
+        # and computed from the data rather than read back off the axes: at
+        # this point the axis is still linear, so its left edge can be ~0 and
+        # a later set_xscale("log") would open a multi-decade empty region.
+        x_finite = x[np.isfinite(x)]
+        assert len(x_finite), f"{axis}: no finite values in {len(x)} samples"
+        data_lo, data_hi = float(x_finite.min()), float(x_finite.max())
+        if display_log:
+            ax.set_xscale("log")
+            pad = 10 ** (0.03 * (np.log10(data_hi) - np.log10(data_lo)))
+            ax.set_xlim(data_lo / pad, data_hi * pad)
+            decades = _decade_ticks(np.log10(data_lo), np.log10(data_hi))
+            ax.xaxis.set_major_locator(FixedLocator([10.0 ** k for k in decades]))
+            ax.xaxis.set_major_formatter(
+                FixedFormatter([_fmt_decade(k) for k in decades]))
+            ax.xaxis.set_minor_locator(NullLocator())
+        else:
+            pad = 0.03 * (data_hi - data_lo)
+            ax.set_xlim(data_lo - pad, data_hi + pad)
+        ax.set_ylim(*ylim)
+        if ylim == (0, 1):
+            # Three rungs on a 1.15 in panel. A six-rung 0.0-1.0 ladder is
+            # more axis furniture than the curve it is there to read.
+            ax.set_yticks([0.0, 0.5, 1.0], ["0", "0.5", "1"])
+        else:
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=3))
+        if invert_y:
+            ax.invert_yaxis()
+
         valid = np.isfinite(y) & np.isfinite(x_smooth)
         if valid.sum() >= 20:
             try:
@@ -844,102 +1142,102 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
                     _LOESS_CACHE[ck] = _loess_band(x_smooth[valid], y[valid])
                 xg, yhat, lo, hi = _LOESS_CACHE[ck]
                 xg_disp = (10.0 ** xg) if log_scale else xg
-                ax.plot(xg_disp, yhat, color="firebrick", lw=2)
-                ax.fill_between(xg_disp, lo, hi, color="firebrick", alpha=0.2)
+                ax.fill_between(xg_disp, lo, hi, color=INK, alpha=0.16, lw=0,
+                                zorder=4)
+                # Cased in white so the curve stays legible where it crosses
+                # the densest part of the scatter.
+                ax.plot(xg_disp, yhat, color=INK, lw=1.3, zorder=5,
+                        solid_capstyle="round",
+                        path_effects=[pe.Stroke(linewidth=2.8,
+                                                foreground="white"),
+                                      pe.Normal()])
             except Exception as e:
                 print(f"  smoother failed for {axis}/{metric}: {e}", flush=True)
-        # Empirical overlays at raw-x positions for the requested anchor list.
-        # Compute xlim from DATA + anchors directly, not from ax.get_xlim().
-        # ax.get_xlim() is called while the axis is still on a default linear
-        # scale, so its left edge can be ~0 (matplotlib's default margin
-        # below positive data). When we later set_xscale('log'), log(0) -> -inf
-        # and the panel ends up showing a multi-decade empty region on the
-        # left with data crammed at the right.
-        x_finite = x[np.isfinite(x)]
-        if len(x_finite) > 0:
-            cur_lo, cur_hi = float(x_finite.min()), float(x_finite.max())
-        else:
-            cur_lo, cur_hi = ax.get_xlim()
-        # An anchor can fall outside the swept range on an axis, in which case
-        # the smoother says nothing about it. Such an anchor is marked at the
-        # edge rather than plotted at its value: extending the axis to reach it
-        # would imply the LOESS extends there too, and would squash the region
-        # that actually carries data. Yin et al. is the case in hand, on
-        # lib_alpha_nb -- see the note on that axis in UNION_AXIS_BOUNDS.
-        data_lo, data_hi = cur_lo, cur_hi
-        # Stagger label y so multi-anchor overlays at similar x don't overlap.
-        drawn = []
-        for name in anchors:
-            coord = EMPIRICAL.get(name)
-            if coord is None:
-                continue
-            v = coord.get(axis)
-            if v is None:
-                continue
-            xv = float(v)
-            color = EMPIRICAL_COLORS.get(name, "black")
-            label = name.split("-")[0][:4]
-            if xv < data_lo or xv > data_hi:
-                off_low = xv < data_lo
-                edge = data_lo if off_low else data_hi
-                ax.plot([edge], [1.02], marker="<" if off_low else ">",
-                        color=color, markersize=6, clip_on=False,
-                        transform=ax.get_xaxis_transform())
-                ax.text(edge, 1.07, f"{label} off scale ({xv:.3g})",
-                        fontsize=6, style="italic", color=color,
-                        ha="left" if off_low else "right",
-                        transform=ax.get_xaxis_transform())
-                continue
-            cur_lo = min(cur_lo, xv)
-            cur_hi = max(cur_hi, xv)
-            ax.axvline(xv, color=color, linestyle="--", lw=1.0, alpha=0.8)
-            ypos = 1.02
-            for xprev, _ in drawn:
-                if abs(xv - xprev) < 1e-9:
-                    ypos = 1.07
-            ax.text(xv, ypos, label,
-                    fontsize=7, ha="center", color=color,
-                    transform=ax.get_xaxis_transform())
-            drawn.append((xv, name))
-        # Pad x-range a touch on either side; in log display, pad in log
-        # space (multiplicative); in linear, additive.
-        if display_log and cur_lo > 0 and cur_hi > 0:
-            log_span = np.log10(cur_hi) - np.log10(cur_lo)
-            if log_span > 0:
-                ax.set_xlim(cur_lo / (10 ** (0.03 * log_span)),
-                            cur_hi * (10 ** (0.03 * log_span)))
-        else:
-            span = cur_hi - cur_lo
-            if span > 0:
-                ax.set_xlim(cur_lo - 0.03 * span, cur_hi + 0.03 * span)
-        if display_log:
-            ax.set_xscale("log")
-            # Use default LogFormatterMathtext (renders 10^N) -- ScalarFormatter
-            # on log axes was producing crammed/overlapping major ticks at the
-            # right edge. Default formatter spaces ticks at every decade and
-            # renders cleanly. We also subdue minor tick labels.
-            from matplotlib.ticker import (LogLocator, LogFormatterMathtext,
-                                            NullFormatter)
-            ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=10))
-            ax.xaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
-            ax.xaxis.set_minor_formatter(NullFormatter())
-        else:
-            ax.set_xscale("linear")
-        ax.set_xlabel(axis_label(axis))
-        ax.set_ylabel(ylabel)
-        if ylim is not None:
-            ax.set_ylim(*ylim)
-        if invert_y:
-            ax.invert_yaxis()
+
+        _draw_anchor_rules(ax, axis, anchors, data_lo, data_hi)
         if hline is not None:
-            ax.axhline(hline, color="grey", lw=0.5, ls="--")
-    for j in range(len(AXIS_NAMES), len(axes)):
-        axes[j].axis("off")
-    fig.suptitle(title + ("  [linear-x]" if force_linear_x else ""))
-    # constrained_layout was set in subplots(); skip plt.tight_layout
-    fig.savefig(out_path, format="svg", bbox_inches="tight")
+            ax.axhline(hline, color=MUTED, lw=0.6, ls=(0, (3, 2)), zorder=2)
+        ax.set_xlabel(axis_label(axis), color=INK, labelpad=2)
+        _style_marg_axes(ax, show_yticks=(ax_i % MARG_NCOL == 0))
+
+    _draw_anchor_key(fig, _marg_rect(len(AXIS_NAMES)), anchors)
+
+    fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.115 / MARG_FIG_H,
+             title + ("  [linear x]" if force_linear_x else ""),
+             ha="left", va="center", fontsize=7.5, color=INK)
+    if subtitle:
+        fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.255 / MARG_FIG_H, subtitle,
+                 ha="left", va="center", fontsize=6.5, color=MUTED)
+    fig.text(0.075 / MARG_FIG_W, 0.5, ylabel, rotation=90, ha="left",
+             va="center", fontsize=7.5, color=INK)
+    _assert_labels_fit(fig, f"marginals/{metric}")
+    # No bbox_inches="tight": the panel is placed at a fixed width on the page
+    # and the margins above are what put its plot areas where they are.
+    fig.savefig(out_path, format="svg", dpi=600)
     plt.close(fig)
-    print(f"Saved: {out_path}", flush=True)
+    print(f"Saved: {out_path} ({MARG_FIG_W:.2f} x {MARG_FIG_H:.2f} in)",
+          flush=True)
+
+
+# One marginals SVG per metric. The legacy filename "marginals.svg" remains
+# the P@FC=2 plot for backwards compat with existing references.
+# Titles name the quantity and the reading; the y label names the metric, once.
+METRIC_SPECS = [
+    # (metric, ylim, ylabel, hline, invert_y, fname_suffix, title)
+    ("power_at_fc1p5", (0, 1), "power at 1.5x fold change", 0.8, False,
+     "_p15", "Power at 1.5x against each design axis"),
+    ("power_at_fc2",   (0, 1), "power at 2x fold change",   0.8, False,
+     "", "Power at 2x against each design axis"),
+    ("power_at_fc3",   (0, 1), "power at 3x fold change",   0.8, False,
+     "_p3", "Power at 3x against each design axis"),
+    ("power_auc_1to3", (0, 1), "mean power, fold change 1-3x", None, False,
+     "_auc", "Mean power against each design axis"),
+    ("fc_at_p50",      None,   "fold change at 50% power", None, True,
+     "_fc50", "Minimum detectable fold change against each design axis"),
+]
+
+# published: the three assays the manuscript reports on, which is the variant
+# its figures use. The takeshi variants predate Yin et al. being available as
+# an anchor and are kept for the unpublished-data comparison.
+ANCHOR_VARIANTS = [
+    ("_published",    PUBLISHED_ANCHORS),
+    ("_no_takeshi",   DEFAULT_ANCHORS),
+    ("_with_takeshi", ALL_ANCHORS),
+]
+
+# The manuscript's Fig 5B, and the two Fig 5A / Fig S10 heatmap grids.
+MANUSCRIPT_METRIC = "power_auc_1to3"
+MANUSCRIPT_ANCHORS = "_published"
+
+
+def _marginals_subtitle(df: pd.DataFrame) -> str:
+    return (f"{len(df):,} designs sampled at random over all seven axes; "
+            f"LOESS fit with 95% bootstrap band")
+
+
+def _plot_manuscript_marginals(df: pd.DataFrame, suffix: str):
+    """Fig 5B only: the AUC metric with the three published designs overlaid."""
+    metric, ylim, ylabel, hline, invert, fsuf, title = next(
+        s for s in METRIC_SPECS if s[0] == MANUSCRIPT_METRIC)
+    anchors = dict(ANCHOR_VARIANTS)[MANUSCRIPT_ANCHORS]
+    _plot_marginals_for_metric(
+        df, metric=metric, ylim=ylim, ylabel=ylabel, title=title,
+        subtitle=_marginals_subtitle(df), hline=hline, invert_y=invert,
+        anchors=anchors,
+        out_path=OUT / f"marginals{fsuf}{suffix}{MANUSCRIPT_ANCHORS}.svg")
+
+
+def phase_manuscript(df: pd.DataFrame, mode: str):
+    """Just the three SVGs the manuscript places, from the cached sweep.
+
+    phase_plot renders thirty marginal variants on top of these; this is the
+    entry point for iterating on the figures themselves.
+    """
+    _LOESS_CACHE.clear()
+    suffix = "" if mode == "full" else f"_{mode}"
+    _plot_manuscript_marginals(df, suffix)
+    _pairwise_heatmaps(df, suffix=suffix, title_suffix="")
+    _pairwise_heatmaps_all(df, suffix=suffix)
 
 
 def phase_plot(samples_with_power: pd.DataFrame, mode: str):
@@ -950,39 +1248,13 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
     print(f"plotting {len(df)} samples; metrics: power_at_fc1p5/2/3, "
           f"power_auc_1to3, fc_at_p50", flush=True)
 
-    # One marginals SVG per metric. The legacy filename "marginals.svg"
-    # remains the P@FC=2 plot for backwards compat with existing references.
-    metric_specs = [
-        # (metric, ylim, ylabel, hline, invert_y, fname_suffix, title_suffix)
-        ("power_at_fc1p5", (0, 1), "power @ FC=1.5", 0.8, False,
-         "_p15", "power@FC=1.5 (less ceiling-saturated than P@FC=2)"),
-        ("power_at_fc2",   (0, 1), "power @ FC=2",   0.8, False,
-         "", "power@FC=2 (legacy summary; ~40% of samples saturate at edges)"),
-        ("power_at_fc3",   (0, 1), "power @ FC=3",   0.8, False,
-         "_p3", "power@FC=3 (sparse: few CREs sampled at high FC)"),
-        ("power_auc_1to3", (0, 1), "AUC of power(FC) over [1,3]", None, False,
-         "_auc", "power-curve AUC over FC in [1,3] (continuous, no ceiling)"),
-        ("fc_at_p50",      None,   "FC at 50% power (lower=better)", None, True,
-         "_fc50", "FC at 50% power (minimum detectable effect; NaN if never reached)"),
-    ]
-    # published: the three assays the manuscript reports on, which is the
-    # variant its figures use. The takeshi variants predate Yin et al. being
-    # available as an anchor and are kept for the unpublished-data comparison.
-    anchor_variants = [
-        ("_published",    PUBLISHED_ANCHORS,
-         "shendure + cohen + seelig overlays"),
-        ("_no_takeshi",   DEFAULT_ANCHORS,
-         "shendure + cohen overlays"),
-        ("_with_takeshi", ALL_ANCHORS,
-         "shendure + cohen + takeshi overlays"),
-    ]
-    for metric, ylim, ylabel, hline, invert, fsuf, tsuf in metric_specs:
-        for asuf, alist, asubtitle in anchor_variants:
+    for metric, ylim, ylabel, hline, invert, fsuf, title in METRIC_SPECS:
+        for asuf, alist in ANCHOR_VARIANTS:
             for linx_suf, linx in [("", False), ("_linearx", True)]:
                 out_path = OUT / f"marginals{fsuf}{suffix}{asuf}{linx_suf}.svg"
                 _plot_marginals_for_metric(
-                    df, metric=metric, ylim=ylim, ylabel=ylabel,
-                    title=f"Synthetic factorial ({asubtitle}): {tsuf}",
+                    df, metric=metric, ylim=ylim, ylabel=ylabel, title=title,
+                    subtitle=_marginals_subtitle(df),
                     out_path=out_path, hline=hline, invert_y=invert,
                     force_linear_x=linx, anchors=alist)
 
@@ -996,23 +1268,20 @@ def phase_plot(samples_with_power: pd.DataFrame, mode: str):
     _pairwise_heatmaps_all(df, suffix=suffix)
 
 
-def _heat_panel(ax, df, a, b, cmap="viridis", nb=8):
-    """One (a, b) power surface. Returns the image handle for a colorbar.
+def _heat_grid(df, a, b, nb=8):
+    """Mean power in an nb x nb grid over axes (a, b), and the bin edges.
 
     Bins on whichever scale the mode drew the axis on; binning a log-drawn
     axis linearly piles most of the samples into the first bin and reads as a
-    flat response.
+    flat response. Edges come back in that same (log10, where log-drawn)
+    space, which is what the panel is drawn in.
     """
     xa = df[a].values.astype(float)
     xb = df[b].values.astype(float)
     if active_bounds()[a][2]:
-        xa = np.log10(xa); a_lab = f"log10 {axis_label(a)}"
-    else:
-        a_lab = axis_label(a)
+        xa = np.log10(xa)
     if active_bounds()[b][2]:
-        xb = np.log10(xb); b_lab = f"log10 {axis_label(b)}"
-    else:
-        b_lab = axis_label(b)
+        xb = np.log10(xb)
     # Mask non-finite power before the weighted histogram: np.histogram2d sums
     # weights, so one NaN weight poisons its whole bin to NaN (imshow then
     # renders it transparent). power_auc_1to3 is NaN-free, but mask
@@ -1024,49 +1293,193 @@ def _heat_panel(ax, df, a, b, cmap="viridis", nb=8):
     bins_b = np.linspace(xb[m].min(), xb[m].max(), nb + 1)
     H_sum, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b], weights=pw[m])
     H_n, _, _ = np.histogram2d(xa[m], xb[m], bins=[bins_a, bins_b])
+    assert H_n.sum() == m.sum(), (
+        f"{a} x {b}: {int(H_n.sum())} of {int(m.sum())} samples landed in a "
+        f"bin; the rest fell outside the edges")
     with np.errstate(invalid="ignore"):
         H = np.where(H_n > 0, H_sum / H_n, np.nan)
-    im = ax.imshow(H.T, origin="lower", aspect="auto", cmap=cmap,
+    filled = np.isfinite(H)
+    assert filled.any(), f"{a} x {b}: every one of {H.size} bins is empty"
+    assert (H[filled] >= 0).all() and (H[filled] <= 1).all(), (
+        f"{a} x {b}: mean power outside [0, 1], range "
+        f"{np.nanmin(H)} to {np.nanmax(H)}")
+    return H, bins_a, bins_b, int(H.size - filled.sum())
+
+
+def _heat_panel(ax, df, a, b, nb=8, xlabel=True, ylabel=True, labelsize=None):
+    """One (a, b) power surface. Returns the image handle for a colourbar.
+
+    Drawn in log10 units where the axis was drawn there, but the ladder is
+    labelled with raw values: "log10 cells" makes a reader do the arithmetic
+    the axis could have done for them.
+    """
+    from matplotlib.ticker import FixedFormatter, FixedLocator
+
+    H, bins_a, bins_b, n_empty = _heat_grid(df, a, b, nb=nb)
+    im = ax.imshow(H.T, origin="lower", aspect="auto", cmap=POWER_CMAP,
                    vmin=0, vmax=1,
                    extent=[bins_a[0], bins_a[-1], bins_b[0], bins_b[-1]])
-    ax.set_xlabel(a_lab)
-    ax.set_ylabel(b_lab)
-    return im
+    for edges, mpl_axis, is_log in (
+            (bins_a, ax.xaxis, active_bounds()[a][2]),
+            (bins_b, ax.yaxis, active_bounds()[b][2])):
+        if is_log:
+            # Three decades at most: these panels are barely an inch wide, and
+            # a four-rung ladder runs its labels into one another.
+            decades = _decade_ticks(edges[0], edges[-1], max_ticks=3)
+            mpl_axis.set_major_locator(FixedLocator(decades))
+            mpl_axis.set_major_formatter(
+                FixedFormatter([_fmt_decade(k) for k in decades]))
+    ax.tick_params(length=0, colors=INK, pad=2)
+    # A label on a tick hard against either end of the axis would hang into
+    # the neighbouring panel, so those two are aligned inwards. Only those
+    # two: nudging a tick that sits well inside the axis pulls it towards its
+    # neighbour instead, which is the collision it was meant to prevent.
+    x_lo, x_hi = ax.get_xlim()
+    for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
+        frac = (tick - x_lo) / (x_hi - x_lo)
+        if frac < 0.1:
+            label.set_ha("left")
+        elif frac > 0.9:
+            label.set_ha("right")
+    for spine in ax.spines.values():
+        spine.set_color(HAIR)
+        spine.set_linewidth(0.6)
+    if xlabel:
+        ax.set_xlabel(axis_label_short(a), color=INK, labelpad=2,
+                      fontsize=labelsize)
+    if ylabel:
+        ax.set_ylabel(axis_label_short(b), color=INK, labelpad=2,
+                      fontsize=labelsize)
+    return im, n_empty
+
+
+STRIP_W_IN, STRIP_H_IN, STRIP_RIGHT_IN = 1.30, 0.05, 0.06
+# Two lines: on one it is wider than the strip it names, and widening the
+# strip to match would eat into the room the title has.
+STRIP_LABEL = "mean power,\nfold change 1-3x"
+
+
+def _power_strip(fig, im, fig_w, fig_h, top_in=0.26):
+    """The 0-1 power scale as a slim horizontal strip in the top margin.
+
+    One strip for the whole figure, at its top right. Every panel is on the
+    same fixed 0-1 scale, so a bar beside each of them is the same key drawn
+    once per panel, and in the margin it costs no panel width at all.
+
+    Returns the left edge of the strip in inches, which is where the header
+    text on the other side of the margin has to stop.
+    """
+    x0_in = fig_w - STRIP_RIGHT_IN - STRIP_W_IN
+    cax = fig.add_axes([x0_in / fig_w, (fig_h - top_in - STRIP_H_IN) / fig_h,
+                        STRIP_W_IN / fig_w, STRIP_H_IN / fig_h])
+    cbar = fig.colorbar(im, cax=cax, orientation="horizontal")
+    cbar.set_ticks([0.0, 0.5, 1.0])
+    cbar.set_ticklabels(["0", "0.5", "1"])
+    cbar.outline.set_visible(False)
+    cax.tick_params(length=0, labelsize=6, colors=MUTED, pad=1.5)
+    label = fig.text(x0_in / fig_w, 1 - (top_in - 0.03) / fig_h, STRIP_LABEL,
+                     ha="left", va="bottom", fontsize=6.5, color=MUTED,
+                     linespacing=1.35)
+    _assert_text_fits(fig, [label], fig_w, "power strip label")
+    return x0_in
+
+
+# --- Fig S10 geometry, in inches at the size the page gives the figure ------
+# Twenty-one pairs laid out as the strict lower triangle of a 7-axis matrix.
+# A flat grid of 21 would repeat every axis label five or six times; in the
+# triangle each axis is named once, on the outer edge, which is what buys the
+# panels enough width to be worth looking at.
+ALL_FIG_W = 6.90             # \linewidth of the text block
+ALL_LEFT_IN, ALL_RIGHT_IN = 0.56, 0.06
+ALL_TOP_IN, ALL_BOTTOM_IN = 0.62, 0.50
+# Panels butt up against one another without this and the triangle reads as
+# one continuous field rather than as a grid of separate surfaces.
+ALL_GAP_IN = 0.05
+# Rows are shorter than columns are wide. Six square rows plus this figure's
+# own caption is more than a page holds, and nothing about the cells needs to
+# be square -- their two axes are different quantities.
+ALL_ROW_FRAC = 0.84
+ALL_LABEL_PT = 6.5           # a 7.5 pt "basal expression" is taller than a row
 
 
 def _pairwise_heatmaps_all(df, suffix: str):
     """Every axis pair, for the supplement.
 
     The main figure shows three slices picked by marginal swing plus one
-    fixed pair; this is the exhaustive version, so a reader can check that
-    the additive decomposition in the attribution bars is not hiding
-    structure in a pair nobody chose to look at. Fitting power on all seven
-    axes gives R2 = 0.78 from additive main effects alone, and all 21
-    pairwise interaction terms together add 0.02.
+    selected pair; this is the exhaustive version, so a reader can check that
+    the additive decomposition is not hiding structure in a pair nobody chose
+    to look at.
+
+    Row i against column j for j < i, so the pair at a given cell is read off
+    the axis names on the bottom row and the left column. Panels share their
+    row's and column's axis, and only the outer edge carries furniture.
     """
-    import itertools
-    pairs = list(itertools.combinations(AXIS_NAMES, 2))
-    ncol = 5
-    nrow = int(np.ceil(len(pairs) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(4.0 * ncol, 3.4 * nrow))
-    axes = np.atleast_1d(axes).ravel()
-    im = None
-    for ax, (a, b) in zip(axes, pairs):
-        im = _heat_panel(ax, df, a, b)
-        ax.tick_params(labelsize=7)
-        ax.xaxis.label.set_size(8)
-        ax.yaxis.label.set_size(8)
-    for ax in axes[len(pairs):]:
-        ax.axis("off")
-    fig.suptitle("Power across every pair of design axes "
-                 f"({len(pairs)} pairs, {len(df)} LHS samples)")
-    fig.tight_layout(rect=(0, 0, 0.94, 0.98))
-    cax = fig.add_axes([0.955, 0.15, 0.012, 0.7])
-    fig.colorbar(im, cax=cax, label="power AUC (FC 1-3)")
+    n = len(AXIS_NAMES)
+    pitch = (ALL_FIG_W - ALL_LEFT_IN - ALL_RIGHT_IN) / (n - 1)
+    row_pitch = ALL_ROW_FRAC * pitch
+    cell_w, cell_h = pitch - ALL_GAP_IN, row_pitch - ALL_GAP_IN
+    fig_h = ALL_TOP_IN + (n - 1) * row_pitch + ALL_BOTTOM_IN
+    fig = plt.figure(figsize=(ALL_FIG_W, fig_h))
+
+    im, n_pairs, empty = None, 0, 0
+    for i in range(1, n):          # row axis, drawn up the y
+        for j in range(i):         # column axis, drawn along the x
+            rect = [(ALL_LEFT_IN + j * pitch) / ALL_FIG_W,
+                    (fig_h - ALL_TOP_IN - i * row_pitch + ALL_GAP_IN) / fig_h,
+                    cell_w / ALL_FIG_W, cell_h / fig_h]
+            ax = fig.add_axes(rect)
+            im, n_empty = _heat_panel(ax, df, AXIS_NAMES[j], AXIS_NAMES[i],
+                                      xlabel=(i == n - 1), ylabel=(j == 0),
+                                      labelsize=ALL_LABEL_PT)
+            empty += n_empty
+            n_pairs += 1
+            if i != n - 1:
+                ax.tick_params(labelbottom=False)
+            if j != 0:
+                ax.tick_params(labelleft=False)
+    assert n_pairs == n * (n - 1) // 2, (
+        f"drew {n_pairs} panels for {n} axes, expected {n * (n - 1) // 2}")
+
+    strip_x0 = _power_strip(fig, im, ALL_FIG_W, fig_h)
+    title = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.135 / fig_h,
+                     "Power across every pair of design axes",
+                     ha="left", va="center", fontsize=7.5, color=INK)
+    sub1 = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.275 / fig_h,
+                    "Each cell is the mean over the sampled designs in it, "
+                    "marginalising over the five axes not shown.",
+                    ha="left", va="center", fontsize=6.5, color=MUTED)
+    sub2 = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.405 / fig_h,
+                    "Each panel's pair is named on the bottom row and the "
+                    "left column.",
+                    ha="left", va="center", fontsize=6.5, color=MUTED)
+    _assert_text_fits(fig, [title, sub1, sub2], strip_x0 - 0.12,
+                      "Fig S10 header")
+    _assert_labels_fit(fig, "Fig S10")
     out = OUT / f"pairwise_heatmaps_all{suffix}.svg"
-    fig.savefig(out, format="svg", bbox_inches="tight")
+    fig.savefig(out, format="svg")
     plt.close(fig)
-    print(f"Saved: {out}", flush=True)
+    print(f"Saved: {out} ({ALL_FIG_W:.2f} x {fig_h:.2f} in, {n_pairs} pairs, "
+          f"{empty} empty bins)", flush=True)
+
+
+# --- Fig 5A geometry, in inches at the size the page gives the panel --------
+# Four pairs in one row. Each panel carries its own pair of axes, so each
+# needs its own left gutter; the right-hand edge of the last one is the right
+# edge of the text block.
+PAIR_FIG_W = 6.90            # \textwidth of the text block
+PAIR_GUTTER_IN, PAIR_RIGHT_IN = 0.47, 0.06
+PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.62, 0.44
+
+# Basal expression and dynamic range multiply to the ceiling the assay
+# reaches, and the three published designs sit almost exactly on a line of
+# constant ceiling (log-log correlation -0.99 across them), so whether power
+# depends on the product alone or on how it is split is a question the
+# marginals cannot answer -- each collapses the other axis. Basal expression
+# does not make the top three by swing, so without forcing it this slice is
+# never drawn. It is named in its own title rather than being handed a
+# different colormap: the scale is the same 0-1 power in all four panels, and
+# giving one of them its own ramp says the quantity changed when it did not.
+FORCED_PAIR = ("minP", "activity_max_mult")
 
 
 def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
@@ -1082,40 +1495,50 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
         except Exception:
             ranges[axis] = 0.0
     top3 = sorted(ranges.items(), key=lambda kv: -kv[1])[:3]
-    print(f"Top axes by marginal swing ({suffix or 'full'}): {top3}", flush=True)
-    pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]), (top3[1][0], top3[2][0])]
-    # One pair is always drawn regardless of swing. Basal expression and
-    # dynamic range multiply to the ceiling the assay reaches, and the three
-    # published designs sit almost exactly on a line of constant ceiling
-    # (log-log correlation -0.99 across them), so whether power depends on the
-    # product alone or on how it is split is a question the marginals cannot
-    # answer -- each collapses the other axis. Basal expression does not make
-    # the top three by swing, so without forcing it this slice is never drawn.
-    # Rendered in a different colormap because it is selected by hand, not by
-    # the swing rule that picks the others.
-    forced_pair = ("minP", "activity_max_mult")
-    # Drop it from the swing-selected set first, in the rare case both axes
-    # make the top three; otherwise the same slice is drawn twice.
-    pairs = [p for p in pairs if set(p) != set(forced_pair)] + [forced_pair]
-    fig, axes = plt.subplots(1, len(pairs), figsize=(4.7 * len(pairs), 4))
-    for ax, (a, b) in zip(axes, pairs):
-        is_forced = (a, b) == forced_pair
-        im = _heat_panel(ax, df, a, b,
-                         cmap="magma" if is_forced else "viridis")
-        if is_forced:
-            for spine in ax.spines.values():
-                spine.set_color("darkorange")
-                spine.set_linewidth(2.0)
-            ax.set_title("fixed pair: do these trade off?", fontsize=9,
-                         color="darkorange")
-        plt.colorbar(im, ax=ax, label="power AUC (FC 1-3)")
-    fig.suptitle("Pairwise heatmaps: top-3 axes by marginal swing, plus one "
-                 f"fixed pair (right, orange){title_suffix}")
-    plt.tight_layout()
+    print(f"Top axes by marginal swing ({suffix or 'full'}): "
+          + ", ".join(f"{a} {r:.3f}" for a, r in top3), flush=True)
+    pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]),
+             (top3[1][0], top3[2][0])]
+    # Drop the forced pair from the swing-selected set first, in the rare case
+    # both its axes make the top three; otherwise the same slice is drawn twice.
+    pairs = [p for p in pairs if set(p) != set(FORCED_PAIR)] + [FORCED_PAIR]
+
+    n = len(pairs)
+    cell = (PAIR_FIG_W - n * PAIR_GUTTER_IN - PAIR_RIGHT_IN) / n
+    fig_h = PAIR_TOP_IN + cell + PAIR_BOTTOM_IN
+    fig = plt.figure(figsize=(PAIR_FIG_W, fig_h))
+
+    im, empty = None, 0
+    for k, (a, b) in enumerate(pairs):
+        rect = [(PAIR_GUTTER_IN + k * (cell + PAIR_GUTTER_IN)) / PAIR_FIG_W,
+                PAIR_BOTTOM_IN / fig_h, cell / PAIR_FIG_W, cell / fig_h]
+        ax = fig.add_axes(rect)
+        im, n_empty = _heat_panel(ax, df, a, b)
+        empty += n_empty
+        if (a, b) == FORCED_PAIR:
+            ax.set_title("selected pair", fontsize=6.5, color=MUTED, pad=3)
+
+    strip_x0 = _power_strip(fig, im, PAIR_FIG_W, fig_h)
+    title = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.135 / fig_h,
+                     "Pairs of design axes act close to independently"
+                     + title_suffix,
+                     ha="left", va="center", fontsize=7.5, color=INK)
+    sub1 = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.275 / fig_h,
+                    "Each cell is the mean over the sampled designs in it, "
+                    "marginalising over the five axes not shown.",
+                    ha="left", va="center", fontsize=6.5, color=MUTED)
+    sub2 = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.405 / fig_h,
+                    "Left three: the axes with the largest single-axis swing. "
+                    "Right: a pair chosen by hand.",
+                    ha="left", va="center", fontsize=6.5, color=MUTED)
+    _assert_text_fits(fig, [title, sub1, sub2], strip_x0 - 0.12,
+                      "Fig 5A header")
+    _assert_labels_fit(fig, "Fig 5A")
     out_pair = OUT / f"pairwise_heatmaps{suffix}.svg"
-    fig.savefig(out_pair, format="svg", bbox_inches="tight")
+    fig.savefig(out_pair, format="svg")
     plt.close(fig)
-    print(f"Saved: {out_pair}", flush=True)
+    print(f"Saved: {out_pair} ({PAIR_FIG_W:.2f} x {fig_h:.2f} in, "
+          f"{n} pairs, {empty} empty bins)", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1228,17 +1651,20 @@ if __name__ == "__main__":
     slice_idx = int(sys.argv[3]) if len(sys.argv) > 3 else 0
     n_slices_arg = int(sys.argv[4]) if len(sys.argv) > 4 else N_SLICES
 
-    if phase == "replot":
+    if phase in ("replot", "manuscript"):
         suffix = "" if mode == "full" else f"_{mode}"
         cache_path = OUT / f"samples_power{suffix}.parquet"
         if not cache_path.exists():
-            print(f"replot: cache not found at {cache_path}; "
+            print(f"{phase}: cache not found at {cache_path}; "
                   f"run `plot` first to aggregate from scratch.", flush=True)
             sys.exit(1)
-        print(f"\n{'='*60}\nPhase: replot ({mode}) from {cache_path.name}\n{'='*60}",
-              flush=True)
+        print(f"\n{'='*60}\nPhase: {phase} ({mode}) from {cache_path.name}"
+              f"\n{'='*60}", flush=True)
         df_pow = pd.read_parquet(cache_path)
-        phase_plot(df_pow, mode)
+        if phase == "manuscript":
+            phase_manuscript(df_pow, mode)
+        else:
+            phase_plot(df_pow, mode)
         print("\nDone.", flush=True)
         sys.exit(0)
 
