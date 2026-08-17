@@ -64,6 +64,15 @@
       "minP": 0.9363,
       "activity_max_mult": 1.11
     },
+    "seelig-HepG2": {
+      "n_cells": 5858,
+      "n_cres": 1344,
+      "bcs_per_cre": 4.945,
+      "moi": 73.57,
+      "lib_alpha_nb": 1e-06,
+      "minP": 0.2092,
+      "activity_max_mult": 15.04
+    },
     "takeshi-HepG2": {
       "n_cells": 1690,
       "n_cres": 149,
