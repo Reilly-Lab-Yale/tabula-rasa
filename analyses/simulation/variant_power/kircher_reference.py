@@ -16,8 +16,9 @@ distinguishable in greyscale and under colour-vision deficiency:
     activating (0.263)  black, long dashes, circle markers
     repressing (0.398)  blue, dotted, square markers
 
-Both sit on a thin white halo so they read against the pale low-power cells
-and the dark red high-power cells alike.
+The lines are drawn plain, with no white casing or underlay. Casing a dashed
+line fills its gaps as well as its edges, so the rule reads as a row of
+white-bordered blocks rather than as one line.
 """
 
 import numpy as np
@@ -31,9 +32,6 @@ _REPRESSING_STYLE = dict(color="#2a78d6", linestyle=(0, (1, 2.2)), marker="s")
 _LW = 2.0
 _MARKER_SIZE = 4.0
 _N_MARKERS = 5
-# Halo width. Narrow on purpose: a legibility aid against the dark end of the
-# colourmap, not a design element.
-_UNDERLAY_LW = _LW + 1.2
 
 
 def _row_position(fc_vals, target):
@@ -58,19 +56,14 @@ def _row_position(fc_vals, target):
 
 
 def _draw_line(ax, y, style):
-    """One reference line: a white halo, the dashed rule, then markers."""
-    # Continuous underlay rather than patheffects.withStroke: stroking the dash
-    # geometry puts white in the gaps as well as along the edges, so each dash
-    # renders as its own white-bordered block and the line reads as a ladder.
-    ax.axhline(y=y, color="white", lw=_UNDERLAY_LW, zorder=4)
+    """One reference line: the dashed rule, then its markers."""
     ax.axhline(y=y, color=style["color"], linestyle=style["linestyle"],
                lw=_LW, zorder=5)
     marker_x = np.linspace(0.10, 0.90, _N_MARKERS)
     ax.plot(marker_x, np.full(_N_MARKERS, y),
             linestyle="none", marker=style["marker"], ms=_MARKER_SIZE,
-            color=style["color"], markeredgecolor="white",
-            markeredgewidth=0.6, transform=ax.get_yaxis_transform(),
-            zorder=6)
+            color=style["color"], markeredgecolor="none",
+            transform=ax.get_yaxis_transform(), zorder=6)
 
 
 def annotate(ax, fc_vals):
