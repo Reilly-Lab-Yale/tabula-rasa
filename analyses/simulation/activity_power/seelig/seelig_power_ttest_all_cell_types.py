@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Seelig t-test power -- all cell types.
+Seelig activity power -- all cell types, both deflated test arms.
 
 Single-condition power analysis for the Seelig dataset, which has no
 transfection reporter. The only realistic test condition is the naive
-drop-zeros (has_reporter=False) Welch t-test on observed nonzero counts:
-there is no reporter signal to anchor zero imputation, and MOIB-at-test-time
-was empirically rejected (see moib_test_pilot.py for the negative result --
+drop-zeros (has_reporter=False) test on observed nonzero counts: there is no
+reporter signal to anchor zero imputation, and MOIB-at-test-time was
+empirically rejected (see moib_test_pilot.py for the negative result --
 inflated Type I error). Fit-time MOIB Wald (via the seelig_cm_moib_nb_phantom
 ortho) is the principled alternative but is not what this script measures.
+
+Because there is no reporter, only the deflated arms apply; the +reporter arms
+run for Shendure have no counterpart here. Both Welch's t-test and MWU are run
+on identical simulated data, so the two arms are exactly paired: the t-test arm
+is the reproduction check, MWU is the test Results 2.2 adopts.
 
 For each cell type:
 1. Draw `n_cres` synthetic CREs from uniform(min, max), with one fixed at
@@ -16,17 +21,14 @@ For each cell type:
    seelig_cm_nb_phantom ortho.
 2. Simulate `cells_per_cell_type` cells across N_SIMS replicates, repeated
    N_LIBRARY_REPS times.
-3. Run Welch's t-test in the deflated condition only (has_reporter=False --
-   drop zeros before testing). The simulator generates the full
-   transfected-but-silent zero set; this condition reflects what a no-reporter
-   experiment would actually observe.
-4. Aggregate and plot per-cell-type power curves.
+3. Run every arm in ARMS against the same sims.
+4. Aggregate and plot per-cell-type power curves, overlaying both arms.
 
 Usage:
     python seelig_power_ttest_all_cell_types.py [phase]
 
 Phases:
-    simulate  -- generate simulations and run t-test
+    simulate  -- generate simulations and run both test arms
     plot      -- aggregate results and produce SVG
     all       -- run both phases sequentially (default)
 """
@@ -59,8 +61,17 @@ DATA_ROOT = Path("/nfs/roberts/project/pi_skr2/shared/tabula_data_new")
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-SIM_DATE = "2026-04-10"
+SIM_DATE = "2026-08-17"
 SIM_DIR = DATA_ROOT / "simulated" / f"{SIM_DATE}_seelig_pow"
+
+# {t-test, MWU} x {deflated}, as (test directory, method, reporter). Yin ran no
+# transfection reporter, so the +reporter arms that Shendure carries have no
+# counterpart and are omitted. Aggregates are written per arm with SIM_DATE in
+# the filename.
+ARMS = [
+    ("ttest_deflated", "ttest", False),
+    ("mwu_deflated",   "mwu",   False),
+]
 
 # Use the canonical phantom ortho for n_cres per cell type. Mu values are not
 # read here -- the simulation draws synthetic CRE strengths from
@@ -73,15 +84,25 @@ CELL_TYPES = sorted(_params.nb.keys())
 N_CRES_PER_CT = {ct: len(_params.nb[ct]) for ct in CELL_TYPES}
 del _params
 
+assert CELL_TYPES, "ortho yielded no cell types"
+assert all(N_CRES_PER_CT[ct] > 1 for ct in CELL_TYPES), (
+    f"a cell type has too few CREs to hold out a reference: {N_CRES_PER_CT}"
+)
+
 MINP = scm.SEELIG_BOUNDS.reference_activity
 MAX_ACTIVITY = 4.0 * MINP
 MIN_ACTIVITY = scm.SEELIG_BOUNDS.min_mpra_umi
 N_LIBRARY_REPS = 156
 N_SIMS = 5
 
+assert MIN_ACTIVITY < MINP < MAX_ACTIVITY, (
+    f"activity bounds must bracket the reference: "
+    f"min={MIN_ACTIVITY:.6e}, minP={MINP:.6e}, max={MAX_ACTIVITY:.6e}"
+)
+
 
 # ---------------------------------------------------------------------------
-# Phase: simulate
+# Phase: simulate -- generate data and run every arm in ARMS
 # ---------------------------------------------------------------------------
 
 def phase_simulate(client):
@@ -103,15 +124,21 @@ def phase_simulate(client):
         bound_ct.cells_per_cell_type = (
             scm.SEELIG_BOUNDS.cells_per_cell_type.loc[[cell_type]]
         )
+        assert len(bound_ct.cells_per_cell_type) == 1, (
+            f"per-cell-type bound must hold exactly one cell type, got "
+            f"{len(bound_ct.cells_per_cell_type)} for {cell_type}"
+        )
         ct_dir = SIM_DIR / cell_type
 
-        # Resume: a sim is "complete" if its ttest_deflated/ dir exists and is
-        # non-empty.
+        # Resume: reload already-complete sims from disk.
+        # A sim is "complete" once every arm in ARMS has results.
         sims_ct = []
         if ct_dir.exists():
             for d in sorted(ct_dir.iterdir()):
-                defl_dir = d / "tests" / "hs_all_ct" / "ttest_deflated"
-                if defl_dir.exists() and any(defl_dir.iterdir()):
+                if not d.is_dir():
+                    continue
+                arm_dirs = [d / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
+                if all(p.exists() and any(p.iterdir()) for p in arm_dirs):
                     sims_ct.append(
                         scm.de_novo_simulation(
                             location=ct_dir, name=d.name, client=client
@@ -137,6 +164,10 @@ def phase_simulate(client):
             sims_ct.append(sim)
 
         all_sims[cell_type] = sims_ct
+        assert len(sims_ct) == N_LIBRARY_REPS, (
+            f"{cell_type}: expected {N_LIBRARY_REPS} replicates, have "
+            f"{len(sims_ct)}"
+        )
         print(f"  {len(sims_ct)} replicates ready.", flush=True)
 
     for sims in all_sims.values():
@@ -144,42 +175,46 @@ def phase_simulate(client):
             sim.save()
     print("\nAll sims saved.", flush=True)
 
-    # --- t-test: deflated (no reporter) ---
-    # Drop zeros before testing. This matches what a no-reporter experiment
-    # like Seelig actually observes -- only nonzero MPRA counts make it onto
-    # disk.
-    for cell_type, sims in all_sims.items():
-        print(f"t-test (deflated): {cell_type}", flush=True)
-        hs = None
-        for sim in sims:
-            defl_dir = (
-                sim.location / sim.name / "tests" / "hs_all_ct" / "ttest_deflated"
-            )
-            if defl_dir.exists() and any(defl_dir.iterdir()):
-                continue
-            if hs is None:
-                example = scm.scMPRA_data.from_parquet(
-                    sim.scmpradatp / "0.scmpra"
+    # --- run every arm on the same simulated data ---
+    # The deflated arms drop all zero-count observations before testing, which
+    # is what a no-reporter experiment actually sees on disc. Without that the
+    # test gets an unfair advantage: the simulation writes explicit zeros for
+    # transfected-but-silent events that such an experiment could never
+    # observe. Both arms read the same sims, so they are exactly paired.
+    for arm, method, has_reporter in ARMS:
+        for cell_type, sims in all_sims.items():
+            print(f"{arm}: {cell_type}", flush=True)
+            hs = None
+            for sim in sims:
+                arm_dir = sim.location / sim.name / "tests" / "hs_all_ct" / arm
+                if arm_dir.exists() and any(arm_dir.iterdir()):
+                    continue  # already done
+                if hs is None:
+                    example = scm.scMPRA_data.from_parquet(
+                        sim.scmpradatp / "0.scmpra"
+                    )
+                    hs = scm.make_all_by_celltype_hypotheses(
+                        counts=example, reference_cre="reference"
+                    )
+                # May already exist from an earlier arm, but not if we resumed
+                # from disk.
+                hypo_file = (
+                    sim.location / sim.name / "tests" / "hs_all_ct"
+                    / "hypotheses.tsv"
                 )
-                hs = scm.make_all_by_celltype_hypotheses(
-                    counts=example, reference_cre="reference"
-                )
-            hypo_file = (
-                sim.location / sim.name / "tests" / "hs_all_ct" / "hypotheses.tsv"
-            )
-            if not hypo_file.exists():
-                sim.add_hypothesis_set("hs_all_ct", hs)
-            sim.ttest("hs_all_ct", has_reporter=False)
-            sim.save()
+                if not hypo_file.exists():
+                    sim.add_hypothesis_set("hs_all_ct", hs)
+                getattr(sim, method)("hs_all_ct", has_reporter=has_reporter)
+                sim.save()
 
-    for sims in all_sims.values():
-        for sim in sims:
-            sim.save()
-    print("t-test (deflated) done and saved.", flush=True)
+        for sims in all_sims.values():
+            for sim in sims:
+                sim.save()
+        print(f"{arm} done and saved.", flush=True)
 
 
 # ---------------------------------------------------------------------------
-# Phase: plot
+# Phase: plot -- aggregate and produce SVG
 # ---------------------------------------------------------------------------
 
 def phase_plot(client):
@@ -191,8 +226,8 @@ def phase_plot(client):
             for d in sorted(ct_dir.iterdir()):
                 if not d.is_dir():
                     continue
-                defl_dir = d / "tests" / "hs_all_ct" / "ttest_deflated"
-                if defl_dir.exists() and any(defl_dir.iterdir()):
+                arm_dirs = [d / "tests" / "hs_all_ct" / a for a, _, _ in ARMS]
+                if all(p.exists() and any(p.iterdir()) for p in arm_dirs):
                     sims_ct.append(
                         scm.de_novo_simulation(
                             location=ct_dir, name=d.name, client=client
@@ -201,24 +236,58 @@ def phase_plot(client):
         all_sims[cell_type] = sims_ct
         print(f"  {cell_type}: loaded {len(sims_ct)} sims", flush=True)
 
-    all_mergy_deflated = {
-        ct: scm.sum_pow(
-            sims, hypothesis_set_name="hs_all_ct", test_type="ttest_deflated"
+    assert all(all_sims[ct] for ct in CELL_TYPES), (
+        f"a cell type has no complete sims: "
+        f"{ {ct: len(s) for ct, s in all_sims.items()} }"
+    )
+
+    per_arm = {}
+    for arm, _, _ in ARMS:
+        per_arm[arm] = {
+            ct: scm.sum_pow(
+                sims, hypothesis_set_name="hs_all_ct", test_type=arm
+            )
+            for ct, sims in all_sims.items()
+        }
+        rows = []
+        n_expected = 0
+        for ct, df in per_arm[arm].items():
+            n_expected += len(df)
+            df = df.copy()
+            df["cell_type"] = ct
+            rows.append(df)
+        combined = pd.concat(rows, ignore_index=True)
+        assert len(combined) == n_expected, (
+            f"{arm}: concat changed row count, {n_expected} -> "
+            f"{len(combined)}"
         )
-        for ct, sims in all_sims.items()
-    }
+        assert combined["reject_null"].notna().all(), (
+            f"{arm}: {combined['reject_null'].isna().sum()} null test outcomes"
+        )
+        assert (combined["fc"] > 0).all(), (
+            f"{arm}: {(combined['fc'] <= 0).sum()} non-positive fold changes"
+        )
+        assert set(combined["cell_type"]) == set(CELL_TYPES), (
+            f"{arm}: cell types in aggregate {sorted(set(combined['cell_type']))} "
+            f"do not match {CELL_TYPES}"
+        )
+        out_path = OUTPUT_DIR / f"power_df_{arm}_{SIM_DATE}.parquet"
+        combined.to_parquet(out_path)
+        print(f"Saved: {out_path} ({len(combined):,} rows)", flush=True)
 
-    rows = []
-    for ct, df in all_mergy_deflated.items():
-        df = df.copy()
-        df["cell_type"] = ct
-        rows.append(df)
-    combined = pd.concat(rows, ignore_index=True)
-    out_path = OUTPUT_DIR / "seelig_power_df_deflated.parquet"
-    combined.to_parquet(out_path)
-    print(f"Saved: {out_path}", flush=True)
+    # Power is monotone in effect size, so the strongest CREs must be easier to
+    # detect than the weakest. A violation means the arms or the ground truth
+    # got crossed somewhere upstream.
+    for arm, _, _ in ARMS:
+        for ct, df in per_arm[arm].items():
+            lo = df.loc[df["fc"] < 1.05, "reject_null"].mean()
+            hi = df.loc[df["fc"] > 3.5, "reject_null"].mean()
+            assert lo < hi, (
+                f"{arm}/{ct}: power does not increase with effect size, "
+                f"reject rate near FC=1 is {lo:.3f} but {hi:.3f} at FC>3.5"
+            )
 
-    # --- Plot ---
+    # --- Plot: overlay both arms on each subplot ---
     def _pow_curve_data(mergy, n_bins=100):
         df = mergy.copy()
         df["fc"] = pd.cut(df["fc"], bins=n_bins)
@@ -235,9 +304,12 @@ def phase_plot(client):
     fig, axes = plt.subplots(
         nrows, ncols, figsize=(5 * ncols, 4 * nrows), sharey=True
     )
-    if len(CELL_TYPES) == 1:
-        axes = np.array([axes])
     axes = np.array(axes).flatten()
+
+    arm_style = {
+        "ttest_deflated": ("coral", "s", "t-test (deflated)"),
+        "mwu_deflated": ("steelblue", "o", "MWU (deflated)"),
+    }
 
     for i, cell_type in enumerate(CELL_TYPES):
         # In the Seelig bounds, "reference" is HepG2 (chosen at preprocessing
@@ -246,12 +318,14 @@ def phase_plot(client):
         ct_display = "HepG2" if cell_type == "reference" else cell_type
         ax = axes[i]
 
-        binned = _pow_curve_data(all_mergy_deflated[cell_type])
-        ax.plot(
-            binned["bin_center"], binned["reject_frac"],
-            color="coral", marker="s", markersize=2, linewidth=1,
-            label="-reporter (deflated)",
-        )
+        for arm, _, _ in ARMS:
+            color, marker, label = arm_style[arm]
+            binned = _pow_curve_data(per_arm[arm][cell_type])
+            ax.plot(
+                binned["bin_center"], binned["reject_frac"],
+                color=color, marker=marker, markersize=2, linewidth=1,
+                label=label,
+            )
 
         ax.axhline(0.8, color="black", linestyle="--", lw=0.8)
         ax.axvline(1.0, color="grey", linestyle=":", lw=0.8)
@@ -273,12 +347,12 @@ def phase_plot(client):
         axes[j].set_visible(False)
 
     fig.suptitle(
-        "Welch's t-test Power by Cell Type -- Seelig\n"
-        "no transfection reporter (deflated test on nonzero counts)",
+        "Power by Cell Type -- Seelig\n"
+        "no transfection reporter (deflated tests on nonzero counts)",
         fontsize=12,
     )
     plt.tight_layout()
-    svg_path = OUTPUT_DIR / "seelig_power_ttest_deflated.svg"
+    svg_path = OUTPUT_DIR / f"power_arm_comparison_{SIM_DATE}.svg"
     fig.savefig(svg_path, format="svg", bbox_inches="tight")
     print(f"Saved: {svg_path}", flush=True)
 
@@ -291,9 +365,12 @@ if __name__ == "__main__":
     phase = sys.argv[1] if len(sys.argv) > 1 else "all"
 
     def _make_slurm_client():
+        # Worker memory: the Shendure power run peaked at ~9.2 GB per worker.
+        # A Seelig sim object carries n_cres x n_cells about 4.6x larger, so
+        # the per-worker footprint is sized up in proportion with headroom.
         cluster = SLURMCluster(
             cores=1,
-            memory="24G",
+            memory="64G",
             processes=1,
             env_extra=[
                 f"export PYTHONPATH={_repo_root}:$PYTHONPATH",
@@ -302,7 +379,7 @@ if __name__ == "__main__":
                 "-p priority",
                 "--account=prio_skr2",
                 "--job-name=seelig_pow_worker",
-                "--time=8:00:00",
+                "--time=12:00:00",
                 "--exclude=a1132u18n02",
                 "--output=worker_%j.out",
             ],
