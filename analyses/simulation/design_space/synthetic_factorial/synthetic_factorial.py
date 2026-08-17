@@ -943,7 +943,7 @@ MARG_COLGAP_IN = 0.28
 MARG_PLOT_H_IN = 1.15
 MARG_HEADROOM_IN = 0.20      # anchor tags sit above each panel's top spine
 MARG_XFURN_IN = 0.42         # tick ladder and axis name under each row
-MARG_TOP_IN = 0.42           # title and subtitle
+MARG_TOP_IN = 0.12           # headroom only; the panel carries no title
 MARG_BOTTOM_IN = 0.06
 MARG_PLOT_W_IN = (MARG_FIG_W - MARG_LEFT_IN - MARG_RIGHT_IN
                   - (MARG_NCOL - 1) * MARG_COLGAP_IN) / MARG_NCOL
@@ -1046,6 +1046,7 @@ def _draw_anchor_key(fig, rect, anchors: list):
 def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float,float]",
                                 ylabel: str, title: str, out_path: Path,
                                 subtitle: str = "",
+                                captioned: bool = True,
                                 hline: "float | None" = None,
                                 invert_y: bool = False,
                                 force_linear_x: bool = False,
@@ -1162,12 +1163,17 @@ def _plot_marginals_for_metric(df: pd.DataFrame, metric: str, ylim: "tuple[float
 
     _draw_anchor_key(fig, _marg_rect(len(AXIS_NAMES)), anchors)
 
-    fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.115 / MARG_FIG_H,
-             title + ("  [linear x]" if force_linear_x else ""),
-             ha="left", va="center", fontsize=7.5, color=INK)
-    if subtitle:
-        fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.255 / MARG_FIG_H, subtitle,
-                 ha="left", va="center", fontsize=6.5, color=MUTED)
+    # captioned=False for the manuscript panel: its figure legend says what
+    # this is, and a title repeating the legend is wasted space. The
+    # exploratory variants are read on their own and keep theirs.
+    if captioned:
+        fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.115 / MARG_FIG_H,
+                 title + ("  [linear x]" if force_linear_x else ""),
+                 ha="left", va="center", fontsize=7.5, color=INK)
+        if subtitle:
+            fig.text(MARG_LEFT_IN / MARG_FIG_W, 1 - 0.255 / MARG_FIG_H,
+                     subtitle, ha="left", va="center", fontsize=6.5,
+                     color=MUTED)
     fig.text(0.075 / MARG_FIG_W, 0.5, ylabel, rotation=90, ha="left",
              va="center", fontsize=7.5, color=INK)
     _assert_labels_fit(fig, f"marginals/{metric}")
@@ -1222,8 +1228,8 @@ def _plot_manuscript_marginals(df: pd.DataFrame, suffix: str):
     anchors = dict(ANCHOR_VARIANTS)[MANUSCRIPT_ANCHORS]
     _plot_marginals_for_metric(
         df, metric=metric, ylim=ylim, ylabel=ylabel, title=title,
-        subtitle=_marginals_subtitle(df), hline=hline, invert_y=invert,
-        anchors=anchors,
+        subtitle=_marginals_subtitle(df), captioned=False,
+        hline=hline, invert_y=invert, anchors=anchors,
         out_path=OUT / f"marginals{fsuf}{suffix}{MANUSCRIPT_ANCHORS}.svg")
 
 
@@ -1391,7 +1397,8 @@ def _power_strip(fig, im, fig_w, fig_h, top_in=0.26):
 # panels enough width to be worth looking at.
 ALL_FIG_W = 6.90             # \linewidth of the text block
 ALL_LEFT_IN, ALL_RIGHT_IN = 0.56, 0.06
-ALL_TOP_IN, ALL_BOTTOM_IN = 0.62, 0.50
+# Top margin holds the power strip and its two-line label, nothing else.
+ALL_TOP_IN, ALL_BOTTOM_IN = 0.38, 0.50
 # Panels butt up against one another without this and the triangle reads as
 # one continuous field rather than as a grid of separate surfaces.
 ALL_GAP_IN = 0.05
@@ -1440,20 +1447,8 @@ def _pairwise_heatmaps_all(df, suffix: str):
     assert n_pairs == n * (n - 1) // 2, (
         f"drew {n_pairs} panels for {n} axes, expected {n * (n - 1) // 2}")
 
-    strip_x0 = _power_strip(fig, im, ALL_FIG_W, fig_h)
-    title = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.135 / fig_h,
-                     "Power across every pair of design axes",
-                     ha="left", va="center", fontsize=7.5, color=INK)
-    sub1 = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.275 / fig_h,
-                    "Each cell is the mean over the sampled designs in it, "
-                    "marginalising over the five axes not shown.",
-                    ha="left", va="center", fontsize=6.5, color=MUTED)
-    sub2 = fig.text(ALL_LEFT_IN / ALL_FIG_W, 1 - 0.405 / fig_h,
-                    "Each panel's pair is named on the bottom row and the "
-                    "left column.",
-                    ha="left", va="center", fontsize=6.5, color=MUTED)
-    _assert_text_fits(fig, [title, sub1, sub2], strip_x0 - 0.12,
-                      "Fig S10 header")
+    # See the note in _pairwise_heatmaps: caption's job, not the figure's.
+    _power_strip(fig, im, ALL_FIG_W, fig_h)
     _assert_labels_fit(fig, "Fig S10")
     out = OUT / f"pairwise_heatmaps_all{suffix}.svg"
     fig.savefig(out, format="svg")
@@ -1468,7 +1463,9 @@ def _pairwise_heatmaps_all(df, suffix: str):
 # edge of the text block.
 PAIR_FIG_W = 6.90            # \textwidth of the text block
 PAIR_GUTTER_IN, PAIR_RIGHT_IN = 0.47, 0.06
-PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.62, 0.44
+# 0.38 is enough for the strip alone, but the selected-pair tag sits in the
+# same corner and collides with it; 0.52 lets the two stack.
+PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.52, 0.44
 
 # Basal expression and dynamic range multiply to the ceiling the assay
 # reaches, and the three published designs sit almost exactly on a line of
@@ -1518,21 +1515,10 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
         if (a, b) == FORCED_PAIR:
             ax.set_title("selected pair", fontsize=6.5, color=MUTED, pad=3)
 
-    strip_x0 = _power_strip(fig, im, PAIR_FIG_W, fig_h)
-    title = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.135 / fig_h,
-                     "Pairs of design axes act close to independently"
-                     + title_suffix,
-                     ha="left", va="center", fontsize=7.5, color=INK)
-    sub1 = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.275 / fig_h,
-                    "Each cell is the mean over the sampled designs in it, "
-                    "marginalising over the five axes not shown.",
-                    ha="left", va="center", fontsize=6.5, color=MUTED)
-    sub2 = fig.text(PAIR_GUTTER_IN / PAIR_FIG_W, 1 - 0.405 / fig_h,
-                    "Left three: the axes with the largest single-axis swing. "
-                    "Right: a pair chosen by hand.",
-                    ha="left", va="center", fontsize=6.5, color=MUTED)
-    _assert_text_fits(fig, [title, sub1, sub2], strip_x0 - 0.12,
-                      "Fig 5A header")
+    # No title or explanatory subtitle: this is a manuscript panel and the
+    # caption carries what it shows. The top margin stays as it is because the
+    # power strip lives in it.
+    _power_strip(fig, im, PAIR_FIG_W, fig_h)
     _assert_labels_fit(fig, "Fig 5A")
     out_pair = OUT / f"pairwise_heatmaps{suffix}.svg"
     fig.savefig(out_pair, format="svg")
