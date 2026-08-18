@@ -54,6 +54,28 @@ DATASET_LABEL = {"shendure": "Lalanne et al.", "cohen": "Zhao et al.",
 # manuscript introduces, so it is reported to the console and the TSV but
 # kept out of the figure panel and the supplementary table.
 MANUSCRIPT_DATASETS = set(DATASET_LABEL)
+
+# Expansion names exactly as Fig 1B prints them, so the table and the figure
+# name the same thing the same way (plot_nb_vs_zinb_bars.py::SERIES).
+#
+# The key is (dataset, expansion) rather than the expansion alone: "obs" is
+# not one mode. Lalanne et al.\'s reporter resolves a zero to a single
+# construct on its own, so its "obs" is already the fine expansion, while
+# Zhao et al. needs "obsingle" for that and its bare "obs" is the coarse one.
+# Rewriting the token alone would silently print two different modes under
+# one name.
+EXPANSION_LABEL = {
+    ("shendure", "obs"):      "observed, fine",
+    ("shendure", "cm"):       "consider missing",
+    # Not a series in Fig 1B, which shows only the two Lalanne et al. fits it
+    # compares; the table is exhaustive, so it needs the name anyway.
+    ("shendure", "cm_moib"):  "consider missing + MOI",
+    ("cohen", "obsingle"):    "observed, fine",
+    ("cohen", "obs"):         "observed, coarse",
+    ("cohen", "cm"):          "consider missing",
+    ("seelig", "cm_moib"):    "consider missing + MOI",
+    ("seelig", "cm"):         "consider missing",
+}
 # Fits shown in the left-hand scatter: the three canonical fits, plus the
 # reporter-free Lalanne fit as the contrast. That one is not a broken fit --
 # it is what the same experiment looks like when no transfection reporter was
@@ -330,8 +352,7 @@ def manuscript_table(rows):
         expansion, _, family = rest.rpartition("_")
         assert family in ("nb", "zinb"), (
             f"cannot read a count family off {name!r} (got {family!r})")
-        expansion = expansion.replace("cm_moib", "CM+MOI").replace("cm", "CM")
-        return expansion, family.upper()
+        return EXPANSION_LABEL[(dataset, expansion)], family.upper()
 
     tex = OUT / "cross_family_agreement.tex"
     with open(tex, "w") as f:
@@ -345,7 +366,7 @@ def manuscript_table(rows):
             ds = DATASET_LABEL.get(r["dataset"], r["dataset"])
             expansion, family = split_name(r["name"], r["dataset"])
             mark = "$^{*}$" if r["canonical"] else ""
-            f.write(f"{ds}{mark} & \\emph{{{expansion}}} & {family} & "
+            f.write(f"{ds}{mark} & {expansion} & {family} & "
                     f"{len(r['rel']):,} & {pct(r['rel'].median())} & "
                     f"{pct(r['rel'].quantile(0.95))} & "
                     f"{pct(r['rel'].max())} \\\\\n")
