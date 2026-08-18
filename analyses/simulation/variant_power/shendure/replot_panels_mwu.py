@@ -3,7 +3,7 @@
 per cell type into output/panels_mwu/.
 
 The reference-cell-type panel is one third of manuscript Fig 3B; all ten are
-supplementary Fig S6. No simulation -- a replot from the cached aggregate.
+supplementary Fig S5. No simulation -- a replot from the cached aggregate.
 
 Drawing lives in ../panel_style.py, shared with the other two datasets.
 
