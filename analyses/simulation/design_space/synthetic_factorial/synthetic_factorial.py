@@ -1412,10 +1412,9 @@ ALL_LABEL_PT = 6.5           # a 7.5 pt "basal expression" is taller than a row
 def _pairwise_heatmaps_all(df, suffix: str):
     """Every axis pair, for the supplement.
 
-    The main figure shows three slices picked by marginal swing plus one
-    selected pair; this is the exhaustive version, so a reader can check that
-    the additive decomposition is not hiding structure in a pair nobody chose
-    to look at.
+    The main figure shows the three slices among the highest-swing axes; this
+    is the exhaustive version, so a reader can check that the additive
+    decomposition is not hiding structure in a pair nobody chose to look at.
 
     Row i against column j for j < i, so the pair at a given cell is read off
     the axis names on the bottom row and the left column. Panels share their
@@ -1458,25 +1457,13 @@ def _pairwise_heatmaps_all(df, suffix: str):
 
 
 # --- Fig 5A geometry, in inches at the size the page gives the panel --------
-# Four pairs in one row. Each panel carries its own pair of axes, so each
+# Three pairs in one row. Each panel carries its own pair of axes, so each
 # needs its own left gutter; the right-hand edge of the last one is the right
 # edge of the text block.
 PAIR_FIG_W = 6.90            # \textwidth of the text block
 PAIR_GUTTER_IN, PAIR_RIGHT_IN = 0.47, 0.06
-# 0.38 is enough for the strip alone, but the selected-pair tag sits in the
-# same corner and collides with it; 0.52 lets the two stack.
-PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.52, 0.44
-
-# Basal expression and dynamic range multiply to the ceiling the assay
-# reaches, and the three published designs sit almost exactly on a line of
-# constant ceiling (log-log correlation -0.99 across them), so whether power
-# depends on the product alone or on how it is split is a question the
-# marginals cannot answer -- each collapses the other axis. Basal expression
-# does not make the top three by swing, so without forcing it this slice is
-# never drawn. It is named in its own title rather than being handed a
-# different colormap: the scale is the same 0-1 power in all four panels, and
-# giving one of them its own ramp says the quantity changed when it did not.
-FORCED_PAIR = ("minP", "activity_max_mult")
+# Enough for the power strip, the only furniture in the top margin.
+PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.38, 0.44
 
 
 def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
@@ -1494,11 +1481,12 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     top3 = sorted(ranges.items(), key=lambda kv: -kv[1])[:3]
     print(f"Top axes by marginal swing ({suffix or 'full'}): "
           + ", ".join(f"{a} {r:.3f}" for a, r in top3), flush=True)
+    # Every pair among the three highest-swing axes, and nothing else. The
+    # selection rule is stated in full by that sentence, which is what makes
+    # the panel answerable to a reader; a hand-picked fourth slice would not
+    # be. Fig S9 draws all 21 pairs for anyone who wants the rest.
     pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]),
              (top3[1][0], top3[2][0])]
-    # Drop the forced pair from the swing-selected set first, in the rare case
-    # both its axes make the top three; otherwise the same slice is drawn twice.
-    pairs = [p for p in pairs if set(p) != set(FORCED_PAIR)] + [FORCED_PAIR]
 
     n = len(pairs)
     cell = (PAIR_FIG_W - n * PAIR_GUTTER_IN - PAIR_RIGHT_IN) / n
@@ -1512,8 +1500,6 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
         ax = fig.add_axes(rect)
         im, n_empty = _heat_panel(ax, df, a, b)
         empty += n_empty
-        if (a, b) == FORCED_PAIR:
-            ax.set_title("selected pair", fontsize=6.5, color=MUTED, pad=3)
 
     # No title or explanatory subtitle: this is a manuscript panel and the
     # caption carries what it shows. The top margin stays as it is because the
