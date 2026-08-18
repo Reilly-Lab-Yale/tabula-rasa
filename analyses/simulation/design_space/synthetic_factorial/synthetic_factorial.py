@@ -477,6 +477,29 @@ def _assert_labels_fit(fig, what):
                 f"in along a {along / fig.dpi:.2f} in panel edge")
 
 
+def _assert_margin_clears_panels(fig, cax, what):
+    """Nothing in the top margin may hang down into a panel.
+
+    The strip itself is placed in inches and so is easy to reason about, but
+    its tick labels are laid out by the renderer and extend an unpredictable
+    distance below it. Panel height is set by how many pairs are drawn, so a
+    top margin that cleared the labels at one panel count can stop clearing
+    them at another, and the result is text sitting on the top row of a
+    heatmap rather than anything that looks like an error.
+    """
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    margin = cax.get_tightbbox(r)
+    for ax in fig.axes:
+        if ax is cax:
+            continue
+        panel = ax.get_window_extent(r)
+        overlap = min(margin.y1, panel.y1) - max(margin.y0, panel.y0)
+        assert overlap <= 0, (
+            f"{what}: the power strip reaches {overlap / fig.dpi:.3f} in into "
+            f"a panel; raise the top margin by at least that much")
+
+
 def _assert_text_fits(fig, texts, limit_in, what):
     """No header line may run past the width it was written to fit."""
     fig.canvas.draw()
@@ -1387,6 +1410,7 @@ def _power_strip(fig, im, fig_w, fig_h, top_in=0.26):
                      ha="left", va="bottom", fontsize=6.5, color=MUTED,
                      linespacing=1.35)
     _assert_text_fits(fig, [label], fig_w, "power strip label")
+    _assert_margin_clears_panels(fig, cax, "power strip")
     return x0_in
 
 
@@ -1397,8 +1421,10 @@ def _power_strip(fig, im, fig_w, fig_h, top_in=0.26):
 # panels enough width to be worth looking at.
 ALL_FIG_W = 6.90             # \linewidth of the text block
 ALL_LEFT_IN, ALL_RIGHT_IN = 0.56, 0.06
-# Top margin holds the power strip and its two-line label, nothing else.
-ALL_TOP_IN, ALL_BOTTOM_IN = 0.38, 0.50
+# Top margin holds the power strip and its two-line label, nothing else --
+# but sized for the strip's rendered height, tick labels included, not for
+# where the strip itself is placed. See _assert_margin_clears_panels.
+ALL_TOP_IN, ALL_BOTTOM_IN = 0.44, 0.50
 # Panels butt up against one another without this and the triangle reads as
 # one continuous field rather than as a grid of separate surfaces.
 ALL_GAP_IN = 0.05
@@ -1462,8 +1488,11 @@ def _pairwise_heatmaps_all(df, suffix: str):
 # edge of the text block.
 PAIR_FIG_W = 6.90            # \textwidth of the text block
 PAIR_GUTTER_IN, PAIR_RIGHT_IN = 0.47, 0.06
-# Enough for the power strip, the only furniture in the top margin.
-PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.38, 0.44
+# The power strip is the only furniture up here, but it is taller than the
+# 0.31 in it is placed at: its tick labels are laid out by the renderer and
+# hang below it. _assert_margin_clears_panels measures the total and fails if
+# it reaches a panel, which is what set this number.
+PAIR_TOP_IN, PAIR_BOTTOM_IN = 0.44, 0.44
 
 
 def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
