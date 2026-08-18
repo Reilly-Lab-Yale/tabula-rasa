@@ -27,10 +27,10 @@ scaling:
 
     pairwise_heatmaps_union.svg          Fig 5A, at \textwidth (6.90 in)
     marginals_auc_union_published.svg    Fig 5B, at 0.95\linewidth (6.56 in)
-    pairwise_heatmaps_all_union.svg      Fig S10, at \linewidth (6.90 in)
+    pairwise_heatmaps_all_union.svg      Fig S8, at \linewidth (6.90 in)
 
 Fig 5A shows that the axes act close to independently, which is what licenses
-reading each of them on its own in Fig 5B; Fig S10 is the exhaustive version
+reading each of them on its own in Fig 5B; Fig S8 is the exhaustive version
 of 5A. Same type scale and greys as activity_power/replot_overlay_ct.py and
 variant_power/panel_style.py. The `manuscript` phase renders just these three.
 
@@ -63,7 +63,7 @@ Usage:
                 the cache is missing.
     manuscript -- as replot, but only the three SVGs the manuscript places:
                 pairwise_heatmaps (Fig 5A), marginals_auc..._published
-                (Fig 5B) and pairwise_heatmaps_all (Fig S10).
+                (Fig 5B) and pairwise_heatmaps_all (Fig S8).
     all      -- samples then simulate (slice 0 only) then plot. Useful only
                 when n_slices=1 (smoke). For pilot/full use launch.sh.
 
@@ -1234,7 +1234,7 @@ ANCHOR_VARIANTS = [
     ("_with_takeshi", ALL_ANCHORS),
 ]
 
-# The manuscript's Fig 5B, and the two Fig 5A / Fig S10 heatmap grids.
+# The manuscript's Fig 5B, and the two Fig 5A / Fig S8 heatmap grids.
 MANUSCRIPT_METRIC = "power_auc_1to3"
 MANUSCRIPT_ANCHORS = "_published"
 
@@ -1414,7 +1414,7 @@ def _power_strip(fig, im, fig_w, fig_h, top_in=0.26):
     return x0_in
 
 
-# --- Fig S10 geometry, in inches at the size the page gives the figure ------
+# --- Fig S8 geometry, in inches at the size the page gives the figure ------
 # Twenty-one pairs laid out as the strict lower triangle of a 7-axis matrix.
 # A flat grid of 21 would repeat every axis label five or six times; in the
 # triangle each axis is named once, on the outer edge, which is what buys the
@@ -1474,7 +1474,7 @@ def _pairwise_heatmaps_all(df, suffix: str):
 
     # See the note in _pairwise_heatmaps: caption's job, not the figure's.
     _power_strip(fig, im, ALL_FIG_W, fig_h)
-    _assert_labels_fit(fig, "Fig S10")
+    _assert_labels_fit(fig, "Fig S8")
     out = OUT / f"pairwise_heatmaps_all{suffix}.svg"
     fig.savefig(out, format="svg")
     plt.close(fig)
@@ -1513,7 +1513,7 @@ def _pairwise_heatmaps(df, suffix: str, title_suffix: str = ""):
     # Every pair among the three highest-swing axes, and nothing else. The
     # selection rule is stated in full by that sentence, which is what makes
     # the panel answerable to a reader; a hand-picked fourth slice would not
-    # be. Fig S9 draws all 21 pairs for anyone who wants the rest.
+    # be. Fig S8 draws all 21 pairs for anyone who wants the rest.
     pairs = [(top3[0][0], top3[1][0]), (top3[0][0], top3[2][0]),
              (top3[1][0], top3[2][0])]
 
